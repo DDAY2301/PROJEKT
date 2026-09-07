@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="sl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Projektni brief za pripravo spletne strani evropskega projekta.">
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="../assets/mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="../assets/site.css">
+  <title>Začni projekt | Project Visibility Sprint</title>
+</head>
+<body>
+  <a class="skip-link" href="#brief">Preskoči na obrazec</a>
+  <header class="site-header">
+    <nav class="wrap nav" aria-label="Glavna navigacija">
+      <a class="brand" href="../"><img src="../assets/mark.svg" alt=""><span>Project Visibility Sprint</span></a>
+      <div class="nav-links"><a href="../#paketi">Paketi</a><a class="button secondary small" href="../">Nazaj na stran</a></div>
+    </nav>
+  </header>
+
+  <main class="brief-page" id="brief">
+    <div class="wrap brief-shell">
+      <aside class="brief-intro">
+        <div class="eyebrow">Projektni brief</div>
+        <h1>Začnimo z bistvom.</h1>
+        <p>Vnesite osnovne podatke. Na njihovi podlagi pripravimo predlog obsega, rok in naslednje korake.</p>
+        <p><strong>Domena ni del paketa.</strong><br>Registrirate jo na svoje ime in sami plačujete podaljšanja. Enkratno tehnično povezavo izvedemo mi.</p>
+      </aside>
+
+      <section class="form-card" aria-labelledby="naslov-obrazca">
+        <div class="eyebrow">Povpraševanje</div>
+        <h2 id="naslov-obrazca">Opišite projekt.</h2>
+        <form data-brief-form>
+          <div class="form-grid">
+            <div class="field"><label for="organization">Organizacija</label><input id="organization" name="organization" autocomplete="organization" required></div>
+            <div class="field"><label for="name">Kontaktna oseba</label><input id="name" name="name" autocomplete="name" required></div>
+            <div class="field"><label for="email">E-pošta</label><input id="email" name="email" type="email" autocomplete="email" required></div>
+            <div class="field"><label for="programme">Program ali razpis</label><input id="programme" name="programme" placeholder="npr. Erasmus+ KA2" required></div>
+            <div class="field"><label for="package">Želeni paket</label><select id="package" name="package"><option value="Še ne vem">Še ne vem</option><option value="Start">Start — 490 €</option><option value="Standard">Standard — 890 €</option><option value="Premium">Premium — 1.490 €</option></select></div>
+            <div class="field"><label for="deadline">Želeni rok</label><input id="deadline" name="deadline" type="date"></div>
+            <div class="field full"><label for="url">Obstoječa spletna stran ali projektna povezava</label><input id="url" name="url" type="url" inputmode="url" placeholder="https://"></div>
+            <div class="field full"><label for="description">Kaj mora stran obiskovalcu pojasniti?</label><textarea id="description" name="description" required placeholder="Na kratko opišite namen projekta, partnerje, ciljne skupine in ključne rezultate."></textarea><small>Ne pošiljajte zaupnih osebnih ali pogodbenih podatkov.</small></div>
+          </div>
+          <div class="form-actions"><button class="button" type="submit">Pripravi povpraševanje →</button><span class="privacy-note">Podatki se ne shranjujejo v brskalniku.</span></div>
+          <p class="success" data-form-status role="status"></p>
+        </form>
+      </section>
+    </div>
+  </main>
+  <script src="../assets/site.js" defer></script>
+</body>
+</html>
