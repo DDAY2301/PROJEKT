@@ -125,11 +125,38 @@ while ((Get-Date) -lt $deadline -and -not $tunnelUrl) {
 if (-not $tunnelUrl) {
   throw "Cloudflare tunnel started but its public URL was not detected. Check $cfLog."
 }
-try {
-  $publicHealth = Invoke-RestMethod -Uri "$tunnelUrl/health" -Method Get -TimeoutSec 12
-  if (-not $publicHealth.ok) { throw "Public health check did not return ok." }
-} catch { throw "Cloudflare URL exists but cannot reach the agent: $tunnelUrl" }
-Write-Host "Cloudflare: ONLINE / $tunnelUrl" -ForegroundColor Green
+
+Write-Host "Cloudflare URL created: $tunnelUrl" -ForegroundColor DarkCyan
+Write-Host "Waiting for the Cloudflare edge route to become ready..."
+$publicHealth = $null
+$publicDeadline = (Get-Date).AddSeconds(90)
+$attempt = 0
+while ((Get-Date) -lt $publicDeadline -and -not $publicHealth) {
+  $attempt += 1
+  try {
+    $candidateHealth = Invoke-RestMethod -Uri "$tunnelUrl/health" -Method Get -TimeoutSec 8
+    if ($candidateHealth -and $candidateHealth.ok) {
+      $publicHealth = $candidateHealth
+      break
+    }
+  } catch {
+    if ($attempt -eq 1 -or ($attempt % 5) -eq 0) {
+      Write-Host "Cloudflare propagation attempt $attempt - not ready yet..." -ForegroundColor DarkYellow
+    }
+  }
+  Start-Sleep -Seconds 2
+}
+
+if (-not $publicHealth) {
+  Write-Warning "Cloudflare URL was created but the automatic public health check did not become ready within 90 seconds."
+  Write-Warning "The tunnel window is still running. You can test manually: $tunnelUrl/health"
+  if (Test-Path $cfLog) {
+    Write-Host "Last Cloudflare log lines:" -ForegroundColor Yellow
+    Get-Content $cfLog -Tail 12 -ErrorAction SilentlyContinue | Out-Host
+  }
+} else {
+  Write-Host "Cloudflare: ONLINE / $tunnelUrl" -ForegroundColor Green
+}
 
 Write-Host "[6/6] Opening public product..."
 $encodedApi = [Uri]::EscapeDataString($tunnelUrl)
@@ -138,6 +165,7 @@ $publicLanding = "https://dday2301.github.io/PROJEKT/"
 Write-Host ""
 Write-Host "PUBLIC LANDING: $publicLanding" -ForegroundColor Cyan
 Write-Host "PUBLIC AI BUILDER: $publicBuilder" -ForegroundColor Cyan
+Write-Host "PUBLIC API HEALTH: $tunnelUrl/health" -ForegroundColor Cyan
 Write-Host "LOCAL HEALTH: http://127.0.0.1:$Port/health" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Keep the Ollama, API and Cloudflare windows open while the product is in use." -ForegroundColor Yellow
