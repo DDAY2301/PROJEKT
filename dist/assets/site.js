@@ -11,34 +11,25 @@ if (briefForm) {
 
   briefForm.addEventListener("submit", (event) => {
     event.preventDefault();
-
     const data = new FormData(briefForm);
-    const lines = [
-      "Pozdravljeni,",
-      "",
-      "pošiljam povpraševanje za projektno spletno stran.",
-      "",
-      `Organizacija: ${data.get("organization")}`,
-      `Kontaktna oseba: ${data.get("name")}`,
-      `E-pošta: ${data.get("email")}`,
-      `Program: ${data.get("programme")}`,
-      `Želeni paket: ${data.get("package")}`,
-      `Predviden rok: ${data.get("deadline") || "ni določen"}`,
-      `Obstoječa povezava: ${data.get("url") || "ni je"}`,
-      "",
-      "Opis projekta:",
-      `${data.get("description")}`,
-      "",
-      "Lep pozdrav"
-    ];
-
-    const subject = encodeURIComponent(`Povpraševanje – ${data.get("organization")}`);
-    const body = encodeURIComponent(lines.join("\n"));
-    window.location.href = `mailto:kontakt@projectvisibility.eu?subject=${subject}&body=${body}`;
+    const prefill = {
+      organization: data.get("organization") || "",
+      contact_name: data.get("name") || "",
+      contact_email: data.get("email") || "",
+      programme: data.get("programme") || "",
+      package: data.get("package") || "Start",
+      deadline: data.get("deadline") || "",
+      existing_url: data.get("url") || "",
+      goal: data.get("description") || ""
+    };
+    localStorage.setItem("pv_prefill", JSON.stringify(prefill));
 
     if (status) {
       status.classList.add("visible");
-      status.textContent = "Odprl se bo vaš e-poštni program s pripravljenim povpraševanjem. Pred pošiljanjem ga lahko še uredite.";
+      status.textContent = "Brief je pripravljen. Odpiram builder za popolno prilagoditev in generiranje strani …";
     }
+
+    const pkg = encodeURIComponent(prefill.package);
+    window.location.href = `../builder/?paket=${pkg}`;
   });
 }
