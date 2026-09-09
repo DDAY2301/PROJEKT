@@ -2,7 +2,7 @@ name: Agent API CI
 
 on:
   push:
-    branches: [main, feature/autonomous-website-agent-api]
+    branches: [main, feature/autonomous-website-agent-api, feature/product-console-v2]
   pull_request:
     branches: [main]
 
@@ -16,14 +16,16 @@ jobs:
           python-version: '3.12'
       - name: Install dependencies
         run: pip install -r api/requirements.txt
-      - name: Compile API
-        run: python -m py_compile api/main.py
-      - name: Import API
+      - name: Compile API runtime
+        run: python -m py_compile api/main.py api/enhanced_runtime.py api/server.py
+      - name: Import complete server
         env:
           APP_SECRET: ci-only-secret
-        run: python -c "import api.main; print(api.main.app.title)"
-      - name: Check generated public files
+          OLLAMA_MODEL: qwen2.5-coder:3b
+        run: python -c "import api.server; print(api.server.app.title)"
+      - name: Check product files
         run: |
           test -f dist/index.html
           test -f dist/builder/index.html
           test -f dist/assets/builder.js
+          test -f start-product.ps1
