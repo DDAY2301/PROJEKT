@@ -1,7 +1,19 @@
-const API = localStorage.getItem('pv_api_url') || 'http://localhost:8000';
+const API = localStorage.getItem('pv_api_url') || ((location.protocol === 'http:' || location.protocol === 'https:') ? location.origin : 'http://localhost:8000');
 let token = localStorage.getItem('pv_token') || '';
 const $ = id => document.getElementById(id);
 const status = msg => $('status').textContent = msg;
+
+function errorMessage(data, fallback) {
+  if (!data) return fallback;
+  if (typeof data.detail === 'string') return data.detail;
+  if (Array.isArray(data.detail)) {
+    return data.detail.map(x => {
+      const where = Array.isArray(x.loc) ? x.loc.filter(v => v !== 'body').join('.') : '';
+      return `${where ? where + ': ' : ''}${x.msg || 'Neveljaven podatek'}`;
+    }).join(' | ');
+  }
+  return fallback;
+}
 
 async function request(path, options={}) {
   const headers = {'Content-Type':'application/json', ...(options.headers||{})};
@@ -9,7 +21,7 @@ async function request(path, options={}) {
   const r = await fetch(`${API}${path}`, {...options, headers});
   const text = await r.text();
   let data; try { data = JSON.parse(text); } catch { data = {detail:text}; }
-  if (!r.ok) throw new Error(data.detail || `HTTP ${r.status}`);
+  if (!r.ok) throw new Error(errorMessage(data, `HTTP ${r.status}`));
   return data;
 }
 
@@ -18,14 +30,26 @@ async function checkHealth(){
     const h = await request('/health');
     status(`API povezan. Model: ${h.model}. GitHub publishing: ${h.github_configured ? 'DA' : 'NE'}.`);
   } catch(e) {
-    status(`API ni dosegljiv na ${API}. Zaženi lokalni agent. ${e.message}`);
+    status(`API ni dosegljiv na ${API}. ${e.message}`);
   }
 }
 
-function authBody(){ return {email:$('email').value.trim(), password:$('password').value}; }
+function authBody(){
+  return {email:$('email').value.trim(), password:$('password').value};
+}
+
+function validateAuth(){
+  const email = $('email').value.trim();
+  const password = $('password').value;
+  if (!email) throw new Error('Vpiši e-poštni naslov.');
+  if (!email.includes('@')) throw new Error('Vpiši veljaven e-poštni naslov.');
+  if (password.length < 8) throw new Error('Geslo mora imeti najmanj 8 znakov.');
+}
 
 $('register').addEventListener('click', async () => {
   try {
+    validateAuth();
+    status('Ustvarjam račun ...');
     const d=await request('/auth/register',{method:'POST',body:JSON.stringify(authBody())});
     token=d.token; localStorage.setItem('pv_token',token);
     $('authState').textContent='Registriran in prijavljen.';
@@ -36,6 +60,8 @@ $('register').addEventListener('click', async () => {
 
 $('login').addEventListener('click', async () => {
   try {
+    validateAuth();
+    status('Prijavljam ...');
     const d=await request('/auth/login',{method:'POST',body:JSON.stringify(authBody())});
     token=d.token; localStorage.setItem('pv_token',token);
     $('authState').textContent='Prijavljen.';
