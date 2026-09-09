@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="sl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Odpiram Website Builder | Project Visibility</title>
+  <style>
+    :root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#102923;background:#f4f6f2}
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:radial-gradient(circle at top,#e9f1ec 0,#f6f5ef 48%,#eef2ef 100%)}
+    main{width:min(620px,100%);padding:34px;border:1px solid #cbd7d1;border-radius:24px;background:#fff;box-shadow:0 24px 70px rgba(16,41,35,.12)}
+    .mark{width:42px;height:42px;display:grid;place-items:center;border-radius:12px;background:#123f35;color:#d9ff65;font-weight:950;margin-bottom:22px}
+    h1{margin:0 0 10px;font-size:clamp(2rem,6vw,3.7rem);line-height:.95;letter-spacing:-.055em}p{margin:0;color:#5d7069;line-height:1.65}.state{margin-top:24px;padding:14px 16px;border-radius:14px;background:#102923;color:#dbe7e2;font:600 13px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap}.bad{background:#5b2525;color:#ffe5e5}.button{display:none;margin-top:18px;padding:12px 16px;border:0;border-radius:12px;background:#d9ff65;color:#102923;text-decoration:none;font-weight:900;cursor:pointer}
+  </style>
+</head>
+<body>
+<main>
+  <div class="mark">P</div>
+  <h1>Vzpostavljam povezavo.</h1>
+  <p>Najprej preverim, ali je trenutna javna povezava dejansko aktivna. Na neveljaven ali pretečen naslov te ne bom preusmeril.</p>
+  <div class="state" id="state">Preverjam povezavo …</div>
+  <button class="button" id="retry" type="button">Preveri znova</button>
+</main>
+<script>
+(() => {
+  const state = document.getElementById('state');
+  const retry = document.getElementById('retry');
+  const params = new URLSearchParams(location.search);
+  const api = (params.get('api') || '').trim().replace(/\/$/, '');
+  const allowed = /^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/i.test(api) || /^https:\/\/[a-z0-9.-]+(?::\d+)?$/i.test(api);
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+  function fail(message) {
+    state.classList.add('bad');
+    state.textContent = message;
+    retry.style.display = 'inline-flex';
+  }
+
+  async function verifyAndOpen() {
+    retry.style.display = 'none';
+    state.classList.remove('bad');
+    if (!api || !allowed) {
+      fail('Povezava ni veljavna. Ponovno zaženi Project Visibility launcher.');
+      return;
+    }
+    state.textContent = 'Preverjam: ' + api + '\nČakam na odgovor storitve …';
+    let healthy = false;
+    for (let attempt = 1; attempt <= 8; attempt++) {
+      try {
+        const response = await fetch(api + '/health?runtime=' + Date.now(), {cache:'no-store'});
+        if (response.ok) {
+          const data = await response.json();
+          if (data && data.ok) { healthy = true; break; }
+        }
+      } catch (_) {}
+      state.textContent = 'Preverjam: ' + api + '\nPoskus ' + attempt + '/8 — povezava še ni pripravljena.';
+      await sleep(1500);
+    }
+    if (!healthy) {
+      fail('Ta javna povezava ni več dosegljiva ali je potekla.\n\nQuick Tunnel naslovi so začasni. Zaženi start-product.ps1, da sistem ustvari in preveri nov naslov.');
+      return;
+    }
+    const target = api + '/builder.html?api=' + encodeURIComponent(api) + '&v=20260909-6';
+    state.textContent = 'Povezava je aktivna.\nOdpiram Website Builder …';
+    location.replace(target);
+  }
+
+  retry.addEventListener('click', verifyAndOpen);
+  verifyAndOpen();
+})();
+</script>
+</body>
+</html>
