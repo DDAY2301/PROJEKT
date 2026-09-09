@@ -1,14 +1,15 @@
 """Runtime enhancements for the autonomous website agent.
 
 This module patches the generation coroutine in api.main without duplicating the
-API routes. It adds explicit build states and guarantees that background task
-failures are persisted as a project status instead of disappearing silently.
+API routes. It adds explicit build states, automatic GitHub Pages publishing and
+guarantees that background task failures are persisted as a project status.
 """
 
 import json
 import re
 
 import api.main as core
+from api.pages_publish import publish_generated_site
 
 
 def set_status(project_id: str, status: str) -> None:
@@ -57,6 +58,7 @@ async def generate_project_observable(project_id: str):
 
         set_status(project_id, "publishing")
         await core.github_put_bundle(repo_name, files, f"Agent build for {config['name']}")
+        await publish_generated_site(repo_name)
 
         final_status = "ready" if not any(
             i.get("severity") in {"critical", "high"} for i in issues
