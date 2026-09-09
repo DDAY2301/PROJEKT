@@ -1,0 +1,7 @@
+fastapi==0.116.1
+uvicorn[standard]==0.35.0
+httpx==0.28.1
+PyJWT==2.10.1
+bcrypt==4.3.0
+pydantic[email]==2.11.7
+apscheduler==3.11.0

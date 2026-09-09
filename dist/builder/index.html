@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="sl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex">
+  <link rel="stylesheet" href="../assets/site.css">
+  <title>Website Builder | Project Visibility Sprint</title>
+  <style>
+    .builder{max-width:1100px;margin:0 auto;padding:40px 20px}.builder-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}.panel{background:#fff;border:1px solid #ddd;border-radius:18px;padding:22px}.builder label{display:block;font-weight:700;margin:14px 0 6px}.builder input,.builder select,.builder textarea{width:100%;padding:12px;border:1px solid #bbb;border-radius:10px}.builder textarea{min-height:110px}.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}.swatch{display:flex;gap:12px}.swatch input{height:48px;padding:4px}.status{white-space:pre-wrap;background:#111827;color:#fff;padding:16px;border-radius:12px;min-height:120px}.hidden{display:none}@media(max-width:800px){.builder-grid,.row{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<header class="site-header"><nav class="wrap nav"><a class="brand" href="../"><span>Project Visibility Sprint</span></a></nav></header>
+<main class="builder">
+  <h1>Samostojni Website Builder</h1>
+  <p>Prijavi se, izberi paket in določi vsebino, barve, strani, slog ter druge zahteve. Agent nato izdela stran, jo preveri, popravi kritične napake in jo shrani v GitHub.</p>
+  <div class="builder-grid">
+    <section class="panel">
+      <h2>1. Račun</h2>
+      <label>E-pošta<input id="email" type="email"></label>
+      <label>Geslo<input id="password" type="password" minlength="8"></label>
+      <div class="row"><button class="button" id="register">Registracija</button><button class="button secondary" id="login">Prijava</button></div>
+      <p id="authState">Nisi prijavljen.</p>
+    </section>
+    <section class="panel">
+      <h2>2. Projekt</h2>
+      <label>Ime projekta<input id="name"></label>
+      <label>Organizacija<input id="organization"></label>
+      <label>Paket<select id="package"><option>Start</option><option>Standard</option><option>Premium</option></select></label>
+      <label>Program / dejavnost<input id="programme" placeholder="npr. Erasmus+ KA2 ali lokalno podjetje"></label>
+      <label>Glavni cilj strani<textarea id="goal"></textarea></label>
+      <label>Ciljna publika<input id="audience"></label>
+      <label>Ton komunikacije<input id="tone" value="professional and human"></label>
+    </section>
+    <section class="panel">
+      <h2>3. Vizualna identiteta</h2>
+      <div class="row">
+        <label>Primarna barva<input id="primary" type="color" value="#111827"></label>
+        <label>Poudarek<input id="secondary" type="color" value="#84cc16"></label>
+      </div>
+      <div class="row">
+        <label>Ozadje<input id="background" type="color" value="#ffffff"></label>
+        <label>Besedilo<input id="textColor" type="color" value="#111827"></label>
+      </div>
+      <label>Slog<select id="fontStyle"><option>modern</option><option>minimal</option><option>editorial</option><option>classic</option><option>tech</option></select></label>
+      <label>Vizualno razpoloženje<input id="mood" value="clean, trustworthy, contemporary"></label>
+      <label>Smer fotografij / slik<input id="imageDirection" value="authentic, relevant, non-stock feeling"></label>
+    </section>
+    <section class="panel">
+      <h2>4. Strani in posebne želje</h2>
+      <label>Želene strani<textarea id="pages" placeholder="Domov | predstavitev\nO projektu | cilj in aktivnosti\nGalerija | fotografije in dogodki\nKontakt | kontaktni podatki"></textarea></label>
+      <label>Naslov hero sekcije<input id="heroTitle"></label>
+      <label>Podnaslov<input id="heroSubtitle"></label>
+      <label>CTA gumb<input id="cta" value="Kontaktirajte nas"></label>
+      <label>Kontaktni e-mail<input id="contact" type="email"></label>
+      <label>Dodatne zahteve<textarea id="requirements"></textarea></label>
+      <button class="button" id="generate">Generiraj spletno stran →</button>
+    </section>
+  </div>
+  <section class="panel" style="margin-top:24px"><h2>Status agenta</h2><div class="status" id="status">Pripravljen.</div></section>
+</main>
+<script src="../assets/builder.js" defer></script>
+</body>
+</html>
