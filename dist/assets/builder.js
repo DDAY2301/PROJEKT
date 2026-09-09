@@ -83,5 +83,27 @@ async function watch(id){
 
 const requestedPackage = new URLSearchParams(window.location.search).get('paket');
 if(['Start','Standard','Premium'].includes(requestedPackage)) $('package').value=requestedPackage;
+
+try {
+  const rawPrefill = localStorage.getItem('pv_prefill');
+  if (rawPrefill) {
+    const p = JSON.parse(rawPrefill);
+    if (p.organization) $('organization').value = p.organization;
+    if (p.programme) $('programme').value = p.programme;
+    if (p.goal) $('goal').value = p.goal;
+    if (p.contact_email) {
+      $('contact').value = p.contact_email;
+      if (!$('email').value) $('email').value = p.contact_email;
+    }
+    if (['Start','Standard','Premium'].includes(p.package)) $('package').value = p.package;
+    const extras = [];
+    if (p.contact_name) extras.push(`Kontaktna oseba: ${p.contact_name}`);
+    if (p.deadline) extras.push(`Želeni rok: ${p.deadline}`);
+    if (p.existing_url) extras.push(`Obstoječa povezava: ${p.existing_url}`);
+    if (extras.length && !$('requirements').value) $('requirements').value = extras.join('\n');
+    localStorage.removeItem('pv_prefill');
+  }
+} catch {}
+
 if(token) $('authState').textContent='Žeton prijave je shranjen v tem brskalniku.';
 checkHealth();
