@@ -26,6 +26,8 @@ jobs:
       - name: Check product files
         run: |
           test -f dist/index.html
+          test -f dist/builder.html
           test -f dist/builder/index.html
+          test -f dist/404.html
           test -f dist/assets/builder.js
           test -f start-product.ps1
