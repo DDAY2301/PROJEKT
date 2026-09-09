@@ -13,15 +13,34 @@ async function request(path, options={}) {
   return data;
 }
 
+async function checkHealth(){
+  try {
+    const h = await request('/health');
+    status(`API povezan. Model: ${h.model}. GitHub publishing: ${h.github_configured ? 'DA' : 'NE'}.`);
+  } catch(e) {
+    status(`API ni dosegljiv na ${API}. Zaženi lokalni agent. ${e.message}`);
+  }
+}
+
 function authBody(){ return {email:$('email').value.trim(), password:$('password').value}; }
 
 $('register').addEventListener('click', async () => {
-  try { const d=await request('/auth/register',{method:'POST',body:JSON.stringify(authBody())}); token=d.token; localStorage.setItem('pv_token',token); $('authState').textContent='Registriran in prijavljen.'; }
+  try {
+    const d=await request('/auth/register',{method:'POST',body:JSON.stringify(authBody())});
+    token=d.token; localStorage.setItem('pv_token',token);
+    $('authState').textContent='Registriran in prijavljen.';
+    status('Račun je pripravljen. Zdaj lahko oddaš projekt agentu.');
+  }
   catch(e){ status(`Napaka registracije: ${e.message}`); }
 });
 
 $('login').addEventListener('click', async () => {
-  try { const d=await request('/auth/login',{method:'POST',body:JSON.stringify(authBody())}); token=d.token; localStorage.setItem('pv_token',token); $('authState').textContent='Prijavljen.'; }
+  try {
+    const d=await request('/auth/login',{method:'POST',body:JSON.stringify(authBody())});
+    token=d.token; localStorage.setItem('pv_token',token);
+    $('authState').textContent='Prijavljen.';
+    status('Prijava uspešna.');
+  }
   catch(e){ status(`Napaka prijave: ${e.message}`); }
 });
 
@@ -34,7 +53,7 @@ function parsePages(){
 }
 
 $('generate').addEventListener('click', async () => {
-  if(!token){ status('Najprej se prijavi.'); return; }
+  if(!token){ status('Najprej se registriraj ali prijavi.'); return; }
   const payload={
     name:$('name').value.trim(), organization:$('organization').value.trim(), package:$('package').value,
     programme:$('programme').value.trim(), goal:$('goal').value.trim(), audience:$('audience').value.trim(), tone:$('tone').value.trim(),
@@ -43,7 +62,7 @@ $('generate').addEventListener('click', async () => {
     contact_email:$('contact').value.trim()||null, image_direction:$('imageDirection').value.trim(), custom_requirements:$('requirements').value.trim()
   };
   try {
-    status('Projekt oddan agentu …');
+    status('Projekt oddan agentu … načrtovanje se začenja.');
     const created=await request('/projects',{method:'POST',body:JSON.stringify(payload)});
     status(`Projekt ${created.id} je v čakalni vrsti.\nAgent načrtuje, gradi, preverja in popravlja stran.`);
     watch(created.id);
@@ -57,9 +76,12 @@ async function watch(id){
       const p=await request(`/projects/${id}`);
       const issues=p.last_audit?.issues||[];
       status(`Status: ${p.status}\nGitHub repo: ${p.repo_name||'še ni ustvarjen'}\nSamodejni popravki: ${p.auto_fix_attempts}\nQA težave: ${issues.length}\n${issues.slice(0,8).map(x=>`- ${x.severity}: ${x.message}`).join('\n')}`);
-      if(['ready','needs_review'].includes(p.status)) return;
+      if(['ready','needs_review','failed'].includes(p.status)) return;
     }catch(e){ status(`Preverjanje statusa ni uspelo: ${e.message}`); return; }
   }
 }
 
+const requestedPackage = new URLSearchParams(window.location.search).get('paket');
+if(['Start','Standard','Premium'].includes(requestedPackage)) $('package').value=requestedPackage;
 if(token) $('authState').textContent='Žeton prijave je shranjen v tem brskalniku.';
+checkHealth();
