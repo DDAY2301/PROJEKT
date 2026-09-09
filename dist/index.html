@@ -2,153 +2,82 @@
 <html lang="sl">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Projektne spletne strani in diseminacijski paketi za Erasmus+, CERV in druge evropske projekte.">
-  <link rel="canonical" href="https://projectvisibility.eu/">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="AI website agent za projektne in poslovne spletne strani: brief, dizajn, koda, QA, samodejni popravki in GitHub objava.">
+  <link rel="canonical" href="https://dday2301.github.io/PROJEKT/">
   <link rel="icon" href="assets/mark.svg" type="image/svg+xml">
   <link rel="stylesheet" href="assets/site.css">
-  <meta property="og:title" content="Project Visibility Sprint | Projekt na spletu v 72 urah">
-  <meta property="og:description" content="Projektna spletna stran, partnerji, rezultati in pravilna predstavitev financiranja — v jasnem paketu in po fiksni ceni.">
-  <meta property="og:url" content="https://projectvisibility.eu/">
+  <meta property="og:title" content="Project Visibility AI | Od briefa do GitHuba">
+  <meta property="og:description" content="Prilagodi znamko in vsebino. Lokalni AI agent načrtuje, izdela, preveri, popravi in objavi spletno stran.">
+  <meta property="og:url" content="https://dday2301.github.io/PROJEKT/">
   <meta property="og:type" content="website">
-  <title>Project Visibility Sprint | Projekt na spletu v 72 urah</title>
+  <title>Project Visibility AI | Autonomous Website Agent</title>
+  <style>
+    .ai-hero{padding:clamp(4.5rem,10vw,8rem) 0 4rem;overflow:hidden}.ai-hero-grid{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(22rem,.95fr);gap:clamp(2rem,6vw,5rem);align-items:center}.ai-hero h1{max-width:10ch}.ai-hero h1 span{color:var(--green)}.hero-kicker{display:inline-flex;align-items:center;gap:.55rem;padding:.45rem .7rem;border-radius:999px;background:var(--green-light);color:var(--green);font-size:.76rem;font-weight:900;letter-spacing:.06em;text-transform:uppercase}.hero-kicker i{width:.5rem;height:.5rem;border-radius:50%;background:var(--lime);box-shadow:0 0 0 4px rgba(217,255,101,.32)}
+    .agent-window{padding:1rem;border:1px solid #29423b;border-radius:1.5rem;background:#071713;color:#fff;box-shadow:0 28px 80px rgba(7,23,19,.28)}.agent-window-top{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.25rem .2rem .9rem;border-bottom:1px solid rgba(255,255,255,.09)}.window-dots{display:flex;gap:.35rem}.window-dots i{width:.58rem;height:.58rem;border-radius:50%;background:#526760}.agent-online{display:flex;align-items:center;gap:.4rem;color:#cfe0da;font-size:.73rem;font-weight:850}.agent-online::before{content:"";width:.48rem;height:.48rem;border-radius:50%;background:var(--lime);box-shadow:0 0 0 4px rgba(217,255,101,.12)}.terminal-title{margin:1.15rem .25rem;color:#8ca29a;font:700 .7rem/1.4 ui-monospace,Consolas,monospace;text-transform:uppercase;letter-spacing:.12em}.agent-flow{display:grid;gap:.5rem}.flow-row{display:grid;grid-template-columns:2rem 1fr auto;gap:.65rem;align-items:center;padding:.7rem;border:1px solid rgba(255,255,255,.08);border-radius:.85rem;background:rgba(255,255,255,.035)}.flow-row b{display:grid;place-items:center;width:2rem;height:2rem;border-radius:.65rem;background:#123f35;color:var(--lime);font-size:.76rem}.flow-row strong{display:block;font-size:.86rem}.flow-row small{display:block;color:#92aaa2;font-size:.69rem}.flow-row em{font-style:normal;color:var(--lime);font:800 .65rem ui-monospace,Consolas,monospace}.agent-code{margin-top:.8rem;padding:.8rem;border-radius:.85rem;background:#020b08;color:#a9beb6;font:500 .68rem/1.6 ui-monospace,Consolas,monospace}.agent-code span{color:var(--lime)}
+    .system-strip{margin-top:2rem;display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--line);border-radius:1.2rem;overflow:hidden;background:var(--white)}.sys{padding:1rem 1.2rem;border-right:1px solid var(--line)}.sys:last-child{border-right:0}.sys strong{display:block;font-size:.82rem}.sys span{color:var(--muted);font-size:.76rem}
+    .ai-section{background:var(--ink);color:#fff}.ai-section .eyebrow{color:var(--lime)}.ai-section .muted{color:#b8cac3}.agent-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.8rem}.agent-feature{min-height:15rem;padding:1.4rem;border:1px solid rgba(255,255,255,.1);border-radius:1.1rem;background:rgba(255,255,255,.04)}.agent-feature span{display:inline-grid;width:2.2rem;height:2.2rem;place-items:center;border-radius:.7rem;background:var(--lime);color:var(--ink);font-weight:950}.agent-feature h3{margin-top:2.5rem;color:#fff}.agent-feature p{color:#b8cac3;font-size:.88rem}
+    .demo-cta{margin:0 0 4rem;padding:clamp(1.8rem,5vw,3.4rem);border-radius:1.6rem;background:linear-gradient(120deg,var(--lime),#edffb6);display:grid;grid-template-columns:1fr auto;gap:1rem;align-items:center}.demo-cta h2{margin:0;max-width:17ch;font-size:clamp(2rem,5vw,4rem)}.demo-cta p{margin:.65rem 0 0;max-width:42rem;color:#385047}.demo-cta .button{white-space:nowrap}
+    @media(max-width:900px){.ai-hero-grid,.demo-cta{grid-template-columns:1fr}.system-strip,.agent-grid{grid-template-columns:1fr 1fr}.sys:nth-child(2){border-right:0}.sys{border-bottom:1px solid var(--line)}}
+    @media(max-width:620px){.system-strip,.agent-grid{grid-template-columns:1fr}.sys{border-right:0}.ai-hero h1{max-width:12ch}.agent-window{padding:.75rem}}
+  </style>
 </head>
 <body>
-  <a class="skip-link" href="#vsebina">Preskoči na vsebino</a>
-  <header class="site-header">
-    <nav class="wrap nav" aria-label="Glavna navigacija">
-      <a class="brand" href="#vrh"><img src="assets/mark.svg" alt=""><span>Project Visibility Sprint</span></a>
-      <div class="nav-links">
-        <a href="#vkljuceno">Kaj dobite</a>
-        <a href="#paketi">Paketi</a>
-        <a class="button small" href="brief/">Začni projekt</a>
-      </div>
-    </nav>
-  </header>
+<a class="skip-link" href="#vsebina">Preskoči na vsebino</a>
+<header class="site-header"><nav class="wrap nav" aria-label="Glavna navigacija"><a class="brand" href="#vrh"><img src="assets/mark.svg" alt=""><span>Project Visibility AI</span></a><div class="nav-links"><a href="#sistem">Kako deluje</a><a href="#paketi">Paketi</a><a class="button small" href="builder/">Odpri AI Builder →</a></div></nav></header>
 
-  <main id="vsebina">
-    <section class="hero" id="vrh">
-      <div class="wrap hero-grid">
-        <div>
-          <span class="pill">Za Erasmus+, CERV in druge EU projekte</span>
-          <h1>Vaš projekt na spletu v <em>72 urah.</em></h1>
-          <p class="lead">Jasna projektna stran, pravilna predstavitev financiranja, partnerji, rezultati in gradiva — pripravljeno za udeležence, javnost in poročanje.</p>
-          <div class="hero-actions">
-            <a class="button" href="brief/">Pošlji projektni brief →</a>
-            <a class="button secondary" href="#paketi">Primerjaj pakete</a>
-          </div>
-          <div class="proof" aria-label="Glavne prednosti">
-            <span>Fiksna cena</span><span>Brez vezave</span><span>Objava vključena</span>
-          </div>
-        </div>
-        <aside class="brief-card" aria-label="Kontrolni seznam projektne strani">
-          <div class="eyebrow">Visibility check</div>
-          <h2>Je projekt razumljiv obiskovalcu in dokazljiv financerju?</h2>
-          <ol class="brief-list">
-            <li>Jasen cilj, aktivnosti in ciljne skupine</li>
-            <li>Ustrezna navedba programa in financiranja</li>
-            <li>Partnerji, novice, rezultati in dokazila</li>
-            <li>Hitra, mobilna in dostopna objava</li>
-          </ol>
-        </aside>
+<main id="vsebina">
+  <section class="ai-hero" id="vrh">
+    <div class="wrap ai-hero-grid">
+      <div>
+        <span class="hero-kicker"><i></i> Autonomous Website Agent</span>
+        <h1>Od briefa do <span>GitHuba.</span></h1>
+        <p class="lead">Prilagodi barve, vsebino, strani in slog. Lokalni AI agent nato pripravi arhitekturo, izdela responsive frontend, izvede QA, sam popravi kritične napake in rezultat objavi v GitHub.</p>
+        <div class="hero-actions"><a class="button" href="builder/">Zaženi AI Website Builder →</a><a class="button secondary" href="#sistem">Poglej sistem</a></div>
+        <div class="proof"><span>Lokalni AI model</span><span>Samodejni QA</span><span>GitHub publishing</span><span>Brez plačljivih AI tokenov v lokalnem načinu</span></div>
+        <div class="system-strip"><div class="sys"><strong>01 / BRIEF</strong><span>Cilj + znamka + vsebina</span></div><div class="sys"><strong>02 / BUILD</strong><span>HTML + CSS + JS</span></div><div class="sys"><strong>03 / QA</strong><span>Audit + self-fix</span></div><div class="sys"><strong>04 / SHIP</strong><span>GitHub repo</span></div></div>
       </div>
-    </section>
-
-    <section id="vkljuceno">
-      <div class="wrap">
-        <div class="section-head">
-          <div class="eyebrow">En izvajalec, jasen rezultat</div>
-          <h2>Stran, zgrajena okoli projektnega cikla.</h2>
-          <p class="muted">Od prve predstavitve do objave rezultatov in zaključnega poročanja. Brez generične predloge in brez nepotrebne tehnične navlake.</p>
+      <aside class="agent-window" aria-label="Prikaz agentskega procesa">
+        <div class="agent-window-top"><div class="window-dots"><i></i><i></i><i></i></div><span class="agent-online">AGENT ONLINE</span></div>
+        <div class="terminal-title">autonomous build / current pipeline</div>
+        <div class="agent-flow">
+          <div class="flow-row"><b>01</b><div><strong>Design architecture</strong><small>IA, sections, content hierarchy</small></div><em>DONE</em></div>
+          <div class="flow-row"><b>02</b><div><strong>Generate website</strong><small>Semantic responsive frontend</small></div><em>DONE</em></div>
+          <div class="flow-row"><b>03</b><div><strong>QA + security audit</strong><small>SEO, accessibility, broken UI</small></div><em>DONE</em></div>
+          <div class="flow-row"><b>04</b><div><strong>Self-fix loop</strong><small>Critical/high issues patched</small></div><em>PASS</em></div>
+          <div class="flow-row"><b>05</b><div><strong>GitHub publish</strong><small>Versioned source repository</small></div><em>READY</em></div>
         </div>
-        <div class="grid-3">
-          <article class="card"><span class="card-number">01 / ZGODBA</span><h3>Projektna zgodba</h3><p class="muted">Razumljiva razlaga potrebe, ciljev, aktivnosti, ciljnih skupin in pričakovanega učinka.</p></article>
-          <article class="card"><span class="card-number">02 / VIDNOST</span><h3>Predstavitev financiranja</h3><p class="muted">Program, financer in obvezna besedila so umeščeni pregledno, dosledno in po vaših navodilih.</p></article>
-          <article class="card"><span class="card-number">03 / REZULTATI</span><h3>Dokazi na enem mestu</h3><p class="muted">Novice, galerija, gradiva, povezave in rezultati so organizirani tako, da jih je mogoče hitro najti.</p></article>
-          <article class="card"><span class="card-number">04 / JEZIKI</span><h3>Večjezična objava</h3><p class="muted">Slovenščina in angleščina sta lahko vključeni že v osnovni paket, dodatni jeziki pa po dogovoru.</p></article>
-          <article class="card"><span class="card-number">05 / OBJAVA</span><h3>Povezava vaše domene</h3><p class="muted">Pripravimo objavo in enkratno tehnično povežemo domeno, ki jo kupite in upravljate vi.</p></article>
-          <article class="card"><span class="card-number">06 / PREDAJA</span><h3>Datoteke in podpora</h3><p class="muted">Prejmete urejeno rešitev, navodila za uporabo in dogovorjeno obdobje za popravke.</p></article>
-        </div>
-      </div>
-    </section>
-
-    <section class="process">
-      <div class="wrap">
-        <div class="section-head">
-          <div class="eyebrow">Potek sodelovanja</div>
-          <h2>Od gradiv do objave.</h2>
-          <p class="muted">Rok začne teči, ko prejmemo potrjeno besedilo, logotipe, fotografije in podatke o financerju.</p>
-        </div>
-        <div class="steps">
-          <article class="step"><small>1. korak</small><h3>Projektni brief</h3><p>V nekaj minutah zberemo program, cilj, jezike, obseg in želeni rok.</p></article>
-          <article class="step"><small>2. korak</small><h3>Gradiva</h3><p>Pošljete ključne podatke, logotipe, fotografije in navodila financerja.</p></article>
-          <article class="step"><small>3. korak</small><h3>Izdelava</h3><p>Uredimo besedilo, oblikovanje, mobilni prikaz in vsebinske sklope.</p></article>
-          <article class="step"><small>4. korak</small><h3>Pregled in objava</h3><p>Vnesemo dogovorjene popravke, preverimo stran in jo objavimo.</p></article>
-        </div>
-      </div>
-    </section>
-
-    <section id="paketi">
-      <div class="wrap">
-        <div class="section-head">
-          <div class="eyebrow">Fiksni paketi</div>
-          <h2>Izberite obseg, ne presenečenj.</h2>
-          <p class="muted">Vsak paket ima vnaprej določen obseg izdelave in podpore.</p>
-        </div>
-        <div class="domain-banner">
-          <strong>!</strong>
-          <p>Domena ni vključena v ceno. Naročnik jo kupi in registrira na svoje ime ter sam plača prvo registracijo in vsa poznejša podaljšanja. Enkratna tehnična povezava domene s projektno stranjo je vključena. Morebitno plačljivo gostovanje se obračuna ločeno samo po predhodnem dogovoru.</p>
-        </div>
-        <div class="prices">
-          <article class="price">
-            <span class="label">Start</span><h3>Hitra projektna prisotnost</h3><p class="muted">Za en projekt, ki potrebuje urejeno osnovno stran.</p>
-            <div class="price-tag">490 € <small>brez DDV</small></div>
-            <ul><li>ena projektna stran</li><li>slovenščina + angleščina</li><li>do 7 vsebinskih sklopov</li><li>osnovni SEO in mobilni prikaz</li><li>ena serija popravkov</li><li>povezava naročnikove domene</li></ul>
-            <a class="button secondary" href="brief/?paket=Start">Izberi Start</a>
-          </article>
-          <article class="price featured">
-            <span class="label">Standard</span><h3>Celovita projektna stran</h3><p class="muted">Za partnerstvo z več aktivnostmi, novicami in rezultati.</p>
-            <div class="price-tag">890 € <small>brez DDV</small></div>
-            <ul><li>do 5 podstrani</li><li>slovenščina + angleščina</li><li>partnerji, novice, galerija in rezultati</li><li>6 predlog za družbena omrežja</li><li>dve seriji popravkov</li><li>povezava naročnikove domene</li><li>14 dni podpore</li></ul>
-            <a class="button lime" href="brief/?paket=Standard">Izberi Standard</a>
-          </article>
-          <article class="price">
-            <span class="label">Premium</span><h3>Diseminacijski sistem</h3><p class="muted">Za večji projekt, več partnerjev in širši nabor gradiv.</p>
-            <div class="price-tag">1.490 € <small>brez DDV</small></div>
-            <ul><li>do 12 podstrani</li><li>do 3 jeziki</li><li>knjižnica rezultatov in gradiv</li><li>12 družbenih predlog</li><li>diseminacijski koledar</li><li>povezava naročnikove domene</li><li>30 dni podpore in predaja</li></ul>
-            <a class="button secondary" href="brief/?paket=Premium">Izberi Premium</a>
-          </article>
-        </div>
-      </div>
-    </section>
-
-    <section>
-      <div class="wrap">
-        <div class="section-head"><div class="eyebrow">Pogosta vprašanja</div><h2>Preden začnemo.</h2></div>
-        <div class="faq">
-          <details><summary>Ali je rok 72 ur vedno mogoč?</summary><p>Za paket Start da, ko so vsa gradiva popolna in potrjena. Za večjezične ali obsežnejše projekte rok določimo v ponudbi.</p></details>
-          <details><summary>Kdo kupi in plačuje domeno?</summary><p>Domeno vedno kupi naročnik, jo registrira na svoje ime ter sam plača prvo registracijo in vsa podaljšanja. Mi izvedemo enkratno tehnično povezavo.</p></details>
-          <details><summary>Ali storitev zagotavlja skladnost projekta?</summary><p>Ne. Stran uredimo po navodilih, ki jih predloži naročnik. Končna odgovornost za pogodbene obveznosti ostane pri upravičencu.</p></details>
-          <details><summary>Ali lahko posodobite obstoječo stran?</summary><p>Da. Po kratkem tehničnem pregledu določimo, ali je primernejša prenova obstoječe rešitve ali ločena projektna stran.</p></details>
-          <details><summary>Kdo pripravi besedila in fotografije?</summary><p>Naročnik preda osnovna gradiva in pravice za uporabo. V paket je vključena ureditev besedila, ne pa profesionalno prevajanje ali fotografiranje.</p></details>
-          <details><summary>Kaj se zgodi po predaji?</summary><p>Prejmete datoteke, navodila in podporo v obsegu izbranega paketa. Nadaljnje posodobitve lahko naročite ločeno.</p></details>
-        </div>
-      </div>
-    </section>
-
-    <div class="wrap">
-      <section class="cta" aria-label="Začetek projekta">
-        <h2>V nekaj minutah opišite projekt.</h2>
-        <a class="button" href="brief/">Odpri projektni brief →</a>
-      </section>
+        <div class="agent-code">model: <span>qwen2.5-coder:3b</span><br>runtime: <span>local / Ollama</span><br>agent_api: <span>FastAPI</span><br>publish: <span>GitHub</span></div>
+      </aside>
     </div>
-  </main>
+  </section>
 
-  <footer class="site-footer">
-    <div class="wrap footer-grid">
-      <span>Project Visibility Sprint · kontakt@projectvisibility.eu</span>
-      <span>Neodvisna izvedbena storitev. Domena in njena podaljšanja so strošek naročnika.</span>
+  <section class="ai-section" id="sistem">
+    <div class="wrap"><div class="section-head"><div class="eyebrow">En sistem, več agentskih vlog</div><h2>Ne generira samo strani. Preveri svoje delo.</h2><p class="muted">Agentni tok je omejen, sledljiv in namenoma ne prepisuje produkcije neskončno. Težave so zaznane, popravljene in ponovno preverjene pred objavo.</p></div>
+      <div class="agent-grid">
+        <article class="agent-feature"><span>01</span><h3>Design Agent</h3><p>Iz briefa pripravi informacijsko arhitekturo, navigacijo, sekcije in vizualno smer glede na paket in cilj uporabnika.</p></article>
+        <article class="agent-feature"><span>02</span><h3>Code Agent</h3><p>Sestavi statični responsive frontend brez nepotrebnega build sistema, z osnovnim SEO, dostopnostjo in lokalnimi asseti.</p></article>
+        <article class="agent-feature"><span>03</span><h3>QA & Self-Fix</h3><p>Statični pregled in drugi AI pregled iščeta konkretne napake. Kritične in high težave sprožijo omejen samodejni popravljalni cikel.</p></article>
+        <article class="agent-feature"><span>04</span><h3>GitHub Publisher</h3><p>Končni bundle se zapiše v lasten repozitorij, zato ostane koda verzionirana, pregledna in pripravljena za naslednji deployment.</p></article>
+        <article class="agent-feature"><span>05</span><h3>Live Customization</h3><p>Barve, ton, strani, CTA, ciljna publika in zahteve so del build konfiguracije. Builder prikazuje vizualni predogled že pred generiranjem.</p></article>
+        <article class="agent-feature"><span>06</span><h3>Local-first AI</h3><p>Za razvoj agent uporablja lokalni Ollama model. Arhitektura omogoča kasnejši preklop na močnejše modele brez menjave celotnega produkta.</p></article>
+      </div>
     </div>
-  </footer>
+  </section>
+
+  <section id="paketi">
+    <div class="wrap"><div class="section-head"><div class="eyebrow">Build scope</div><h2>Izberi kompleksnost projekta.</h2><p class="muted">Paket določa največji obseg strukture, agent pa znotraj njega optimizira spletno stran glede na brief.</p></div>
+      <div class="prices">
+        <article class="price"><span class="label">Start</span><h3>Focused website</h3><p class="muted">Za manjši projekt ali jasno poslovno predstavitev.</p><div class="price-tag">490 € <small>brez DDV</small></div><ul><li>do 3 strani</li><li>AI architecture + build</li><li>responsive frontend</li><li>QA + self-fix</li><li>GitHub source</li></ul><a class="button secondary" href="builder/?paket=Start">Odpri Start builder</a></article>
+        <article class="price featured"><span class="label">Standard</span><h3>Complete project site</h3><p class="muted">Za več vsebine, partnerjev, rezultatov in galerij.</p><div class="price-tag">890 € <small>brez DDV</small></div><ul><li>do 6 strani</li><li>naprednejša struktura</li><li>partnerji, novice, galerija, rezultati</li><li>QA + self-fix</li><li>GitHub source + predaja</li></ul><a class="button lime" href="builder/?paket=Standard">Odpri Standard builder</a></article>
+        <article class="price"><span class="label">Premium</span><h3>Content system</h3><p class="muted">Za večji projekt ali produkt z obsežnejšo informacijsko arhitekturo.</p><div class="price-tag">1.490 € <small>brez DDV</small></div><ul><li>do 12 strani</li><li>kompleksnejši content model</li><li>knjižnica rezultatov / gradiv</li><li>QA + self-fix</li><li>GitHub source + daljša podpora</li></ul><a class="button secondary" href="builder/?paket=Premium">Odpri Premium builder</a></article>
+      </div>
+    </div>
+  </section>
+
+  <div class="wrap"><section class="demo-cta"><div><h2>Poglej agenta v delu.</h2><p>Odpri builder, določi vizualno identiteto in zahteve ter spremljaj build pipeline od briefa do GitHub repozitorija.</p></div><a class="button" href="builder/">Odpri AI Console →</a></section></div>
+</main>
+
+<footer class="site-footer"><div class="wrap footer-grid"><span>Project Visibility AI · autonomous website build system</span><span>Development mode: GitHub Pages frontend + local AI agent backend.</span></div></footer>
 </body>
 </html>
