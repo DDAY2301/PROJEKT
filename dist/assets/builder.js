@@ -55,7 +55,7 @@ async function request(path, options = {}) {
   try {
     response = await fetch(`${API}${path}`, {...options, headers});
   } catch {
-    throw new Error('Povezava trenutno ni dosegljiva. Preveri, da sta lokalni servis in povezovalni tunnel odprta.');
+    throw new Error('Povezava trenutno ni dosegljiva. Preveri, da lokalni servis deluje.');
   }
   const text = await response.text();
   let data;
@@ -72,7 +72,7 @@ async function checkHealth(showStatus = true) {
     setSignal('apiState', 'Ni povezano', 'bad');
     setSignal('modelState', '—');
     setSignal('githubState', '—');
-    if (showStatus) status('Builder je pripravljen. V nastavitvah povezave vnesi javni HTTPS naslov storitve.');
+    if (showStatus) status('Builder je pripravljen. V nastavitvah povezave vnesi naslov storitve.');
     return false;
   }
 
@@ -109,7 +109,7 @@ async function checkHealth(showStatus = true) {
 $('connectApi')?.addEventListener('click', async () => {
   const next = cleanApi($('apiUrl').value);
   if (!next || !/^https?:\/\//i.test(next)) {
-    status('Vnesi veljaven naslov povezave, npr. https://nekaj.trycloudflare.com');
+    status('Vnesi veljaven naslov povezave.');
     return;
   }
   if (API && API !== next) {
@@ -290,11 +290,34 @@ const statusLabels = {
   building: 'Izdelava strani',
   auditing: 'Preverjanje kakovosti',
   fixing: 'Samodejni popravki',
-  publishing: 'Objava kode',
+  publishing: 'Objava kode in spletne strani',
   ready: 'Končano',
   needs_review: 'Potreben pregled',
   failed: 'Ustavljeno'
 };
+
+function finalSiteUrl(repoName) {
+  return `https://${GITHUB_OWNER.toLowerCase()}.github.io/${repoName}/`;
+}
+
+function setResultLinks(repoName) {
+  if (!repoName) return;
+  const actions = $('resultActions');
+  const repoLink = $('repoLink');
+  repoLink.href = `https://github.com/${GITHUB_OWNER}/${repoName}`;
+
+  let siteLink = $('siteLink');
+  if (!siteLink) {
+    siteLink = document.createElement('a');
+    siteLink.id = 'siteLink';
+    siteLink.className = 'button small';
+    siteLink.target = '_blank';
+    siteLink.rel = 'noopener';
+    siteLink.textContent = 'Odpri spletno stran ↗';
+    actions.insertBefore(siteLink, repoLink);
+  }
+  siteLink.href = finalSiteUrl(repoName);
+}
 
 $('generate')?.addEventListener('click', async () => {
   if (!token) {
@@ -333,13 +356,16 @@ async function watch(id) {
         `Samodejni popravki: ${project.auto_fix_attempts || 0}`,
         `Najdene težave: ${issues.length}${severe ? ` (${severe} pomembnih)` : ''}`
       ];
+      if (project.repo_name) {
+        setResultLinks(project.repo_name);
+        lines.push(`Javna stran: ${finalSiteUrl(project.repo_name)}`);
+      }
       if (issues.length) {
         lines.push('', ...issues.slice(0, 6).map(x => `• ${x.message}`));
       }
       status(lines.join('\n'));
-      if (project.repo_name) $('repoLink').href = `https://github.com/${GITHUB_OWNER}/${project.repo_name}`;
       if (['ready', 'needs_review', 'failed'].includes(project.status)) {
-        $('resultActions').classList.add('visible');
+        if (project.repo_name) $('resultActions').classList.add('visible');
         return;
       }
     } catch (e) {
@@ -367,7 +393,7 @@ async function loadRecentProjects() {
     activeProjectId = project.id;
     if (project.status) updatePipeline(project.status);
     if (project.repo_name) {
-      $('repoLink').href = `https://github.com/${GITHUB_OWNER}/${project.repo_name}`;
+      setResultLinks(project.repo_name);
       $('resultActions').classList.add('visible');
     }
   } catch {}
