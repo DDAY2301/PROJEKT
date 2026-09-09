@@ -108,9 +108,10 @@ if ($env:GITHUB_TOKEN) {
   Write-Warning "GitHub publishing is disabled. Agent generation can start, but final repository publishing requires GITHUB_TOKEN."
 }
 
-Write-Host "[6/6] Starting API..."
+Write-Host "[6/6] Starting API and builder..."
 Write-Host "Health:  http://localhost:$Port/health"
-Write-Host "Builder: $repoRoot\dist\builder\index.html"
+Write-Host "Builder: http://localhost:$Port/builder/"
+Write-Host "Public site: http://localhost:$Port/"
 Write-Host "Press Ctrl+C to stop."
-& ".\.venv\Scripts\python.exe" -m uvicorn api.main:app --host 127.0.0.1 --port $Port
+& ".\.venv\Scripts\python.exe" -m uvicorn api.server:app --host 127.0.0.1 --port $Port
 if ($LASTEXITCODE -ne 0) { throw "API process exited with code $LASTEXITCODE." }
