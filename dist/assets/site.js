@@ -26,10 +26,10 @@ if (briefForm) {
 
     if (status) {
       status.classList.add("visible");
-      status.textContent = "Brief je pripravljen. Odpiram builder za popolno prilagoditev in generiranje strani …";
+      status.textContent = "Brief je pripravljen. Odpiram konfigurator za popolno prilagoditev strani …";
     }
 
     const pkg = encodeURIComponent(prefill.package);
-    window.location.href = `../builder/?paket=${pkg}`;
+    window.location.href = `../builder.html?paket=${pkg}`;
   });
 }
