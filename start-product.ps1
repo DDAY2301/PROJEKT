@@ -109,7 +109,10 @@ if (Test-Path $cfLog) { Remove-Item $cfLog -Force }
 
 $escapedExe = $cloudflared.Replace("'", "''")
 $escapedLog = $cfLog.Replace("'", "''")
-$cfCommand = "& '$escapedExe' tunnel --url http://127.0.0.1:$Port 2>&1 | Tee-Object -FilePath '$escapedLog'"
+# cloudflared writes normal informational messages to stderr. Convert both native
+# streams to plain text before displaying them so Windows PowerShell does not
+# paint healthy quick-tunnel logs as NativeCommandError records.
+$cfCommand = "& '$escapedExe' tunnel --url http://127.0.0.1:$Port 2>&1 | ForEach-Object { `$line = `$_.ToString(); Add-Content -LiteralPath '$escapedLog' -Value `$line; Write-Host `$line }"
 Start-Process powershell -ArgumentList @('-NoExit','-Command',$cfCommand)
 
 $tunnelUrl = $null
