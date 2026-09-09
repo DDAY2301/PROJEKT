@@ -1,4 +1,7 @@
-const API = localStorage.getItem('pv_api_url') || ((location.protocol === 'http:' || location.protocol === 'https:') ? location.origin : 'http://localhost:8000');
+const params = new URLSearchParams(window.location.search);
+const apiParam = params.get('api');
+if (apiParam) localStorage.setItem('pv_api_url', apiParam.replace(/\/$/, ''));
+const API = localStorage.getItem('pv_api_url') || ((location.hostname === 'localhost' || location.hostname === '127.0.0.1') ? location.origin : 'http://localhost:8000');
 let token = localStorage.getItem('pv_token') || '';
 const $ = id => document.getElementById(id);
 const status = msg => $('status').textContent = msg;
@@ -107,7 +110,7 @@ async function watch(id){
   }
 }
 
-const requestedPackage = new URLSearchParams(window.location.search).get('paket');
+const requestedPackage = params.get('paket');
 if(['Start','Standard','Premium'].includes(requestedPackage)) $('package').value=requestedPackage;
 
 try {
