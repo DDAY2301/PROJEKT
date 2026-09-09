@@ -3,81 +3,93 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="description" content="AI website agent za projektne in poslovne spletne strani: brief, dizajn, koda, QA, samodejni popravki in GitHub objava.">
+  <meta name="description" content="Project Visibility je spletni studio za projektne in poslovne strani: brief, vizualna prilagoditev, izdelava, pregled in GitHub predaja.">
   <link rel="canonical" href="https://dday2301.github.io/PROJEKT/">
   <link rel="icon" href="assets/mark.svg" type="image/svg+xml">
   <link rel="stylesheet" href="assets/site.css">
-  <meta property="og:title" content="Project Visibility AI | Od briefa do GitHuba">
-  <meta property="og:description" content="Prilagodi znamko in vsebino. Lokalni AI agent načrtuje, izdela, preveri, popravi in objavi spletno stran.">
+  <meta property="og:title" content="Project Visibility | Od briefa do objavljive strani">
+  <meta property="og:description" content="Določi vsebino, barve in strukturo. Project Visibility pripravi responsive stran, jo preveri in preda v GitHub repozitoriju.">
   <meta property="og:url" content="https://dday2301.github.io/PROJEKT/">
   <meta property="og:type" content="website">
-  <title>Project Visibility AI | Autonomous Website Agent</title>
+  <title>Project Visibility | Website Studio</title>
   <style>
-    .ai-hero{padding:clamp(4.5rem,10vw,8rem) 0 4rem;overflow:hidden}.ai-hero-grid{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(22rem,.95fr);gap:clamp(2rem,6vw,5rem);align-items:center}.ai-hero h1{max-width:10ch}.ai-hero h1 span{color:var(--green)}.hero-kicker{display:inline-flex;align-items:center;gap:.55rem;padding:.45rem .7rem;border-radius:999px;background:var(--green-light);color:var(--green);font-size:.76rem;font-weight:900;letter-spacing:.06em;text-transform:uppercase}.hero-kicker i{width:.5rem;height:.5rem;border-radius:50%;background:var(--lime);box-shadow:0 0 0 4px rgba(217,255,101,.32)}
-    .agent-window{padding:1rem;border:1px solid #29423b;border-radius:1.5rem;background:#071713;color:#fff;box-shadow:0 28px 80px rgba(7,23,19,.28)}.agent-window-top{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.25rem .2rem .9rem;border-bottom:1px solid rgba(255,255,255,.09)}.window-dots{display:flex;gap:.35rem}.window-dots i{width:.58rem;height:.58rem;border-radius:50%;background:#526760}.agent-online{display:flex;align-items:center;gap:.4rem;color:#cfe0da;font-size:.73rem;font-weight:850}.agent-online::before{content:"";width:.48rem;height:.48rem;border-radius:50%;background:var(--lime);box-shadow:0 0 0 4px rgba(217,255,101,.12)}.terminal-title{margin:1.15rem .25rem;color:#8ca29a;font:700 .7rem/1.4 ui-monospace,Consolas,monospace;text-transform:uppercase;letter-spacing:.12em}.agent-flow{display:grid;gap:.5rem}.flow-row{display:grid;grid-template-columns:2rem 1fr auto;gap:.65rem;align-items:center;padding:.7rem;border:1px solid rgba(255,255,255,.08);border-radius:.85rem;background:rgba(255,255,255,.035)}.flow-row b{display:grid;place-items:center;width:2rem;height:2rem;border-radius:.65rem;background:#123f35;color:var(--lime);font-size:.76rem}.flow-row strong{display:block;font-size:.86rem}.flow-row small{display:block;color:#92aaa2;font-size:.69rem}.flow-row em{font-style:normal;color:var(--lime);font:800 .65rem ui-monospace,Consolas,monospace}.agent-code{margin-top:.8rem;padding:.8rem;border-radius:.85rem;background:#020b08;color:#a9beb6;font:500 .68rem/1.6 ui-monospace,Consolas,monospace}.agent-code span{color:var(--lime)}
-    .system-strip{margin-top:2rem;display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--line);border-radius:1.2rem;overflow:hidden;background:var(--white)}.sys{padding:1rem 1.2rem;border-right:1px solid var(--line)}.sys:last-child{border-right:0}.sys strong{display:block;font-size:.82rem}.sys span{color:var(--muted);font-size:.76rem}
-    .ai-section{background:var(--ink);color:#fff}.ai-section .eyebrow{color:var(--lime)}.ai-section .muted{color:#b8cac3}.agent-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.8rem}.agent-feature{min-height:15rem;padding:1.4rem;border:1px solid rgba(255,255,255,.1);border-radius:1.1rem;background:rgba(255,255,255,.04)}.agent-feature span{display:inline-grid;width:2.2rem;height:2.2rem;place-items:center;border-radius:.7rem;background:var(--lime);color:var(--ink);font-weight:950}.agent-feature h3{margin-top:2.5rem;color:#fff}.agent-feature p{color:#b8cac3;font-size:.88rem}
-    .demo-cta{margin:0 0 4rem;padding:clamp(1.8rem,5vw,3.4rem);border-radius:1.6rem;background:linear-gradient(120deg,var(--lime),#edffb6);display:grid;grid-template-columns:1fr auto;gap:1rem;align-items:center}.demo-cta h2{margin:0;max-width:17ch;font-size:clamp(2rem,5vw,4rem)}.demo-cta p{margin:.65rem 0 0;max-width:42rem;color:#385047}.demo-cta .button{white-space:nowrap}
-    @media(max-width:900px){.ai-hero-grid,.demo-cta{grid-template-columns:1fr}.system-strip,.agent-grid{grid-template-columns:1fr 1fr}.sys:nth-child(2){border-right:0}.sys{border-bottom:1px solid var(--line)}}
-    @media(max-width:620px){.system-strip,.agent-grid{grid-template-columns:1fr}.sys{border-right:0}.ai-hero h1{max-width:12ch}.agent-window{padding:.75rem}}
+    .studio-hero{padding:clamp(4.5rem,9vw,7.5rem) 0 4.5rem;overflow:hidden}.studio-grid{display:grid;grid-template-columns:minmax(0,1.08fr) minmax(22rem,.92fr);gap:clamp(2rem,6vw,5rem);align-items:center}.studio-hero h1{max-width:10.5ch}.studio-hero h1 span{color:var(--green)}
+    .studio-kicker{display:inline-flex;align-items:center;gap:.55rem;padding:.45rem .72rem;border-radius:999px;background:var(--green-light);color:var(--green);font-size:.75rem;font-weight:900;letter-spacing:.08em;text-transform:uppercase}.studio-kicker::before{content:"";width:.48rem;height:.48rem;border-radius:50%;background:var(--lime);box-shadow:0 0 0 4px rgba(217,255,101,.3)}
+    .project-board{padding:1.2rem;border:1px solid var(--line);border-radius:1.6rem;background:var(--white);box-shadow:var(--shadow)}.board-top{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.3rem .2rem 1rem;border-bottom:1px solid var(--line)}.board-top strong{font-size:.88rem}.board-top span{color:var(--muted);font-size:.75rem}.board-grid{display:grid;gap:.65rem;margin-top:.9rem}.board-row{display:grid;grid-template-columns:2rem 1fr auto;gap:.7rem;align-items:center;padding:.8rem;border-radius:.9rem;background:#f1f5f2}.board-row b{display:grid;place-items:center;width:2rem;height:2rem;border-radius:.65rem;background:var(--green);color:var(--lime);font-size:.74rem}.board-row strong{display:block;font-size:.86rem}.board-row small{display:block;color:var(--muted);font-size:.7rem}.board-row em{font-style:normal;color:var(--green);font-size:.68rem;font-weight:900}.board-result{margin-top:.9rem;padding:1rem;border-radius:.95rem;background:var(--ink);color:#fff}.board-result small{display:block;color:#b8c9c3;font-size:.7rem}.board-result strong{display:block;margin-top:.2rem;font-size:1rem}.board-result span{display:inline-block;margin-top:.55rem;color:var(--lime);font-size:.72rem;font-weight:850}
+    .metric-strip{display:grid;grid-template-columns:repeat(4,1fr);margin-top:2rem;border:1px solid var(--line);border-radius:1.1rem;overflow:hidden;background:var(--white)}.metric{padding:1rem 1.1rem;border-right:1px solid var(--line)}.metric:last-child{border-right:0}.metric strong{display:block;font-size:.82rem}.metric span{color:var(--muted);font-size:.74rem}
+    .dark-section{background:var(--ink);color:#fff}.dark-section .eyebrow{color:var(--lime)}.dark-section .muted{color:#b9cac4}.feature-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.8rem}.feature-card{min-height:14rem;padding:1.4rem;border:1px solid rgba(255,255,255,.1);border-radius:1.1rem;background:rgba(255,255,255,.04)}.feature-card span{display:inline-grid;width:2.15rem;height:2.15rem;place-items:center;border-radius:.65rem;background:var(--lime);color:var(--ink);font-weight:950}.feature-card h3{margin-top:2.4rem;color:#fff}.feature-card p{color:#b9cac4;font-size:.88rem}
+    .final-cta{margin:0 0 4rem;padding:clamp(2rem,5vw,3.5rem);border-radius:1.7rem;background:linear-gradient(120deg,var(--lime),#edffb0);display:grid;grid-template-columns:1fr auto;gap:1rem;align-items:center}.final-cta h2{max-width:17ch;margin:0;font-size:clamp(2rem,5vw,4rem)}.final-cta p{max-width:42rem;margin:.65rem 0 0;color:#385047}.final-cta .button{white-space:nowrap}
+    @media(max-width:900px){.studio-grid,.final-cta{grid-template-columns:1fr}.metric-strip,.feature-grid{grid-template-columns:1fr 1fr}.metric:nth-child(2){border-right:0}.metric{border-bottom:1px solid var(--line)}}
+    @media(max-width:620px){.metric-strip,.feature-grid{grid-template-columns:1fr}.metric{border-right:0}.studio-hero h1{max-width:12ch}.project-board{padding:.8rem}}
   </style>
 </head>
 <body>
 <a class="skip-link" href="#vsebina">Preskoči na vsebino</a>
-<header class="site-header"><nav class="wrap nav" aria-label="Glavna navigacija"><a class="brand" href="#vrh"><img src="assets/mark.svg" alt=""><span>Project Visibility AI</span></a><div class="nav-links"><a href="#sistem">Kako deluje</a><a href="#paketi">Paketi</a><a class="button small" href="builder/">Odpri AI Builder →</a></div></nav></header>
+<header class="site-header">
+  <nav class="wrap nav" aria-label="Glavna navigacija">
+    <a class="brand" href="#vrh"><img src="assets/mark.svg" alt=""><span>Project Visibility</span></a>
+    <div class="nav-links"><a href="#zmoznosti">Kaj omogoča</a><a href="#paketi">Paketi</a><a class="button small" href="builder.html">Odpri builder →</a></div>
+  </nav>
+</header>
 
 <main id="vsebina">
-  <section class="ai-hero" id="vrh">
-    <div class="wrap ai-hero-grid">
+  <section class="studio-hero" id="vrh">
+    <div class="wrap studio-grid">
       <div>
-        <span class="hero-kicker"><i></i> Autonomous Website Agent</span>
-        <h1>Od briefa do <span>GitHuba.</span></h1>
-        <p class="lead">Prilagodi barve, vsebino, strani in slog. Lokalni AI agent nato pripravi arhitekturo, izdela responsive frontend, izvede QA, sam popravi kritične napake in rezultat objavi v GitHub.</p>
-        <div class="hero-actions"><a class="button" href="builder/">Zaženi AI Website Builder →</a><a class="button secondary" href="#sistem">Poglej sistem</a></div>
-        <div class="proof"><span>Lokalni AI model</span><span>Samodejni QA</span><span>GitHub publishing</span><span>Brez plačljivih AI tokenov v lokalnem načinu</span></div>
-        <div class="system-strip"><div class="sys"><strong>01 / BRIEF</strong><span>Cilj + znamka + vsebina</span></div><div class="sys"><strong>02 / BUILD</strong><span>HTML + CSS + JS</span></div><div class="sys"><strong>03 / QA</strong><span>Audit + self-fix</span></div><div class="sys"><strong>04 / SHIP</strong><span>GitHub repo</span></div></div>
-      </div>
-      <aside class="agent-window" aria-label="Prikaz agentskega procesa">
-        <div class="agent-window-top"><div class="window-dots"><i></i><i></i><i></i></div><span class="agent-online">AGENT ONLINE</span></div>
-        <div class="terminal-title">autonomous build / current pipeline</div>
-        <div class="agent-flow">
-          <div class="flow-row"><b>01</b><div><strong>Design architecture</strong><small>IA, sections, content hierarchy</small></div><em>DONE</em></div>
-          <div class="flow-row"><b>02</b><div><strong>Generate website</strong><small>Semantic responsive frontend</small></div><em>DONE</em></div>
-          <div class="flow-row"><b>03</b><div><strong>QA + security audit</strong><small>SEO, accessibility, broken UI</small></div><em>DONE</em></div>
-          <div class="flow-row"><b>04</b><div><strong>Self-fix loop</strong><small>Critical/high issues patched</small></div><em>PASS</em></div>
-          <div class="flow-row"><b>05</b><div><strong>GitHub publish</strong><small>Versioned source repository</small></div><em>READY</em></div>
+        <span class="studio-kicker">Website Studio</span>
+        <h1>Od briefa do <span>objavljive strani.</span></h1>
+        <p class="lead">Določi vsebino, strukturo, barve in ton. Project Visibility pripravi responsive spletno stran, preveri ključne napake in končno kodo shrani v GitHub.</p>
+        <div class="hero-actions"><a class="button" href="builder.html">Začni projekt →</a><a class="button secondary" href="#paketi">Primerjaj pakete</a></div>
+        <div class="proof"><span>Live predogled</span><span>Responsive izvedba</span><span>Kontrola kakovosti</span><span>GitHub source</span></div>
+        <div class="metric-strip">
+          <div class="metric"><strong>01 / BRIEF</strong><span>Cilj, publika in vsebina</span></div>
+          <div class="metric"><strong>02 / DESIGN</strong><span>Barve, slog in struktura</span></div>
+          <div class="metric"><strong>03 / BUILD</strong><span>HTML, CSS in JS</span></div>
+          <div class="metric"><strong>04 / DELIVERY</strong><span>Pregled in GitHub predaja</span></div>
         </div>
-        <div class="agent-code">model: <span>qwen2.5-coder:3b</span><br>runtime: <span>local / Ollama</span><br>agent_api: <span>FastAPI</span><br>publish: <span>GitHub</span></div>
+      </div>
+
+      <aside class="project-board" aria-label="Potek izdelave spletne strani">
+        <div class="board-top"><strong>Project build</strong><span>pregleden proces</span></div>
+        <div class="board-grid">
+          <div class="board-row"><b>01</b><div><strong>Struktura</strong><small>Navigacija, strani in hierarhija vsebine</small></div><em>READY</em></div>
+          <div class="board-row"><b>02</b><div><strong>Izdelava</strong><small>Semantičen in responsive frontend</small></div><em>READY</em></div>
+          <div class="board-row"><b>03</b><div><strong>Pregled</strong><small>Dostopnost, SEO in tehnična kakovost</small></div><em>PASS</em></div>
+          <div class="board-row"><b>04</b><div><strong>Popravki</strong><small>Kritične težave se odpravijo pred predajo</small></div><em>PASS</em></div>
+        </div>
+        <div class="board-result"><small>KONČNI REZULTAT</small><strong>Versioned source repository</strong><span>GitHub ready →</span></div>
       </aside>
     </div>
   </section>
 
-  <section class="ai-section" id="sistem">
-    <div class="wrap"><div class="section-head"><div class="eyebrow">En sistem, več agentskih vlog</div><h2>Ne generira samo strani. Preveri svoje delo.</h2><p class="muted">Agentni tok je omejen, sledljiv in namenoma ne prepisuje produkcije neskončno. Težave so zaznane, popravljene in ponovno preverjene pred objavo.</p></div>
-      <div class="agent-grid">
-        <article class="agent-feature"><span>01</span><h3>Design Agent</h3><p>Iz briefa pripravi informacijsko arhitekturo, navigacijo, sekcije in vizualno smer glede na paket in cilj uporabnika.</p></article>
-        <article class="agent-feature"><span>02</span><h3>Code Agent</h3><p>Sestavi statični responsive frontend brez nepotrebnega build sistema, z osnovnim SEO, dostopnostjo in lokalnimi asseti.</p></article>
-        <article class="agent-feature"><span>03</span><h3>QA & Self-Fix</h3><p>Statični pregled in drugi AI pregled iščeta konkretne napake. Kritične in high težave sprožijo omejen samodejni popravljalni cikel.</p></article>
-        <article class="agent-feature"><span>04</span><h3>GitHub Publisher</h3><p>Končni bundle se zapiše v lasten repozitorij, zato ostane koda verzionirana, pregledna in pripravljena za naslednji deployment.</p></article>
-        <article class="agent-feature"><span>05</span><h3>Live Customization</h3><p>Barve, ton, strani, CTA, ciljna publika in zahteve so del build konfiguracije. Builder prikazuje vizualni predogled že pred generiranjem.</p></article>
-        <article class="agent-feature"><span>06</span><h3>Local-first AI</h3><p>Za razvoj agent uporablja lokalni Ollama model. Arhitektura omogoča kasnejši preklop na močnejše modele brez menjave celotnega produkta.</p></article>
+  <section class="dark-section" id="zmoznosti">
+    <div class="wrap">
+      <div class="section-head"><div class="eyebrow">Celoten proces na enem mestu</div><h2>Prilagoditev, izdelava in pregled.</h2><p class="muted">Builder je namenjen konkretnemu rezultatu: urejena stran z jasno strukturo, usklajeno vizualno identiteto in pregledno izvorno kodo.</p></div>
+      <div class="feature-grid">
+        <article class="feature-card"><span>01</span><h3>Popolna prilagoditev</h3><p>Barve, slog, ton komunikacije, CTA, ciljna publika in struktura strani so del projektne konfiguracije.</p></article>
+        <article class="feature-card"><span>02</span><h3>Live predogled</h3><p>Vizualna smer se med vnosom sproti prikazuje, zato lahko odločitve preveriš še pred izdelavo.</p></article>
+        <article class="feature-card"><span>03</span><h3>Responsive frontend</h3><p>Končni rezultat uporablja semantičen HTML, prilagodljiv CSS in čim manj nepotrebne tehnične navlake.</p></article>
+        <article class="feature-card"><span>04</span><h3>Kontrola kakovosti</h3><p>Pred predajo se preverijo ključne tehnične napake, navigacija, osnovna dostopnost in SEO elementi.</p></article>
+        <article class="feature-card"><span>05</span><h3>Samodejni popravki</h3><p>Če pregled zazna pomembno težavo, se izvede omejen popravljalni cikel in nato ponovni pregled.</p></article>
+        <article class="feature-card"><span>06</span><h3>GitHub predaja</h3><p>Koda ostane verzionirana in pregledna v lastnem repozitoriju, pripravljena za naslednji deployment ali nadgradnjo.</p></article>
       </div>
     </div>
   </section>
 
   <section id="paketi">
-    <div class="wrap"><div class="section-head"><div class="eyebrow">Build scope</div><h2>Izberi kompleksnost projekta.</h2><p class="muted">Paket določa največji obseg strukture, agent pa znotraj njega optimizira spletno stran glede na brief.</p></div>
+    <div class="wrap">
+      <div class="section-head"><div class="eyebrow">Paketi</div><h2>Izberi obseg projekta.</h2><p class="muted">Paket določa največji obseg strukture. Vsebino in vizualno smer nato prilagodiš neposredno v builderju.</p></div>
       <div class="prices">
-        <article class="price"><span class="label">Start</span><h3>Focused website</h3><p class="muted">Za manjši projekt ali jasno poslovno predstavitev.</p><div class="price-tag">490 € <small>brez DDV</small></div><ul><li>do 3 strani</li><li>AI architecture + build</li><li>responsive frontend</li><li>QA + self-fix</li><li>GitHub source</li></ul><a class="button secondary" href="builder/?paket=Start">Odpri Start builder</a></article>
-        <article class="price featured"><span class="label">Standard</span><h3>Complete project site</h3><p class="muted">Za več vsebine, partnerjev, rezultatov in galerij.</p><div class="price-tag">890 € <small>brez DDV</small></div><ul><li>do 6 strani</li><li>naprednejša struktura</li><li>partnerji, novice, galerija, rezultati</li><li>QA + self-fix</li><li>GitHub source + predaja</li></ul><a class="button lime" href="builder/?paket=Standard">Odpri Standard builder</a></article>
-        <article class="price"><span class="label">Premium</span><h3>Content system</h3><p class="muted">Za večji projekt ali produkt z obsežnejšo informacijsko arhitekturo.</p><div class="price-tag">1.490 € <small>brez DDV</small></div><ul><li>do 12 strani</li><li>kompleksnejši content model</li><li>knjižnica rezultatov / gradiv</li><li>QA + self-fix</li><li>GitHub source + daljša podpora</li></ul><a class="button secondary" href="builder/?paket=Premium">Odpri Premium builder</a></article>
+        <article class="price"><span class="label">Start</span><h3>Focused website</h3><p class="muted">Za manjši projekt ali jasno poslovno predstavitev.</p><div class="price-tag">490 € <small>brez DDV</small></div><ul><li>do 3 strani</li><li>prilagoditev strukture in videza</li><li>responsive frontend</li><li>kontrola kakovosti</li><li>GitHub source</li></ul><a class="button secondary" href="builder.html?paket=Start">Izberi Start</a></article>
+        <article class="price featured"><span class="label">Standard</span><h3>Complete project site</h3><p class="muted">Za več vsebine, partnerjev, rezultatov in galerij.</p><div class="price-tag">890 € <small>brez DDV</small></div><ul><li>do 6 strani</li><li>naprednejša struktura</li><li>partnerji, novice, galerija, rezultati</li><li>pregled in popravki</li><li>GitHub source + predaja</li></ul><a class="button lime" href="builder.html?paket=Standard">Izberi Standard</a></article>
+        <article class="price"><span class="label">Premium</span><h3>Content system</h3><p class="muted">Za večji projekt ali produkt z obsežnejšo informacijsko arhitekturo.</p><div class="price-tag">1.490 € <small>brez DDV</small></div><ul><li>do 12 strani</li><li>kompleksnejši content model</li><li>knjižnica rezultatov / gradiv</li><li>pregled in popravki</li><li>GitHub source + daljša podpora</li></ul><a class="button secondary" href="builder.html?paket=Premium">Izberi Premium</a></article>
       </div>
     </div>
   </section>
 
-  <div class="wrap"><section class="demo-cta"><div><h2>Poglej agenta v delu.</h2><p>Odpri builder, določi vizualno identiteto in zahteve ter spremljaj build pipeline od briefa do GitHub repozitorija.</p></div><a class="button" href="builder/">Odpri AI Console →</a></section></div>
+  <div class="wrap"><section class="final-cta"><div><h2>Začni z vsebino in vizualno smerjo.</h2><p>Odpri builder, izberi paket, določi strani ter takoj preveri osnovni vizualni predogled.</p></div><a class="button" href="builder.html">Odpri Website Builder →</a></section></div>
 </main>
 
-<footer class="site-footer"><div class="wrap footer-grid"><span>Project Visibility AI · autonomous website build system</span><span>Development mode: GitHub Pages frontend + local AI agent backend.</span></div></footer>
+<footer class="site-footer"><div class="wrap footer-grid"><span>Project Visibility · website studio</span><span>Projektna konfiguracija, pregled in GitHub predaja na enem mestu.</span></div></footer>
 </body>
 </html>
