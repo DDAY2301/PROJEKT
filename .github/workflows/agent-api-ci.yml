@@ -1,0 +1,29 @@
+name: Agent API CI
+
+on:
+  push:
+    branches: [main, feature/autonomous-website-agent-api]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: pip install -r api/requirements.txt
+      - name: Compile API
+        run: python -m py_compile api/main.py
+      - name: Import API
+        env:
+          APP_SECRET: ci-only-secret
+        run: python -c "import api.main; print(api.main.app.title)"
+      - name: Check generated public files
+        run: |
+          test -f dist/index.html
+          test -f dist/builder/index.html
+          test -f dist/assets/builder.js
