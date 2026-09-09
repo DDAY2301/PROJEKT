@@ -24,7 +24,8 @@ function initialApi() {
 API = initialApi();
 
 function status(msg) {
-  $('status').textContent = msg;
+  const el = $('status');
+  if (el) el.textContent = msg;
 }
 
 function setSignal(id, text, state = '') {
@@ -47,48 +48,68 @@ function errorMessage(data, fallback) {
 }
 
 async function request(path, options = {}) {
-  if (!API) throw new Error('Agent API ni povezan. Vnesi HTTPS naslov v Agent connection.');
+  if (!API) throw new Error('Povezava storitve ni nastavljena.');
   const headers = {'Content-Type': 'application/json', ...(options.headers || {})};
   if (token) headers.Authorization = `Bearer ${token}`;
-  const r = await fetch(`${API}${path}`, {...options, headers});
-  const text = await r.text();
+  let response;
+  try {
+    response = await fetch(`${API}${path}`, {...options, headers});
+  } catch {
+    throw new Error('Povezava trenutno ni dosegljiva. Preveri, da sta lokalni servis in povezovalni tunnel odprta.');
+  }
+  const text = await response.text();
   let data;
   try { data = JSON.parse(text); } catch { data = {detail: text}; }
-  if (!r.ok) throw new Error(errorMessage(data, `HTTP ${r.status}`));
+  if (!response.ok) throw new Error(errorMessage(data, `HTTP ${response.status}`));
   return data;
 }
+
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 async function checkHealth(showStatus = true) {
   if ($('apiUrl')) $('apiUrl').value = API;
   if (!API) {
-    setSignal('apiState', 'Ni povezan', 'bad');
+    setSignal('apiState', 'Ni povezano', 'bad');
     setSignal('modelState', '—');
     setSignal('githubState', '—');
-    if (showStatus) status('Javni builder je pripravljen. Vnesi HTTPS Cloudflare API naslov in klikni Poveži.');
+    if (showStatus) status('Builder je pripravljen. V nastavitvah povezave vnesi javni HTTPS naslov storitve.');
     return false;
   }
+
   setSignal('apiState', 'Preverjam');
-  try {
-    const h = await request('/health');
-    setSignal('apiState', 'Online', 'ok');
-    setSignal('modelState', h.model || 'local model', 'ok');
-    setSignal('githubState', h.github_configured ? 'Povezan' : 'Manjka token', h.github_configured ? 'ok' : 'warn');
-    $('apiHint').textContent = API;
-    if (showStatus) status(`AGENT ONLINE\nAPI: ${API}\nModel: ${h.model}\nGitHub publishing: ${h.github_configured ? 'ENABLED' : 'DISABLED'}${h.github_configured ? '' : '\nZa končni publish ponovno zaženi backend z GitHub tokenom.'}`);
-    return true;
-  } catch (e) {
-    setSignal('apiState', 'Offline', 'bad');
-    setSignal('modelState', '—');
-    setSignal('githubState', '—');
-    if (showStatus) status(`API NI DOSEGLJIV\n${API}\n\n${e.message}`);
-    return false;
+  setSignal('modelState', 'Preverjam');
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    try {
+      const health = await request('/health');
+      setSignal('apiState', 'Online', 'ok');
+      setSignal('modelState', 'Pripravljen', 'ok');
+      setSignal('githubState', health.github_configured ? 'Povezan' : 'Ni povezano', health.github_configured ? 'ok' : 'warn');
+      if ($('apiHint')) $('apiHint').textContent = API;
+      if (showStatus) {
+        status(health.github_configured
+          ? 'SISTEM ONLINE\nPovezava je aktivna. Izdelava in GitHub objava sta pripravljeni.'
+          : 'SISTEM ONLINE\nIzdelava je pripravljena, GitHub objava pa še ni povezana.');
+      }
+      return true;
+    } catch (e) {
+      lastError = e;
+      if (attempt < 5) await sleep(1800);
+    }
   }
+
+  setSignal('apiState', 'Nedosegljivo', 'bad');
+  setSignal('modelState', '—');
+  setSignal('githubState', '—');
+  if (showStatus) status(`POVEZAVA NI DOSEGLJIVA\n${lastError?.message || 'Poskusi znova čez nekaj sekund.'}`);
+  return false;
 }
 
-$('connectApi').addEventListener('click', async () => {
+$('connectApi')?.addEventListener('click', async () => {
   const next = cleanApi($('apiUrl').value);
   if (!next || !/^https?:\/\//i.test(next)) {
-    status('Vnesi veljaven API URL, npr. https://nekaj.trycloudflare.com');
+    status('Vnesi veljaven naslov povezave, npr. https://nekaj.trycloudflare.com');
     return;
   }
   if (API && API !== next) {
@@ -122,42 +143,42 @@ function updateAuthUi(message) {
   $('authState').textContent = message || (logged ? 'Prijavna seja je aktivna.' : 'Nisi prijavljen.');
 }
 
-$('register').addEventListener('click', async () => {
+$('register')?.addEventListener('click', async () => {
   try {
     validateAuth();
-    status('AUTH / Ustvarjam račun ...');
-    const d = await request('/auth/register', {method: 'POST', body: JSON.stringify(authBody())});
-    token = d.token;
+    status('Ustvarjam račun ...');
+    const data = await request('/auth/register', {method: 'POST', body: JSON.stringify(authBody())});
+    token = data.token;
     localStorage.setItem('pv_token', token);
-    updateAuthUi('Registriran in prijavljen. Workspace je odklenjen.');
-    status('AUTH OK\nRačun je ustvarjen. Zdaj lahko zaženeš autonomous build.');
+    updateAuthUi('Registriran in prijavljen.');
+    status('Račun je pripravljen. Zdaj lahko začneš izdelavo projekta.');
     loadRecentProjects();
   } catch (e) {
     const hint = /already registered/i.test(e.message) ? '\nTa e-pošta že obstaja — uporabi Prijava.' : '';
-    status(`NAPAKA REGISTRACIJE\n${e.message}${hint}`);
+    status(`REGISTRACIJA NI USPELA\n${e.message}${hint}`);
   }
 });
 
-$('login').addEventListener('click', async () => {
+$('login')?.addEventListener('click', async () => {
   try {
     validateAuth();
-    status('AUTH / Prijavljam ...');
-    const d = await request('/auth/login', {method: 'POST', body: JSON.stringify(authBody())});
-    token = d.token;
+    status('Prijavljam ...');
+    const data = await request('/auth/login', {method: 'POST', body: JSON.stringify(authBody())});
+    token = data.token;
     localStorage.setItem('pv_token', token);
-    updateAuthUi('Prijava uspešna. Workspace je odklenjen.');
-    status('AUTH OK\nPrijava uspešna.');
+    updateAuthUi('Prijava uspešna.');
+    status('Prijava je uspešna. Projektni workspace je pripravljen.');
     loadRecentProjects();
   } catch (e) {
-    status(`NAPAKA PRIJAVE\n${e.message}`);
+    status(`PRIJAVA NI USPELA\n${e.message}`);
   }
 });
 
-$('logout').addEventListener('click', () => {
+$('logout')?.addEventListener('click', () => {
   token = '';
   localStorage.removeItem('pv_token');
   updateAuthUi('Odjavljen.');
-  status('Lokalna prijavna seja je odstranjena iz brskalnika.');
+  status('Prijavna seja je zaključena.');
 });
 
 const packageLimits = {Start: 3, Standard: 6, Premium: 12};
@@ -221,107 +242,119 @@ function payload() {
 function resetPipeline() {
   document.querySelectorAll('.pipe').forEach(el => {
     el.classList.remove('running', 'done');
-    el.querySelector('em').textContent = 'waiting';
+    const state = el.querySelector('em');
+    if (state) state.textContent = 'čaka';
   });
 }
 
-const pipelineOrder = ['queued', 'designing', 'building', 'auditing', 'fixing', 'publishing', 'ready'];
-function pipelineIndex(statusName) {
-  if (statusName === 'needs_review') return pipelineOrder.indexOf('ready');
-  return pipelineOrder.indexOf(statusName);
-}
+const stageIndex = {
+  queued: 0,
+  designing: 1,
+  building: 2,
+  auditing: 3,
+  fixing: 4,
+  publishing: 5,
+  ready: 5,
+  needs_review: 5,
+  failed: -1
+};
 
 function updatePipeline(current) {
-  const idx = pipelineIndex(current);
-  const map = {
-    queued: 0,
-    designing: 1,
-    building: 2,
-    auditing: 3,
-    fixing: 4,
-    publishing: 5,
-    ready: 5,
-    needs_review: 5
-  };
-  const active = map[current] ?? idx;
+  const active = stageIndex[current] ?? 0;
   document.querySelectorAll('.pipe').forEach((el, i) => {
     el.classList.remove('running', 'done');
-    const em = el.querySelector('em');
+    const state = el.querySelector('em');
+    if (!state) return;
+    if (current === 'failed') {
+      state.textContent = i === Math.max(active, 0) ? 'ustavljeno' : 'čaka';
+      return;
+    }
     if (i < active || (current === 'ready' && i <= active)) {
       el.classList.add('done');
-      em.textContent = 'done';
+      state.textContent = 'končano';
     } else if (i === active && !['ready', 'needs_review'].includes(current)) {
       el.classList.add('running');
-      em.textContent = 'running';
+      state.textContent = 'teče';
     } else if (current === 'needs_review' && i === active) {
       el.classList.add('running');
-      em.textContent = 'review';
+      state.textContent = 'pregled';
     } else {
-      em.textContent = 'waiting';
+      state.textContent = 'čaka';
     }
   });
 }
 
-$('generate').addEventListener('click', async () => {
+const statusLabels = {
+  queued: 'V čakalni vrsti',
+  designing: 'Priprava strukture',
+  building: 'Izdelava strani',
+  auditing: 'Preverjanje kakovosti',
+  fixing: 'Samodejni popravki',
+  publishing: 'Objava kode',
+  ready: 'Končano',
+  needs_review: 'Potreben pregled',
+  failed: 'Ustavljeno'
+};
+
+$('generate')?.addEventListener('click', async () => {
   if (!token) {
-    status('BUILD BLOKIRAN\nNajprej se registriraj ali prijavi.');
+    status('IZDELAVA JE BLOKIRANA\nNajprej se registriraj ali prijavi.');
     return;
   }
   try {
     validateProject();
     const healthy = await checkHealth(false);
-    if (!healthy) throw new Error('Agent API ni online.');
+    if (!healthy) throw new Error('Storitev trenutno ni dosegljiva.');
     resetPipeline();
     updatePipeline('queued');
     $('resultActions').classList.remove('visible');
-    status('BUILD 01/06\nProjekt pošiljam v agentsko čakalno vrsto ...');
+    status('Projekt pošiljam v izdelavo ...');
     const created = await request('/projects', {method: 'POST', body: JSON.stringify(payload())});
     activeProjectId = created.id;
-    status(`BUILD STARTED\nProject ID: ${created.id}\n\nAgent prevzema brief in začenja načrtovanje.`);
+    status(`IZDELAVA ZAČETA\nProjekt: ${created.id}\n\nPripravljam strukturo in vsebino.`);
     watch(created.id);
   } catch (e) {
-    status(`BUILD NI ZAGNAN\n${e.message}`);
+    status(`IZDELAVA NI ZAGNANA\n${e.message}`);
   }
 });
 
 async function watch(id) {
   for (let i = 0; i < 180; i++) {
-    await new Promise(r => setTimeout(r, 4000));
+    await sleep(4000);
     try {
-      const p = await request(`/projects/${id}`);
-      const issues = p.last_audit?.issues || [];
-      updatePipeline(p.status);
+      const project = await request(`/projects/${id}`);
+      const issues = project.last_audit?.issues || [];
+      updatePipeline(project.status);
       const severe = issues.filter(x => ['critical', 'high'].includes(x.severity)).length;
-      status([
-        `PROJECT ${p.status.toUpperCase()}`,
-        `ID: ${id}`,
-        `Model: ${$('modelState').textContent}`,
-        `GitHub repo: ${p.repo_name || 'še ni ustvarjen'}`,
-        `Self-fix attempts: ${p.auto_fix_attempts}`,
-        `QA issues: ${issues.length} (${severe} critical/high)`,
-        '',
-        ...issues.slice(0, 8).map(x => `• ${x.severity.toUpperCase()} / ${x.code || 'QA'} / ${x.message}`)
-      ].join('\n'));
-      if (p.repo_name) {
-        $('repoLink').href = `https://github.com/${GITHUB_OWNER}/${p.repo_name}`;
+      const lines = [
+        statusLabels[project.status] || project.status,
+        `Projekt: ${id}`,
+        `GitHub repo: ${project.repo_name || 'še ni ustvarjen'}`,
+        `Samodejni popravki: ${project.auto_fix_attempts || 0}`,
+        `Najdene težave: ${issues.length}${severe ? ` (${severe} pomembnih)` : ''}`
+      ];
+      if (issues.length) {
+        lines.push('', ...issues.slice(0, 6).map(x => `• ${x.message}`));
       }
-      if (['ready', 'needs_review', 'failed'].includes(p.status)) {
+      status(lines.join('\n'));
+      if (project.repo_name) $('repoLink').href = `https://github.com/${GITHUB_OWNER}/${project.repo_name}`;
+      if (['ready', 'needs_review', 'failed'].includes(project.status)) {
         $('resultActions').classList.add('visible');
         return;
       }
     } catch (e) {
-      status(`STATUS CHECK FAILED\n${e.message}`);
+      status(`STATUSA NI MOGOČE PREVERITI\n${e.message}`);
       return;
     }
   }
-  status('Build še vedno teče. Osveži projektni status pozneje.');
+  status('Izdelava še vedno teče. Status lahko preveriš nekoliko pozneje.');
 }
 
-$('newBuild').addEventListener('click', () => {
+$('newBuild')?.addEventListener('click', () => {
   activeProjectId = null;
   resetPipeline();
   $('resultActions').classList.remove('visible');
-  status('Pripravljen za nov build.');
+  status('Pripravljen za nov projekt.');
   window.scrollTo({top: 0, behavior: 'smooth'});
 });
 
@@ -330,11 +363,11 @@ async function loadRecentProjects() {
   try {
     const projects = await request('/projects');
     if (!projects.length) return;
-    const p = projects[0];
-    activeProjectId = p.id;
-    if (p.status) updatePipeline(p.status);
-    if (p.repo_name) {
-      $('repoLink').href = `https://github.com/${GITHUB_OWNER}/${p.repo_name}`;
+    const project = projects[0];
+    activeProjectId = project.id;
+    if (project.status) updatePipeline(project.status);
+    if (project.repo_name) {
+      $('repoLink').href = `https://github.com/${GITHUB_OWNER}/${project.repo_name}`;
       $('resultActions').classList.add('visible');
     }
   } catch {}
@@ -342,6 +375,7 @@ async function loadRecentProjects() {
 
 function updatePreview() {
   const canvas = $('previewCanvas');
+  if (!canvas) return;
   canvas.style.setProperty('--preview-bg', $('background').value);
   canvas.style.setProperty('--preview-text', $('textColor').value);
   canvas.style.setProperty('--preview-primary', $('primary').value);
@@ -349,11 +383,13 @@ function updatePreview() {
   $('previewLogo').textContent = ($('organization').value || $('name').value || 'YOUR PROJECT').toUpperCase().slice(0, 28);
   $('previewEyebrow').textContent = ($('programme').value || 'PROJECT / DIGITAL EXPERIENCE').toUpperCase().slice(0, 42);
   $('previewTitle').textContent = $('heroTitle').value || $('name').value || 'Spletna stran, ki ima jasen namen.';
-  $('previewSubtitle').textContent = $('heroSubtitle').value || $('goal').value || 'Agent bo iz tvojega briefa sestavil celotno informacijsko arhitekturo, vsebino in responsive frontend.';
+  $('previewSubtitle').textContent = $('heroSubtitle').value || $('goal').value || 'Vpiši vsebino na levi in predogled se bo sproti prilagajal.';
   $('previewCta').textContent = $('cta').value || 'Kontaktirajte nas';
 }
 
-['name','organization','programme','goal','heroTitle','heroSubtitle','cta','primary','secondary','background','textColor'].forEach(id => $(id).addEventListener('input', updatePreview));
+['name','organization','programme','goal','heroTitle','heroSubtitle','cta','primary','secondary','background','textColor'].forEach(id => {
+  $(id)?.addEventListener('input', updatePreview);
+});
 
 const requestedPackage = params.get('paket');
 if (packageLimits[requestedPackage]) selectPackage(requestedPackage); else selectPackage('Start');
