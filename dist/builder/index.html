@@ -4,62 +4,160 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex">
+  <meta name="description" content="AI website console za pripravo, generiranje, QA in GitHub objavo spletnih strani.">
+  <link rel="icon" href="../assets/mark.svg" type="image/svg+xml">
   <link rel="stylesheet" href="../assets/site.css">
-  <title>Website Builder | Project Visibility Sprint</title>
+  <title>AI Website Console | Project Visibility</title>
   <style>
-    .builder{max-width:1100px;margin:0 auto;padding:40px 20px}.builder-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}.panel{background:#fff;border:1px solid #ddd;border-radius:18px;padding:22px}.builder label{display:block;font-weight:700;margin:14px 0 6px}.builder input,.builder select,.builder textarea{width:100%;padding:12px;border:1px solid #bbb;border-radius:10px}.builder textarea{min-height:110px}.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}.swatch{display:flex;gap:12px}.swatch input{height:48px;padding:4px}.status{white-space:pre-wrap;background:#111827;color:#fff;padding:16px;border-radius:12px;min-height:120px}.field-help{display:block;margin-top:6px;font-size:.9rem;font-weight:400;color:#52635e}.hidden{display:none}@media(max-width:800px){.builder-grid,.row{grid-template-columns:1fr}}
+    :root{--console:#071713;--console-2:#0d241e;--console-line:rgba(255,255,255,.1);--console-muted:#9bb1aa;--ok:#d9ff65;--warn:#ffd166;--bad:#ff7b7b}
+    body{background:linear-gradient(180deg,#071713 0,#102923 34rem,var(--paper) 34rem);min-height:100vh}
+    .console-header{position:sticky;top:0;z-index:40;border-bottom:1px solid rgba(255,255,255,.08);background:rgba(7,23,19,.9);backdrop-filter:blur(18px);color:#fff}
+    .console-nav{width:min(1380px,calc(100% - 2rem));margin:auto;min-height:4.5rem;display:flex;align-items:center;justify-content:space-between;gap:1rem}
+    .console-brand{display:flex;align-items:center;gap:.75rem;text-decoration:none;font-weight:900;letter-spacing:-.03em}.console-brand img{width:2rem;height:2rem;filter:brightness(2)}
+    .console-nav-actions{display:flex;gap:.65rem;align-items:center}.console-link{color:#cfe0da;text-decoration:none;font-weight:750;font-size:.9rem}
+    .console{width:min(1380px,calc(100% - 2rem));margin:0 auto;padding:2rem 0 5rem}
+    .console-hero{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(19rem,.7fr);gap:1.25rem;align-items:stretch;color:#fff;margin:1rem 0 1.25rem}
+    .hero-console-card{padding:clamp(1.5rem,4vw,3rem);border:1px solid var(--console-line);border-radius:1.75rem;background:linear-gradient(135deg,rgba(255,255,255,.08),rgba(255,255,255,.025));box-shadow:0 28px 80px rgba(0,0,0,.2)}
+    .hero-console-card h1{max-width:11ch;margin:.7rem 0 1rem;font-size:clamp(2.8rem,6vw,5.7rem);line-height:.92;color:#fff}.hero-console-card h1 span{color:var(--ok)}
+    .hero-console-card p{max-width:48rem;color:#c6d7d1;font-size:1.08rem}.capabilities{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:1.5rem}.cap{border:1px solid var(--console-line);border-radius:999px;padding:.43rem .7rem;color:#dce8e4;font-size:.78rem;font-weight:780;background:rgba(255,255,255,.04)}
+    .connection-card{padding:1.4rem;border:1px solid var(--console-line);border-radius:1.75rem;background:#0b1e19;display:flex;flex-direction:column;gap:1rem}.connection-card h2{font-size:1.45rem;color:#fff;margin:0;letter-spacing:-.03em}.connection-card p{color:var(--console-muted);margin:0;font-size:.9rem}
+    .signal-grid{display:grid;gap:.55rem}.signal{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.75rem .85rem;border:1px solid var(--console-line);border-radius:.9rem;background:rgba(255,255,255,.03)}.signal span:first-child{color:#cfe0da;font-size:.86rem;font-weight:780}.signal-state{display:inline-flex;align-items:center;gap:.4rem;color:#fff;font-size:.8rem;font-weight:850}.signal-state::before{content:"";width:.48rem;height:.48rem;border-radius:50%;background:#697c76}.signal-state.ok::before{background:var(--ok);box-shadow:0 0 0 4px rgba(217,255,101,.12)}.signal-state.warn::before{background:var(--warn)}.signal-state.bad::before{background:var(--bad)}
+    .api-connect{display:grid;grid-template-columns:1fr auto;gap:.5rem}.api-connect input{min-width:0;border:1px solid rgba(255,255,255,.16);background:#071713;color:#fff;border-radius:.8rem;padding:.75rem}.api-connect button{border:0;border-radius:.8rem;padding:.7rem .9rem;background:var(--ok);font-weight:900;color:#102923;cursor:pointer}.api-hint{font-size:.76rem!important;color:#7f9890!important;word-break:break-word}
+    .workspace{display:grid;grid-template-columns:17rem minmax(0,1fr) minmax(20rem,.82fr);gap:1rem;align-items:start}
+    .rail,.workspace-card,.preview-shell{border:1px solid var(--line);border-radius:1.35rem;background:var(--white);box-shadow:0 16px 45px rgba(16,41,35,.08)}
+    .rail{position:sticky;top:5.5rem;padding:1rem}.rail-title{padding:.45rem .65rem 1rem;font-size:.75rem;font-weight:900;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}.stage{display:flex;gap:.7rem;align-items:flex-start;padding:.8rem .65rem;border-radius:.9rem}.stage.active{background:var(--green-light)}.stage-num{flex:0 0 1.8rem;height:1.8rem;display:grid;place-items:center;border-radius:.55rem;background:var(--ink);color:#fff;font-size:.72rem;font-weight:900}.stage.active .stage-num{background:var(--green);color:var(--lime)}.stage strong{display:block;font-size:.88rem}.stage small{display:block;color:var(--muted);font-size:.74rem;line-height:1.35;margin-top:.12rem}
+    .workspace-main{display:grid;gap:1rem}.workspace-card{padding:1.35rem}.card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1rem}.card-head h2{font-size:1.6rem;margin:0;letter-spacing:-.035em}.card-head p{margin:.25rem 0 0;color:var(--muted);font-size:.9rem}.step-tag{white-space:nowrap;border-radius:999px;background:var(--green-light);color:var(--green);padding:.3rem .6rem;font-size:.72rem;font-weight:900}
+    .field-grid{display:grid;grid-template-columns:1fr 1fr;gap:.85rem}.field-grid.one{grid-template-columns:1fr}.console-field{display:grid;gap:.35rem}.console-field.full{grid-column:1/-1}.console-field label{font-size:.83rem;font-weight:850}.console-field small{color:var(--muted);font-size:.74rem}.console-field input,.console-field select,.console-field textarea{width:100%;border:1px solid #b9c8c1;border-radius:.78rem;background:#fff;padding:.74rem .82rem;color:var(--ink);transition:border-color .18s,box-shadow .18s}.console-field textarea{min-height:7rem;resize:vertical}.console-field input:focus,.console-field select:focus,.console-field textarea:focus{outline:0;border-color:var(--green);box-shadow:0 0 0 4px rgba(18,63,53,.09)}
+    .auth-actions{display:flex;gap:.55rem;flex-wrap:wrap;margin-top:.85rem}.mini-state{margin:.8rem 0 0;padding:.65rem .75rem;border-radius:.75rem;background:#f0f4f2;color:var(--muted);font-size:.82rem;font-weight:700}.mini-state.ok{background:var(--green-light);color:var(--green)}
+    .palette{display:grid;grid-template-columns:repeat(4,1fr);gap:.6rem}.palette .console-field input[type=color]{height:3.1rem;padding:.2rem;cursor:pointer}
+    .package-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:.55rem;margin-bottom:.9rem}.pkg{border:1px solid var(--line);border-radius:.85rem;padding:.7rem;cursor:pointer;background:#fff}.pkg strong{display:block;font-size:.84rem}.pkg small{color:var(--muted);font-size:.7rem}.pkg.active{border-color:var(--green);background:var(--green-light)}
+    .generate-bar{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:1rem;border-radius:1rem;background:var(--ink);color:#fff;margin-top:1rem}.generate-bar p{margin:0;color:#c7d5d0;font-size:.8rem}.generate-bar .button{border-color:var(--lime);background:var(--lime);color:var(--ink);white-space:nowrap}
+    .preview-column{position:sticky;top:5.5rem;display:grid;gap:1rem}.preview-shell{overflow:hidden}.preview-top{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.9rem 1rem;border-bottom:1px solid var(--line)}.preview-top strong{font-size:.85rem}.browser-dots{display:flex;gap:.35rem}.browser-dots i{width:.55rem;height:.55rem;border-radius:50%;background:#c4cfca}.preview-canvas{min-height:30rem;padding:1.2rem;background:var(--preview-bg,#fff);color:var(--preview-text,#102923);transition:background .2s,color .2s}.preview-nav{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:4rem}.preview-logo{font-size:.82rem;font-weight:950}.preview-menu{display:flex;gap:.55rem}.preview-menu span{font-size:.62rem;opacity:.65}.preview-eyebrow{display:inline-block;margin-bottom:.8rem;color:var(--preview-primary,#123f35);font-size:.66rem;font-weight:900;letter-spacing:.1em;text-transform:uppercase}.preview-canvas h3{max-width:10ch;margin:0 0 1rem;font-size:clamp(2.2rem,4vw,3.9rem);line-height:.92;letter-spacing:-.06em}.preview-canvas p{max-width:28rem;opacity:.72;font-size:.84rem}.preview-cta{display:inline-flex;margin-top:1rem;padding:.65rem .9rem;border-radius:999px;background:var(--preview-primary,#123f35);color:#fff;font-size:.7rem;font-weight:900}.preview-accent{height:.38rem;width:5rem;border-radius:999px;background:var(--preview-secondary,#d9ff65);margin-top:2rem}
+    .agent-card{padding:1rem 1.05rem;border:1px solid var(--line);border-radius:1.2rem;background:var(--white)}.agent-card h3{font-size:1rem;margin:0 0 .75rem}.pipeline{display:grid;gap:.45rem}.pipe{display:grid;grid-template-columns:1.25rem 1fr auto;gap:.55rem;align-items:center;padding:.55rem;border-radius:.7rem;background:#f2f5f3}.pipe b{display:grid;place-items:center;width:1.25rem;height:1.25rem;border-radius:50%;background:#d8e2de;font-size:.63rem}.pipe span{font-size:.76rem;font-weight:780}.pipe em{font-style:normal;color:var(--muted);font-size:.67rem}.pipe.running{background:#fff8dc}.pipe.done{background:var(--green-light)}.pipe.done b{background:var(--green);color:var(--lime)}
+    .status-box{white-space:pre-wrap;min-height:7rem;padding:.85rem;border-radius:.8rem;background:#071713;color:#d7e5df;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.72rem;line-height:1.55;overflow:auto}.result-actions{display:none;gap:.5rem;flex-wrap:wrap;margin-top:.75rem}.result-actions.visible{display:flex}.result-actions a{font-size:.78rem}
+    @media(max-width:1180px){.workspace{grid-template-columns:14rem minmax(0,1fr)}.preview-column{grid-column:1/-1;position:static;grid-template-columns:1fr 1fr}.console-hero{grid-template-columns:1fr}.connection-card{display:grid;grid-template-columns:1fr 1fr}.connection-card>h2,.connection-card>p{grid-column:1/-1}}
+    @media(max-width:820px){.workspace{grid-template-columns:1fr}.rail{position:static;display:none}.preview-column{grid-template-columns:1fr}.field-grid,.palette,.package-strip{grid-template-columns:1fr}.console{width:min(100% - 1rem,1380px)}.console-nav{width:min(100% - 1rem,1380px)}.connection-card{grid-template-columns:1fr}.generate-bar{align-items:stretch;flex-direction:column}.generate-bar .button{width:100%}.console-nav-actions .console-link{display:none}}
   </style>
 </head>
 <body>
-<header class="site-header"><nav class="wrap nav"><a class="brand" href="../"><span>Project Visibility Sprint</span></a></nav></header>
-<main class="builder">
-  <h1>Samostojni Website Builder</h1>
-  <p>Prijavi se, izberi paket in določi vsebino, barve, strani, slog ter druge zahteve. Agent nato izdela stran, jo preveri, popravi kritične napake in jo shrani v GitHub.</p>
-  <div class="builder-grid">
-    <section class="panel">
-      <h2>1. Račun</h2>
-      <label>E-pošta<input id="email" type="email" autocomplete="email" required></label>
-      <label>Geslo<input id="password" type="password" minlength="8" maxlength="128" autocomplete="current-password" required><small class="field-help">Najmanj 8 znakov.</small></label>
-      <div class="row"><button class="button" id="register" type="button">Registracija</button><button class="button secondary" id="login" type="button">Prijava</button></div>
-      <p id="authState">Nisi prijavljen.</p>
-    </section>
-    <section class="panel">
-      <h2>2. Projekt</h2>
-      <label>Ime projekta<input id="name"></label>
-      <label>Organizacija<input id="organization"></label>
-      <label>Paket<select id="package"><option>Start</option><option>Standard</option><option>Premium</option></select></label>
-      <label>Program / dejavnost<input id="programme" placeholder="npr. Erasmus+ KA2 ali lokalno podjetje"></label>
-      <label>Glavni cilj strani<textarea id="goal"></textarea></label>
-      <label>Ciljna publika<input id="audience"></label>
-      <label>Ton komunikacije<input id="tone" value="professional and human"></label>
-    </section>
-    <section class="panel">
-      <h2>3. Vizualna identiteta</h2>
-      <div class="row">
-        <label>Primarna barva<input id="primary" type="color" value="#111827"></label>
-        <label>Poudarek<input id="secondary" type="color" value="#84cc16"></label>
+<header class="console-header">
+  <nav class="console-nav" aria-label="AI console navigacija">
+    <a class="console-brand" href="../"><img src="../assets/mark.svg" alt=""><span>Project Visibility AI</span></a>
+    <div class="console-nav-actions"><a class="console-link" href="../">← Prodajna stran</a><span class="pill">Autonomous Website Agent</span></div>
+  </nav>
+</header>
+
+<main class="console">
+  <section class="console-hero">
+    <div class="hero-console-card">
+      <div class="eyebrow" style="color:#d9ff65">AI WEBSITE OPERATING SYSTEM</div>
+      <h1>Od ideje do <span>GitHuba.</span></h1>
+      <p>Definiraj znamko, vsebino in funkcije. Lokalni AI agent pripravi arhitekturo, izdela kodo, izvede QA, sam popravi kritične napake in rezultat objavi v GitHub repozitorij.</p>
+      <div class="capabilities"><span class="cap">Local AI / Ollama</span><span class="cap">Design agent</span><span class="cap">Code agent</span><span class="cap">QA agent</span><span class="cap">Self-fix loop</span><span class="cap">GitHub publishing</span><span class="cap">Zero paid AI tokens</span></div>
+    </div>
+    <aside class="connection-card">
+      <h2>Agent connection</h2><p>Javni GitHub Pages frontend se poveže na tvoj zasebni agentski backend prek HTTPS.</p>
+      <div class="signal-grid">
+        <div class="signal"><span>API</span><strong class="signal-state" id="apiState">Preverjam</strong></div>
+        <div class="signal"><span>AI model</span><strong class="signal-state" id="modelState">—</strong></div>
+        <div class="signal"><span>GitHub publish</span><strong class="signal-state" id="githubState">—</strong></div>
       </div>
-      <div class="row">
-        <label>Ozadje<input id="background" type="color" value="#ffffff"></label>
-        <label>Besedilo<input id="textColor" type="color" value="#111827"></label>
-      </div>
-      <label>Slog<select id="fontStyle"><option>modern</option><option>minimal</option><option>editorial</option><option>classic</option><option>tech</option></select></label>
-      <label>Vizualno razpoloženje<input id="mood" value="clean, trustworthy, contemporary"></label>
-      <label>Smer fotografij / slik<input id="imageDirection" value="authentic, relevant, non-stock feeling"></label>
-    </section>
-    <section class="panel">
-      <h2>4. Strani in posebne želje</h2>
-      <label>Želene strani<textarea id="pages" placeholder="Domov | predstavitev\nO projektu | cilj in aktivnosti\nGalerija | fotografije in dogodki\nKontakt | kontaktni podatki"></textarea></label>
-      <label>Naslov hero sekcije<input id="heroTitle"></label>
-      <label>Podnaslov<input id="heroSubtitle"></label>
-      <label>CTA gumb<input id="cta" value="Kontaktirajte nas"></label>
-      <label>Kontaktni e-mail<input id="contact" type="email"></label>
-      <label>Dodatne zahteve<textarea id="requirements"></textarea></label>
-      <button class="button" id="generate" type="button">Generiraj spletno stran →</button>
-    </section>
+      <div><div class="api-connect"><input id="apiUrl" type="url" placeholder="https://...trycloudflare.com"><button id="connectApi" type="button">Poveži</button></div><p class="api-hint" id="apiHint">API naslov se shrani samo v tem brskalniku.</p></div>
+    </aside>
+  </section>
+
+  <div class="workspace">
+    <aside class="rail" aria-label="Koraki">
+      <div class="rail-title">Build pipeline</div>
+      <div class="stage active"><span class="stage-num">01</span><div><strong>Račun</strong><small>Prijava in identiteta</small></div></div>
+      <div class="stage"><span class="stage-num">02</span><div><strong>Projekt</strong><small>Cilj, publika, paket</small></div></div>
+      <div class="stage"><span class="stage-num">03</span><div><strong>Brand system</strong><small>Barve, slog, mood</small></div></div>
+      <div class="stage"><span class="stage-num">04</span><div><strong>Architecture</strong><small>Strani in vsebina</small></div></div>
+      <div class="stage"><span class="stage-num">05</span><div><strong>Agent build</strong><small>Code → QA → fix → GitHub</small></div></div>
+    </aside>
+
+    <div class="workspace-main">
+      <section class="workspace-card">
+        <div class="card-head"><div><h2>Račun</h2><p>Prijava odklene projektni workspace in spremljanje generiranja.</p></div><span class="step-tag">01 / AUTH</span></div>
+        <div class="field-grid">
+          <div class="console-field"><label for="email">E-pošta</label><input id="email" type="email" autocomplete="email" placeholder="ime@podjetje.si"></div>
+          <div class="console-field"><label for="password">Geslo</label><input id="password" type="password" minlength="8" maxlength="128" autocomplete="current-password" placeholder="Najmanj 8 znakov"></div>
+        </div>
+        <div class="auth-actions"><button class="button" id="register" type="button">Ustvari račun</button><button class="button secondary" id="login" type="button">Prijava</button><button class="button secondary" id="logout" type="button" style="display:none">Odjava</button></div>
+        <div class="mini-state" id="authState">Nisi prijavljen.</div>
+      </section>
+
+      <section class="workspace-card">
+        <div class="card-head"><div><h2>Projektni brief</h2><p>Agent uporablja te podatke kot glavni vir resnice za izdelavo strani.</p></div><span class="step-tag">02 / INTENT</span></div>
+        <div class="package-strip" id="packageStrip"><button type="button" class="pkg active" data-package="Start"><strong>Start</strong><small>do 3 strani</small></button><button type="button" class="pkg" data-package="Standard"><strong>Standard</strong><small>do 6 strani</small></button><button type="button" class="pkg" data-package="Premium"><strong>Premium</strong><small>do 12 strani</small></button></div>
+        <select id="package" hidden><option>Start</option><option>Standard</option><option>Premium</option></select>
+        <div class="field-grid">
+          <div class="console-field"><label for="name">Ime projekta</label><input id="name" placeholder="npr. GREEN ROOTS YOUTH"></div>
+          <div class="console-field"><label for="organization">Organizacija / podjetje</label><input id="organization" placeholder="Nosilec projekta"></div>
+          <div class="console-field"><label for="programme">Program / dejavnost</label><input id="programme" placeholder="Erasmus+ KA2, SaaS, avtoservis ..."></div>
+          <div class="console-field"><label for="audience">Ciljna publika</label><input id="audience" placeholder="Komu je stran namenjena?"></div>
+          <div class="console-field full"><label for="goal">Glavni cilj strani</label><textarea id="goal" placeholder="Kaj mora obiskovalec razumeti, narediti ali kupiti?"></textarea></div>
+          <div class="console-field full"><label for="tone">Ton komunikacije</label><input id="tone" value="professional, human, confident, clear"></div>
+        </div>
+      </section>
+
+      <section class="workspace-card">
+        <div class="card-head"><div><h2>Brand system</h2><p>Osnovna vizualna smer se takoj pokaže v živem predogledu.</p></div><span class="step-tag">03 / DESIGN</span></div>
+        <div class="palette">
+          <div class="console-field"><label>Primarna</label><input id="primary" type="color" value="#123f35"></div>
+          <div class="console-field"><label>Poudarek</label><input id="secondary" type="color" value="#d9ff65"></div>
+          <div class="console-field"><label>Ozadje</label><input id="background" type="color" value="#fffefa"></div>
+          <div class="console-field"><label>Besedilo</label><input id="textColor" type="color" value="#102923"></div>
+        </div>
+        <div class="field-grid" style="margin-top:.85rem">
+          <div class="console-field"><label for="fontStyle">Slog</label><select id="fontStyle"><option>modern</option><option>minimal</option><option>editorial</option><option>classic</option><option>tech</option></select></div>
+          <div class="console-field"><label for="mood">Vizualno razpoloženje</label><input id="mood" value="clean, premium, trustworthy, contemporary"></div>
+          <div class="console-field full"><label for="imageDirection">Smer fotografij / slik</label><input id="imageDirection" value="authentic, editorial, relevant, non-stock feeling"></div>
+        </div>
+      </section>
+
+      <section class="workspace-card">
+        <div class="card-head"><div><h2>Struktura in vsebina</h2><p>Določi strani ali pusti agentu, da strukturo optimizira glede na cilj.</p></div><span class="step-tag">04 / IA</span></div>
+        <div class="field-grid">
+          <div class="console-field full"><label for="pages">Želene strani</label><textarea id="pages" placeholder="Domov | glavna predstavitev\nO projektu | cilji in aktivnosti\nRezultati | dokumenti in učinki\nGalerija | fotografije in dogodki\nKontakt | kontaktni podatki"></textarea><small id="pageLimit">Paket Start omogoča največ 3 strani.</small></div>
+          <div class="console-field"><label for="heroTitle">Hero naslov</label><input id="heroTitle" placeholder="Glavno sporočilo strani"></div>
+          <div class="console-field"><label for="cta">Glavni CTA</label><input id="cta" value="Kontaktirajte nas"></div>
+          <div class="console-field full"><label for="heroSubtitle">Hero podnaslov</label><input id="heroSubtitle" placeholder="Kratek argument ali pojasnilo"></div>
+          <div class="console-field"><label for="contact">Kontaktni e-mail</label><input id="contact" type="email"></div>
+          <div class="console-field"><label for="requirements">Posebne zahteve</label><input id="requirements" placeholder="Funkcije, omejitve, reference ..."></div>
+        </div>
+        <div class="generate-bar"><div><strong>Autonomous build</strong><p>Design → code → static QA → AI QA → self-fix → GitHub publish</p></div><button class="button" id="generate" type="button">Zaženi AI build →</button></div>
+      </section>
+    </div>
+
+    <aside class="preview-column">
+      <section class="preview-shell">
+        <div class="preview-top"><div class="browser-dots"><i></i><i></i><i></i></div><strong>Live design preview</strong></div>
+        <div class="preview-canvas" id="previewCanvas">
+          <div class="preview-nav"><span class="preview-logo" id="previewLogo">YOUR PROJECT</span><div class="preview-menu"><span>O NAS</span><span>REZULTATI</span><span>KONTAKT</span></div></div>
+          <span class="preview-eyebrow" id="previewEyebrow">PROJECT / DIGITAL EXPERIENCE</span>
+          <h3 id="previewTitle">Spletna stran, ki ima jasen namen.</h3>
+          <p id="previewSubtitle">Agent bo iz tvojega briefa sestavil celotno informacijsko arhitekturo, vsebino in responsive frontend.</p>
+          <span class="preview-cta" id="previewCta">Kontaktirajte nas</span><div class="preview-accent"></div>
+        </div>
+      </section>
+
+      <section class="agent-card">
+        <h3>Agent pipeline</h3>
+        <div class="pipeline" id="pipeline">
+          <div class="pipe" data-stage="queued"><b>1</b><span>Brief & queue</span><em>waiting</em></div>
+          <div class="pipe" data-stage="designing"><b>2</b><span>Design architecture</span><em>waiting</em></div>
+          <div class="pipe" data-stage="building"><b>3</b><span>Generate code</span><em>waiting</em></div>
+          <div class="pipe" data-stage="auditing"><b>4</b><span>QA & security audit</span><em>waiting</em></div>
+          <div class="pipe" data-stage="fixing"><b>5</b><span>Self-fix loop</span><em>waiting</em></div>
+          <div class="pipe" data-stage="ready"><b>6</b><span>GitHub publish</span><em>waiting</em></div>
+        </div>
+      </section>
+
+      <section class="agent-card"><h3>Agent log</h3><div class="status-box" id="status">Čakam na povezavo z agentom ...</div><div class="result-actions" id="resultActions"><a class="button small" id="repoLink" href="#" target="_blank" rel="noopener">Odpri GitHub repo ↗</a><button class="button secondary small" id="newBuild" type="button">Nov build</button></div></section>
+    </aside>
   </div>
-  <section class="panel" style="margin-top:24px"><h2>Status agenta</h2><div class="status" id="status">Pripravljen.</div></section>
 </main>
-<script src="../assets/builder.js?v=20260909-2" defer></script>
+<script src="../assets/builder.js?v=20260909-console2" defer></script>
 </body>
 </html>

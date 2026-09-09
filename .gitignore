@@ -4,3 +4,9 @@
 !.env.example
 node_modules/
 .openai/
+.venv/
+__pycache__/
+*.pyc
+api/data/*.db
+api/data/*.db-*
+api/data/*.log
