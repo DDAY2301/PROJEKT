@@ -9,10 +9,23 @@ import api.enhanced_runtime  # noqa: F401 - patches core.generate_project
 app = core.app
 DIST_DIR = Path(__file__).resolve().parent.parent / "dist"
 
+
+# Chrome/Chromium Local Network Access can add a private-network preflight when
+# an HTTPS frontend calls the loopback service. The existing CORS middleware
+# already validates the normal request; this response header opts the local
+# service into that additional browser check. It exposes nothing beyond the
+# machine because 127.0.0.1 remains loopback-only.
+@app.middleware("http")
+async def allow_loopback_private_network(request, call_next):
+    response = await call_next(request)
+    if request.headers.get("access-control-request-private-network", "").lower() == "true":
+        response.headers["Access-Control-Allow-Private-Network"] = "true"
+    return response
+
+
 # Keep the historical /builder/ URL working everywhere, but always route it to
 # the stable single-file entry point. This route is registered before the
-# static mount, so it takes precedence locally and through the Cloudflare
-# tunnel.
+# static mount, so it takes precedence locally and through a tunnel.
 @app.get("/builder/", include_in_schema=False)
 async def builder_redirect():
     return RedirectResponse(url="/builder.html", status_code=307)
