@@ -161,29 +161,29 @@ if (-not $publicHealth) {
 Write-Host "[6/6] Selecting public product URL..."
 $encodedApi = [Uri]::EscapeDataString($tunnelUrl)
 $githubLanding = "https://dday2301.github.io/PROJEKT/"
-$githubBuilder = "https://dday2301.github.io/PROJEKT/builder.html?api=$encodedApi"
+$githubRuntime = "https://dday2301.github.io/PROJEKT/runtime.html?api=$encodedApi"
 $tunnelLanding = "$tunnelUrl/"
-$tunnelBuilder = "$tunnelUrl/builder.html?api=$encodedApi"
+$tunnelBuilder = "$tunnelUrl/builder.html?api=$encodedApi&v=20260909-5"
 $publicLanding = $githubLanding
-$publicBuilder = $githubBuilder
-$frontendSource = "GitHub Pages"
+$publicBuilder = $githubRuntime
+$frontendSource = "GitHub Pages handoff -> same-origin HTTPS runtime"
 
-# GitHub Pages can take several minutes to propagate a new deployment. Probe a
-# cache-busted URL; if the edge still returns 404, use the same static frontend
-# through the already healthy Cloudflare tunnel so the product remains usable.
+# GitHub Pages is the public entry point, but the actual builder is handed off
+# to the active Cloudflare origin. This keeps frontend and API on the same HTTPS
+# origin and avoids browser CORS / Failed-to-fetch failures. If Pages is still
+# propagating, open the exact same builder directly through Cloudflare.
 try {
   $cacheBust = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-  $separator = if ($githubBuilder.Contains('?')) { '&' } else { '?' }
-  $probeUrl = "$githubBuilder${separator}pv=$cacheBust"
+  $probeUrl = "$githubRuntime&pv=$cacheBust"
   $probe = Invoke-WebRequest -Uri $probeUrl -UseBasicParsing -Method Get -TimeoutSec 15
   if ($probe.StatusCode -lt 200 -or $probe.StatusCode -ge 400) { throw "GitHub Pages returned HTTP $($probe.StatusCode)" }
-  Write-Host "Frontend: GitHub Pages ONLINE" -ForegroundColor Green
+  Write-Host "Frontend handoff: GitHub Pages ONLINE" -ForegroundColor Green
 } catch {
-  $frontendSource = "Cloudflare HTTPS fallback"
+  $frontendSource = "Cloudflare same-origin HTTPS runtime"
   $publicLanding = $tunnelLanding
   $publicBuilder = $tunnelBuilder
-  Write-Warning "GitHub Pages is still propagating or returned 404. Using the public Cloudflare frontend for this session."
-  Write-Host "Frontend: Cloudflare HTTPS fallback ONLINE" -ForegroundColor Green
+  Write-Warning "GitHub Pages handoff is still propagating or returned 404. Opening the same-origin Cloudflare builder directly."
+  Write-Host "Frontend: Cloudflare same-origin ONLINE" -ForegroundColor Green
 }
 
 Write-Host ""
