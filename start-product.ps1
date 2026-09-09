@@ -158,13 +158,38 @@ if (-not $publicHealth) {
   Write-Host "Cloudflare: ONLINE / $tunnelUrl" -ForegroundColor Green
 }
 
-Write-Host "[6/6] Opening public product..."
+Write-Host "[6/6] Selecting public product URL..."
 $encodedApi = [Uri]::EscapeDataString($tunnelUrl)
-$publicBuilder = "https://dday2301.github.io/PROJEKT/builder.html?api=$encodedApi"
-$publicLanding = "https://dday2301.github.io/PROJEKT/"
+$githubLanding = "https://dday2301.github.io/PROJEKT/"
+$githubBuilder = "https://dday2301.github.io/PROJEKT/builder.html?api=$encodedApi"
+$tunnelLanding = "$tunnelUrl/"
+$tunnelBuilder = "$tunnelUrl/builder.html?api=$encodedApi"
+$publicLanding = $githubLanding
+$publicBuilder = $githubBuilder
+$frontendSource = "GitHub Pages"
+
+# GitHub Pages can take several minutes to propagate a new deployment. Probe a
+# cache-busted URL; if the edge still returns 404, use the same static frontend
+# through the already healthy Cloudflare tunnel so the product remains usable.
+try {
+  $cacheBust = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+  $separator = if ($githubBuilder.Contains('?')) { '&' } else { '?' }
+  $probeUrl = "$githubBuilder${separator}pv=$cacheBust"
+  $probe = Invoke-WebRequest -Uri $probeUrl -UseBasicParsing -Method Get -TimeoutSec 15
+  if ($probe.StatusCode -lt 200 -or $probe.StatusCode -ge 400) { throw "GitHub Pages returned HTTP $($probe.StatusCode)" }
+  Write-Host "Frontend: GitHub Pages ONLINE" -ForegroundColor Green
+} catch {
+  $frontendSource = "Cloudflare HTTPS fallback"
+  $publicLanding = $tunnelLanding
+  $publicBuilder = $tunnelBuilder
+  Write-Warning "GitHub Pages is still propagating or returned 404. Using the public Cloudflare frontend for this session."
+  Write-Host "Frontend: Cloudflare HTTPS fallback ONLINE" -ForegroundColor Green
+}
+
 Write-Host ""
 Write-Host "PUBLIC LANDING: $publicLanding" -ForegroundColor Cyan
 Write-Host "PUBLIC BUILDER: $publicBuilder" -ForegroundColor Cyan
+Write-Host "FRONTEND SOURCE: $frontendSource" -ForegroundColor Cyan
 Write-Host "PUBLIC SERVICE HEALTH: $tunnelUrl/health" -ForegroundColor Cyan
 Write-Host "LOCAL HEALTH: http://127.0.0.1:$Port/health" -ForegroundColor Cyan
 Write-Host ""
