@@ -10,6 +10,11 @@
   const style = document.createElement('style');
   style.textContent = `
     .intro{padding:0!important}.preview{padding:0!important}
+    .intro-main{padding-bottom:2rem!important;overflow:hidden}
+    .proofs{display:flex!important;flex-wrap:wrap!important;align-items:center!important;gap:.55rem!important;margin-top:1.35rem!important;padding-top:1rem!important;padding-bottom:.1rem!important;border-top:1px solid rgba(255,255,255,.09)}
+    .proofs span{display:inline-flex!important;align-items:center!important;justify-content:center!important;min-height:2rem!important;padding:.4rem .72rem!important;border:1px solid rgba(255,255,255,.13)!important;border-radius:999px!important;background:rgba(255,255,255,.045)!important;color:#dce8e4!important;line-height:1.15!important;white-space:nowrap!important}
+    @media(max-width:760px){.proofs{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important}.proofs span{white-space:normal!important;text-align:center!important}}
+    @media(max-width:460px){.proofs{grid-template-columns:1fr!important}}
     .my-sites{padding:1rem;border:1px solid var(--line);border-radius:1.1rem;background:#fff;box-shadow:0 14px 40px rgba(16,41,35,.06)}
     .my-sites-head{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:.65rem}.my-sites-head h2{margin:0;font-size:1.05rem}.my-sites-head span{padding:.24rem .48rem;border-radius:999px;background:#e6f0eb;color:var(--good);font-size:.62rem;font-weight:900}
     .my-sites-empty{padding:.9rem;border-radius:.78rem;background:#f0f4f2;color:var(--muted);font-size:.76rem;line-height:1.5}.my-sites-empty strong{display:block;margin-bottom:.15rem;color:var(--ink);font-size:.82rem}
@@ -40,7 +45,7 @@
   const mySitesBody = document.getElementById('mySitesBody');
 
   function escapeHtml(value) {
-    return String(value || '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
+    return String(value || '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt',"'":'&#39;','"':'&quot;'}[ch]));
   }
 
   function renderEmptySites(message = 'Izpolni projekt spodaj in klikni “Začni izdelavo”. Ko je objava končana, se tukaj takoj pojavi javna povezava.') {
