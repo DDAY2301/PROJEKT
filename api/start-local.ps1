@@ -8,24 +8,6 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $repoRoot
 
-function Find-CompatiblePython {
-  $candidates = @(
-    @{ Command = "py"; Args = @("-3.12") },
-    @{ Command = "py"; Args = @("-3.13") },
-    @{ Command = "python"; Args = @() }
-  )
-  foreach ($candidate in $candidates) {
-    if (-not (Get-Command $candidate.Command -ErrorAction SilentlyContinue)) { continue }
-    try {
-      $versionText = & $candidate.Command @($candidate.Args) -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>$null
-      if ($LASTEXITCODE -ne 0) { continue }
-      $parts = $versionText.Trim().Split('.')
-      if ([int]$parts[0] -eq 3 -and [int]$parts[1] -ge 11 -and [int]$parts[1] -le 13) { return $candidate }
-    } catch {}
-  }
-  return $null
-}
-
 function Read-SecretText([string]$Prompt) {
   $secure = Read-Host $Prompt -AsSecureString
   $ptr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
@@ -33,40 +15,53 @@ function Read-SecretText([string]$Prompt) {
   finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr) }
 }
 
+function Find-Python {
+  $py = Get-Command py -ErrorAction SilentlyContinue
+  if ($py) { return @{ Command = $py.Source; Args = @("-3.12") } }
+  $python = Get-Command python -ErrorAction SilentlyContinue
+  if ($python) { return @{ Command = $python.Source; Args = @() } }
+  throw "Python 3.12+ was not found."
+}
+
 Write-Host "[1/7] Checking Python and Ollama..."
-$pythonCmd = Find-CompatiblePython
-if (-not $pythonCmd) { throw "Compatible Python was not found. Install Python 3.12: winget install -e --id Python.Python.3.12" }
-if (-not (Get-Command ollama -ErrorAction SilentlyContinue)) { throw "Ollama is not installed or not on PATH." }
-$pythonVersion = & $pythonCmd.Command @($pythonCmd.Args) -c "import sys; print(sys.version.split()[0])"
-Write-Host "Using Python $pythonVersion"
+$pythonCmd = Find-Python
+$version = & $pythonCmd.Command @($pythonCmd.Args) -c "import sys; print('.'.join(map(str,sys.version_info[:3])))"
+if ($LASTEXITCODE -ne 0) { throw "Python check failed." }
+Write-Host "Using Python $version"
+
+$ollama = Get-Command ollama -ErrorAction SilentlyContinue
+if (-not $ollama) { throw "Ollama was not found in PATH." }
 
 Write-Host "[2/7] Checking local Ollama API..."
-try { $tags = Invoke-RestMethod -Uri "http://127.0.0.1:11434/api/tags" -Method Get -TimeoutSec 5 }
-catch { throw "Ollama API is not reachable. Start it first with: ollama serve" }
-$availableModels = @($tags.models | ForEach-Object { $_.name })
-if ($availableModels -notcontains $Model) {
-  Write-Host "Model '$Model' is missing. Downloading it with Ollama..."
-  & ollama pull $Model
-  if ($LASTEXITCODE -ne 0) { throw "Ollama model download failed." }
+try {
+  $tags = Invoke-RestMethod -Uri "http://127.0.0.1:11434/api/tags" -TimeoutSec 5
+} catch {
+  Start-Process -FilePath $ollama.Source -ArgumentList "serve" -WindowStyle Minimized
+  Start-Sleep -Seconds 3
+  $tags = Invoke-RestMethod -Uri "http://127.0.0.1:11434/api/tags" -TimeoutSec 10
+}
+$hasModel = $false
+foreach ($m in $tags.models) { if ($m.name -eq $Model) { $hasModel = $true } }
+if (-not $hasModel) {
+  Write-Host "Model $Model is missing. Pulling it now..."
+  & $ollama.Source pull $Model
+  if ($LASTEXITCODE -ne 0) { throw "Failed to pull Ollama model $Model." }
 }
 
 Write-Host "[3/7] Checking port $Port..."
 $listener = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($listener) {
   try {
-    $existingHealth = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/health" -Method Get -TimeoutSec 3
-    if ($existingHealth.ok) {
-      if (-not $SkipGitHub -and -not $existingHealth.github_configured) {
-        throw "An agent is already running on port $Port WITHOUT GitHub publishing (PID $($listener.OwningProcess)). Stop it first: Stop-Process -Id $($listener.OwningProcess) -Force"
-      }
-      Write-Host "Agent is already running on port $Port (PID $($listener.OwningProcess))."
-      Write-Host "Health: http://127.0.0.1:$Port/health"
-      Write-Host "Builder: http://127.0.0.1:$Port/builder/"
-      exit 0
+    $old = Get-Process -Id $listener.OwningProcess -ErrorAction Stop
+    if ($old.ProcessName -match 'python|uvicorn') {
+      Write-Host "Stopping previous local agent process $($old.Id)..."
+      Stop-Process -Id $old.Id -Force
+      Start-Sleep -Seconds 1
+    } else {
+      throw "Port $Port is already used by $($old.ProcessName) (PID $($old.Id))."
     }
   } catch {
-    if ($_.Exception.Message -like "An agent is already running*") { throw }
-    throw "Port $Port is already in use by PID $($listener.OwningProcess), but it is not a healthy Project Visibility agent."
+    if (Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue) { throw }
   }
 }
 
@@ -95,9 +90,6 @@ $env:OLLAMA_BASE_URL = "http://127.0.0.1:11434"
 $env:OLLAMA_MODEL = $Model
 $env:GITHUB_OWNER = "DDAY2301"
 
-# Keep the auth signing key stable across local restarts so browser sessions do
-# not become invalid every time the API process is restarted. The file is
-# intentionally stored under api/data and ignored by Git.
 $secretFile = Join-Path $repoRoot "api\data\.app-secret"
 if (-not $env:APP_SECRET) {
   if (Test-Path $secretFile) {
@@ -112,22 +104,28 @@ if (-not $env:APP_SECRET) {
 if (-not $env:APP_SECRET) { throw "Could not prepare APP_SECRET." }
 Write-Host "Local login sessions: PERSISTENT across restarts" -ForegroundColor Green
 
-Write-Host "[6/7] Connecting GitHub publishing..."
+Write-Host "[6/7] Connecting GitHub repository access..."
 if (-not $SkipGitHub -and -not $env:GITHUB_TOKEN) {
-  Write-Host "GitHub token will be kept only in this process and will NOT be saved to the repository."
-  $env:GITHUB_TOKEN = Read-SecretText "Paste NEW GitHub token"
+  Write-Host "The token is kept only in this process and is NOT saved to the repository."
+  Write-Host "For full automatic publishing use a fine-grained token with:" -ForegroundColor Yellow
+  Write-Host "  Repository access: All repositories" -ForegroundColor Yellow
+  Write-Host "  Contents: Read and write" -ForegroundColor Yellow
+  Write-Host "  Pages: Read and write" -ForegroundColor Yellow
+  Write-Host "  Administration: Read and write" -ForegroundColor Yellow
+  $env:GITHUB_TOKEN = Read-SecretText "Paste GitHub token"
 }
 if ($env:GITHUB_TOKEN) {
   try {
     $headers = @{ Authorization = "Bearer $env:GITHUB_TOKEN"; Accept = "application/vnd.github+json"; "X-GitHub-Api-Version" = "2022-11-28" }
     $ghUser = Invoke-RestMethod -Uri "https://api.github.com/user" -Headers $headers -Method Get -TimeoutSec 15
-    Write-Host "GitHub publishing: ENABLED as $($ghUser.login)"
+    Write-Host "GitHub repository access: CONNECTED as $($ghUser.login)" -ForegroundColor Green
+    Write-Host "Pages publication permissions are verified when a generated site is published." -ForegroundColor DarkGray
   } catch {
     $env:GITHUB_TOKEN = $null
     throw "GitHub token validation failed. The token was not saved."
   }
 } else {
-  Write-Warning "GitHub publishing is disabled."
+  Write-Warning "GitHub repository publishing is disabled."
 }
 
 Write-Host "[7/7] Starting API and builder..."
