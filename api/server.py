@@ -5,6 +5,7 @@ from fastapi.staticfiles import StaticFiles
 
 import api.main as core
 import api.enhanced_runtime  # noqa: F401 - patches core.generate_project
+import api.revisions  # noqa: F401 - registers post-build revision routes
 
 app = core.app
 DIST_DIR = Path(__file__).resolve().parent.parent / "dist"
