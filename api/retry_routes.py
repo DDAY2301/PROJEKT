@@ -40,22 +40,6 @@ def _audit_without_publish_failures(raw: str | None) -> dict:
     return audit
 
 
-def _schedule_publish(project_id: str) -> tuple[asyncio.Task, bool]:
-    existing = _publish_tasks.get(project_id)
-    if existing is not None and not existing.done():
-        return existing, False
-
-    task = asyncio.create_task(_publish_existing(project_id))
-    _publish_tasks[project_id] = task
-
-    def _cleanup(done_task: asyncio.Task) -> None:
-        if _publish_tasks.get(project_id) is done_task:
-            _publish_tasks.pop(project_id, None)
-
-    task.add_done_callback(_cleanup)
-    return task, True
-
-
 async def _publish_existing(project_id: str) -> None:
     with core.db() as con:
         row = con.execute("SELECT * FROM projects WHERE id=?", (project_id,)).fetchone()
@@ -120,11 +104,35 @@ async def _publish_existing(project_id: str) -> None:
             "message": str(exc)[:700],
         })
         audit.update({"repository_ready": True, "public_url": public_url, "public_live": False})
+        audit.pop("publish_action_required", None)
         with core.db() as con:
             con.execute(
                 "UPDATE projects SET status='failed',repo_name=?,last_audit_json=?,updated_at=? WHERE id=?",
                 (repo_name, json.dumps(audit, ensure_ascii=False), core.now_iso(), project_id),
             )
+
+
+async def _publish_task_runner(project_id: str) -> None:
+    try:
+        await _publish_existing(project_id)
+    finally:
+        _publish_tasks.pop(project_id, None)
+
+
+def _ensure_publish_task(project_id: str) -> bool:
+    """Start publishing if it is not actually running.
+
+    Returns True when a new task was started and False when an existing task is
+    already active. The in-memory registry intentionally resets on process
+    restart; a database row left in `publishing` can therefore be resumed by the
+    next request instead of becoming permanently stuck.
+    """
+    existing = _publish_tasks.get(project_id)
+    if existing and not existing.done():
+        return False
+    task = asyncio.create_task(_publish_task_runner(project_id))
+    _publish_tasks[project_id] = task
+    return True
 
 
 @core.app.post("/projects/{project_id}/retry")
@@ -156,35 +164,23 @@ async def publish_project_only(project_id: str, user_id: str = Depends(core.curr
         if not row:
             raise HTTPException(404, "Project not found")
 
+        # Build/revision stages are genuinely incompatible with a publish-only
+        # request. `publishing` is handled separately and is intentionally
+        # idempotent so duplicate clicks never become a user-facing 409.
         if row["status"] in {"designing", "building", "auditing", "fixing", "revising", "queued"}:
-            raise HTTPException(409, "A website build or revision is already running")
+            raise HTTPException(409, "A website build is currently running")
 
         config = json.loads(row["config_json"])
         repo_name = row["repo_name"] or _repo_name(config)
-
-        # Publishing is intentionally idempotent. If this process already owns
-        # an active publish task, return its state instead of 409. If the DB says
-        # publishing but the service has restarted, there is no in-memory task;
-        # schedule a fresh publish-only recovery against the existing repo.
-        existing = _publish_tasks.get(project_id)
-        if row["status"] == "publishing" and existing is not None and not existing.done():
-            return {
-                "id": project_id,
-                "status": "publishing",
-                "repo_name": repo_name,
-                "already_running": True,
-            }
-
         con.execute(
             "UPDATE projects SET status='publishing',repo_name=?,updated_at=? WHERE id=?",
             (repo_name, core.now_iso(), project_id),
         )
 
-    _, started = _schedule_publish(project_id)
+    started = _ensure_publish_task(project_id)
     return {
         "id": project_id,
         "status": "publishing",
         "repo_name": repo_name,
         "already_running": not started,
-        "resumed": row["status"] == "publishing" and started,
     }
