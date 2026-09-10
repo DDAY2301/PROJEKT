@@ -7,6 +7,7 @@ import api.main as core
 import api.robust_generation  # noqa: F401 - patches planning/build/QA for local models
 import api.enhanced_runtime  # noqa: F401 - patches core.generate_project
 import api.revisions  # noqa: F401 - registers post-build revision routes
+import api.retry_routes  # noqa: F401 - registers failed-build retry route
 
 app = core.app
 DIST_DIR = Path(__file__).resolve().parent.parent / "dist"
