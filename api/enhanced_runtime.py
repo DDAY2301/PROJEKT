@@ -6,10 +6,13 @@ a best-effort live deployment check and persistent failure reporting.
 """
 
 import json
+import logging
 import re
 
 import api.main as core
 from api.pages_publish import publish_generated_site, wait_for_generated_site
+
+logger = logging.getLogger("project_visibility.build")
 
 
 def set_status(project_id: str, status: str) -> None:
@@ -93,7 +96,9 @@ async def generate_project_observable(project_id: str):
                     project_id,
                 ),
             )
+        logger.info("Website build completed project=%s status=%s repo=%s", project_id, final_status, repo_name)
     except Exception as exc:
+        logger.exception("Website build failed project=%s phase=%s", project_id, phase)
         detail = str(exc).strip() or exc.__class__.__name__
         failure = {
             "failure_stage": phase,
