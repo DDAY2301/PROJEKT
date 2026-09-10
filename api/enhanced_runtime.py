@@ -21,6 +21,7 @@ def set_status(project_id: str, status: str) -> None:
 
 
 async def generate_project_observable(project_id: str):
+    phase = "preparing"
     try:
         with core.db() as con:
             row = con.execute("SELECT * FROM projects WHERE id=?", (project_id,)).fetchone()
@@ -28,12 +29,15 @@ async def generate_project_observable(project_id: str):
                 return
             config = json.loads(row["config_json"])
 
+        phase = "structure"
         set_status(project_id, "designing")
         spec = await core.design_site(config)
 
+        phase = "website build"
         set_status(project_id, "building")
         files = await core.build_files(config, spec)
 
+        phase = "quality review"
         set_status(project_id, "auditing")
         audit1 = core.static_audit(files)
         audit2 = await core.ai_audit(files, config)
@@ -42,9 +46,11 @@ async def generate_project_observable(project_id: str):
         attempts = 0
         while any(i.get("severity") in {"critical", "high"} for i in issues) and attempts < core.MAX_AUTO_FIX_ATTEMPTS:
             attempts += 1
+            phase = f"automatic repair {attempts}"
             set_status(project_id, "fixing")
             files = await core.fix_files(files, issues, config)
 
+            phase = "quality re-check"
             set_status(project_id, "auditing")
             audit1 = core.static_audit(files)
             audit2 = await core.ai_audit(files, config)
@@ -56,8 +62,11 @@ async def generate_project_observable(project_id: str):
             (core.GITHUB_OUTPUT_PREFIX + config["name"]).lower(),
         ).strip("-")[:90]
 
+        phase = "GitHub publishing"
         set_status(project_id, "publishing")
         await core.github_put_bundle(repo_name, files, f"Agent build for {config['name']}")
+
+        phase = "public website publishing"
         public_url = await publish_generated_site(repo_name)
         live = await wait_for_generated_site(public_url, seconds=90)
         if not live:
@@ -85,15 +94,18 @@ async def generate_project_observable(project_id: str):
                 ),
             )
     except Exception as exc:
+        detail = str(exc).strip() or exc.__class__.__name__
         failure = {
+            "failure_stage": phase,
+            "error_type": exc.__class__.__name__,
             "issues": [
                 {
                     "severity": "critical",
                     "code": "BUILD_FAILED",
                     "file": "",
-                    "message": str(exc)[:700],
+                    "message": f"Build failed during {phase}: {detail}"[:700],
                 }
-            ]
+            ],
         }
         with core.db() as con:
             con.execute(
