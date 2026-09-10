@@ -1,4 +1,28 @@
 (() => {
+  // Harden authentication UX: a token existing in localStorage does not mean
+  // the backend still accepts it. Intercept auth failures globally, clear the
+  // stale token and immediately return the account card to login mode.
+  const baseRequest = request;
+  let sessionExpiryHandled = false;
+  request = async function(path, options = {}) {
+    try {
+      return await baseRequest(path, options);
+    } catch (e) {
+      if (/invalid or expired token|missing bearer token/i.test(String(e?.message || ''))) {
+        if (token) {
+          token = '';
+          localStorage.removeItem('pv_token');
+        }
+        if (!sessionExpiryHandled) {
+          sessionExpiryHandled = true;
+          updateAuthUi('Seja je potekla. Ponovno se prijavi.');
+          status('PRIJAVA JE POTEKLA\nPonovno se prijavi z e-pošto in geslom. Vneseni podatki projekta ostanejo na strani.');
+        }
+      }
+      throw e;
+    }
+  };
+
   if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
   const resetWorkspaceViewport = () => {
     if (!location.hash) window.scrollTo({top: 0, left: 0, behavior: 'auto'});
@@ -90,7 +114,7 @@
       else renderEmptySites();
     } catch (e) {
       mySitesBody.className = 'my-sites-empty';
-      mySitesBody.innerHTML = `<strong>Strani trenutno ni mogoče preveriti.</strong>${escapeHtml(e.message)}`;
+      mySitesBody.innerHTML = `<strong>${token ? 'Strani trenutno ni mogoče preveriti.' : 'Prijava je potrebna.'}</strong>${escapeHtml(token ? e.message : 'Ponovno se prijavi za dostop do svojih strani.')}`;
     }
   }
 
@@ -189,7 +213,13 @@
   });
 
   document.getElementById('logout')?.addEventListener('click', () => setTimeout(refreshMySites, 0));
-  document.getElementById('login')?.addEventListener('click', () => setTimeout(refreshMySites, 900));
-  document.getElementById('register')?.addEventListener('click', () => setTimeout(refreshMySites, 900));
+  document.getElementById('login')?.addEventListener('click', () => {
+    sessionExpiryHandled = false;
+    setTimeout(refreshMySites, 900);
+  });
+  document.getElementById('register')?.addEventListener('click', () => {
+    sessionExpiryHandled = false;
+    setTimeout(refreshMySites, 900);
+  });
   refreshMySites();
 })();
