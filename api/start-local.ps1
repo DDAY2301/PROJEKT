@@ -94,7 +94,23 @@ Write-Host "[5/7] Configuring local agent..."
 $env:OLLAMA_BASE_URL = "http://127.0.0.1:11434"
 $env:OLLAMA_MODEL = $Model
 $env:GITHUB_OWNER = "DDAY2301"
-if (-not $env:APP_SECRET) { $env:APP_SECRET = & ".\.venv\Scripts\python.exe" -c "import secrets; print(secrets.token_urlsafe(48))" }
+
+# Keep the auth signing key stable across local restarts so browser sessions do
+# not become invalid every time the API process is restarted. The file is
+# intentionally stored under api/data and ignored by Git.
+$secretFile = Join-Path $repoRoot "api\data\.app-secret"
+if (-not $env:APP_SECRET) {
+  if (Test-Path $secretFile) {
+    $env:APP_SECRET = (Get-Content $secretFile -Raw).Trim()
+  } else {
+    $secretDir = Split-Path -Parent $secretFile
+    New-Item -ItemType Directory -Path $secretDir -Force | Out-Null
+    $env:APP_SECRET = & ".\.venv\Scripts\python.exe" -c "import secrets; print(secrets.token_urlsafe(48))"
+    Set-Content -Path $secretFile -Value $env:APP_SECRET -NoNewline -Encoding UTF8
+  }
+}
+if (-not $env:APP_SECRET) { throw "Could not prepare APP_SECRET." }
+Write-Host "Local login sessions: PERSISTENT across restarts" -ForegroundColor Green
 
 Write-Host "[6/7] Connecting GitHub publishing..."
 if (-not $SkipGitHub -and -not $env:GITHUB_TOKEN) {
