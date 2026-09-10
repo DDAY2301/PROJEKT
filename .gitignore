@@ -10,3 +10,4 @@ __pycache__/
 api/data/*.db
 api/data/*.db-*
 api/data/*.log
+api/data/.app-secret
