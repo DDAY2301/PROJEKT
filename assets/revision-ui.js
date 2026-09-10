@@ -33,8 +33,8 @@
     .my-sites{padding:1rem;border:1px solid var(--line);border-radius:1.1rem;background:#fff;box-shadow:0 14px 40px rgba(16,41,35,.06)}
     .my-sites-head{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:.65rem}.my-sites-head h2{margin:0;font-size:1.05rem}.my-sites-head span{padding:.24rem .48rem;border-radius:999px;background:#e6f0eb;color:var(--good);font-size:.62rem;font-weight:900}
     .my-sites-empty{padding:.9rem;border-radius:.78rem;background:#f0f4f2;color:var(--muted);font-size:.76rem;line-height:1.5}.my-sites-empty strong{display:block;margin-bottom:.15rem;color:var(--ink);font-size:.82rem}
-    .published-site{display:grid;grid-template-columns:1fr auto;gap:.7rem;align-items:center;padding:.78rem;border:1px solid #cfe0d8;border-radius:.8rem;background:#f4faf7}.published-site strong{display:block;font-size:.83rem}.published-site small{display:block;margin-top:.12rem;color:var(--muted);font-size:.64rem}.site-actions{display:flex;gap:.4rem;flex-wrap:wrap;justify-content:flex-end}.site-actions a,.site-actions button{min-height:2.35rem!important;padding:.45rem .65rem!important;font-size:.7rem!important}
-    .publish-warning{margin-top:.5rem;padding:.55rem .65rem;border-radius:.6rem;background:#fff3cd;color:#795b00;font-size:.68rem;line-height:1.45}
+    .published-site{display:grid;grid-template-columns:1fr auto;gap:.7rem;align-items:center;padding:.78rem;border:1px solid #cfe0d8;border-radius:.8rem;background:#f4faf7}.published-site strong{display:block;font-size:.83rem}.published-site small{display:block;margin-top:.12rem;color:var(--muted);font-size:.64rem}.site-actions{display:flex;gap:.4rem;flex-wrap:wrap;justify-content:flex-end}.site-actions a,.site-actions button{min-height:2.35rem!important;padding:.45rem .65rem!important;font-size:.7rem!important}.site-actions button:disabled{opacity:.58;cursor:wait;transform:none!important}
+    .publish-warning{margin-top:.5rem;padding:.55rem .65rem;border-radius:.6rem;background:#fff3cd;color:#795b00;font-size:.68rem;line-height:1.45}.publish-progress{margin-top:.5rem;padding:.55rem .65rem;border-radius:.6rem;background:#e8f3ef;color:#17634f;font-size:.68rem;line-height:1.45}
     .revision-card{display:none;margin-top:.85rem;padding:.9rem;border:1px solid var(--line);border-radius:.9rem;background:#f7faf8}.revision-card.visible{display:block}.revision-card h4{margin:0;font-size:.9rem}.revision-card p{margin:.25rem 0 .7rem;color:var(--muted);font-size:.72rem;line-height:1.45}
     .revision-card textarea{width:100%;min-height:5.8rem;padding:.7rem .75rem;border:1px solid #b8c7c0;border-radius:.72rem;background:#fff;resize:vertical;font:inherit;font-size:.78rem}.revision-actions{display:flex;gap:.5rem;margin-top:.55rem;flex-wrap:wrap}.revision-actions button:disabled{opacity:.55;cursor:not-allowed}
     .revision-history{display:grid;gap:.35rem;margin-top:.7rem}.revision-item{padding:.55rem .62rem;border-radius:.6rem;background:#edf3f0;font-size:.68rem}.revision-item strong{display:block;color:var(--good);font-size:.62rem;text-transform:uppercase}.revision-item span{display:block;margin-top:.12rem;color:#49605a}
@@ -60,6 +60,7 @@
     try { return JSON.parse(project?.last_audit_json || '{}'); } catch { return {}; }
   }
   function needsPublishRecovery(project) {
+    if (project?.status === 'publishing') return false;
     const audit = auditOf(project);
     if (audit.publish_action_required === 'github_pages_permission') return true;
     return (audit.issues || []).some(i => i.code === 'GITHUB_PAGES_PERMISSION' || (i.code === 'BUILD_FAILED' && /public website publishing|github pages/i.test(i.message || '')));
@@ -72,31 +73,42 @@
   async function publishOnly(projectId, button) {
     if (!token) return status('Najprej se ponovno prijavi.');
     button.disabled = true;
-    button.textContent = 'Objavljam ...';
+    button.textContent = 'Objava poteka …';
     try {
       const result = await request(`/projects/${projectId}/publish`, {method:'POST'});
       activeProjectId = projectId;
       updatePipeline('publishing');
-      status(`DOKONČUJEM OBJAVO\nProjekt: ${projectId}\nRepo: ${result.repo_name || 'preverjam'}\n\nGeneriranje se ne ponavlja.`);
-      for (let i = 0; i < 45; i++) {
+      status(`${result.already_running ? 'OBJAVA ŽE POTEKA' : 'DOKONČUJEM OBJAVO'}\nProjekt: ${projectId}\nRepo: ${result.repo_name || 'preverjam'}\n\nGeneriranje se ne ponavlja.`);
+      await refreshMySites();
+      for (let i = 0; i < 50; i++) {
         await sleep(3000);
         const project = await request(`/projects/${projectId}`);
         updatePipeline(project.status);
         if (['ready','needs_review','failed'].includes(project.status)) {
           await refreshMySites();
-          if (project.repo_name) setResultLinks(project.repo_name);
           const audit = auditOf(project);
-          if (audit.public_live) status(`OBJAVA KONČANA\n${audit.public_url || finalSiteUrl(project.repo_name)}`);
-          else if (needsPublishRecovery(project)) status('JAVNA OBJAVA ŠE NI DOVOLJENA\nGitHub token potrebuje Pages: Read and write ter Administration: Read and write.');
+          if (audit.public_live) {
+            if (project.repo_name) setResultLinks(project.repo_name);
+            status(`OBJAVA KONČANA\n${audit.public_url || finalSiteUrl(project.repo_name)}`);
+          } else if (needsPublishRecovery(project)) {
+            status('JAVNA OBJAVA ŠE NI DOVOLJENA\nGitHub token potrebuje Pages: Read and write ter Administration: Read and write.');
+          } else if (project.status === 'failed') {
+            const issue = (audit.issues || []).find(i => i.code === 'PUBLISH_RETRY_FAILED');
+            status(`OBJAVA NI USPELA\n${issue?.message || 'Preveri dnevnik storitve.'}`);
+          } else {
+            status('GitHub Pages je omogočen. Javna stran se še propagira; preveri ponovno čez nekaj trenutkov.');
+          }
           return;
         }
       }
-      status('Objava še poteka. Osveži “Moje strani” čez nekaj trenutkov.');
+      status('Objava na GitHub Pages še poteka. Sistem jo lahko nadaljuje tudi ob ponovnem kliku.');
     } catch (e) {
       status(`OBJAVA NI USPELA\n${e.message}`);
     } finally {
-      button.disabled = false;
-      button.textContent = 'Dokončaj objavo →';
+      if (button?.isConnected) {
+        button.disabled = false;
+        button.textContent = 'Dokončaj objavo →';
+      }
     }
   }
 
@@ -105,30 +117,38 @@
     const repo = project.repo_name || '';
     const url = audit.public_url || (repo ? finalSiteUrl(repo) : '');
     const live = audit.public_live === true;
-    const recovery = needsPublishRecovery(project);
+    const publishing = project.status === 'publishing';
+    const recovery = !publishing && needsPublishRecovery(project);
     mySitesBody.className = '';
     mySitesBody.innerHTML = `
       <div class="published-site">
         <div>
           <strong>${escapeHtml(project.name || repo || 'Spletna stran')}</strong>
-          <small>${live ? escapeHtml(url) : repo ? `Koda pripravljena: ${escapeHtml(repo)}` : 'Koda je pripravljena za dokončanje objave.'}</small>
+          <small>${live ? escapeHtml(url) : publishing ? 'GitHub Pages objava je v teku.' : repo ? `Koda pripravljena: ${escapeHtml(repo)}` : 'Koda je pripravljena za dokončanje objave.'}</small>
+          ${publishing ? '<div class="publish-progress">Javna objava trenutno poteka. Ni treba ponovno zaganjati izdelave ali večkrat klikati objave.</div>' : ''}
           ${recovery ? '<div class="publish-warning">Stran je izdelana, vendar trenutni GitHub token nima dovoljenja za vklop GitHub Pages. Po popravku dovoljenj ponovno zaženi servis in klikni “Dokončaj objavo”.</div>' : ''}
         </div>
         <div class="site-actions">
           ${live ? `<a class="button small" href="${escapeHtml(url)}" target="_blank" rel="noopener">Odpri stran ↗</a><button class="button secondary small" id="editPublishedSite" type="button">Uredi</button>` : ''}
+          ${publishing ? '<button class="button small" type="button" disabled>Objava poteka …</button>' : ''}
           ${recovery ? '<button class="button small" id="publishExistingSite" type="button">Dokončaj objavo →</button>' : ''}
           ${repo ? `<a class="button secondary small" href="https://github.com/${GITHUB_OWNER}/${encodeURIComponent(repo)}" target="_blank" rel="noopener">GitHub ↗</a>` : ''}
         </div>
       </div>`;
+    if (live && repo) currentRepo = repo;
     document.getElementById('publishExistingSite')?.addEventListener('click', e => publishOnly(project.id, e.currentTarget));
     document.getElementById('editPublishedSite')?.addEventListener('click', () => {
       const revision = document.getElementById('revisionCard');
-      if (revision) {
+      if (revision && live) {
         activeProjectId = project.id;
+        currentRepo = repo;
         revision.classList.add('visible');
+        refreshPreview();
+        loadHistory();
         revision.scrollIntoView({behavior:'smooth', block:'center'});
       }
     });
+    if (publishing) setTimeout(refreshMySites, 3500);
   }
 
   async function refreshMySites() {
@@ -140,9 +160,9 @@
     try {
       const projects = await request('/projects');
       if (!projects.length) return renderEmpty();
-      const candidate = projects.find(p => p.repo_name || needsPublishRecovery(p)) || projects[0];
+      const candidate = projects.find(p => p.repo_name || needsPublishRecovery(p) || p.status === 'publishing') || projects[0];
       activeProjectId = candidate.id;
-      if (candidate.repo_name || needsPublishRecovery(candidate)) renderProject(candidate);
+      if (candidate.repo_name || needsPublishRecovery(candidate) || candidate.status === 'publishing') renderProject(candidate);
       else renderEmpty(`Zadnji projekt ima stanje “${candidate.status || 'v pripravi'}”.`);
     } catch (e) {
       mySitesBody.className = 'my-sites-empty';
@@ -192,17 +212,15 @@
       historyEl.innerHTML = items.slice(0,4).map(item => `<div class="revision-item"><strong>${escapeHtml(item.status)}</strong><span>${escapeHtml(item.instruction)}</span></div>`).join('');
     } catch {}
   }
-  function showForRepo(repoName) {
+  function rememberRepo(repoName) {
     if (!repoName) return;
     currentRepo = repoName;
-    card.classList.add('visible');
-    refreshPreview();
     loadHistory();
     refreshMySites();
   }
 
   const originalSetResultLinks = setResultLinks;
-  setResultLinks = function(repoName) { originalSetResultLinks(repoName); showForRepo(repoName); };
+  setResultLinks = function(repoName) { originalSetResultLinks(repoName); rememberRepo(repoName); };
   stageIndex.revising = 2;
   statusLabels.revising = 'Urejanje objavljene strani';
   refresh.addEventListener('click', refreshPreview);
