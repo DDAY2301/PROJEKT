@@ -10,7 +10,7 @@ import logging
 import re
 
 import api.main as core
-from api.pages_publish import publish_generated_site, wait_for_generated_site
+from api.pages_publish import PagesPermissionError, publish_generated_site, wait_for_generated_site
 
 logger = logging.getLogger("project_visibility.build")
 
@@ -23,8 +23,17 @@ def set_status(project_id: str, status: str) -> None:
         )
 
 
+def repo_name_for(config: dict) -> str:
+    return re.sub(
+        r"[^a-z0-9-]+",
+        "-",
+        (core.GITHUB_OUTPUT_PREFIX + config["name"]).lower(),
+    ).strip("-")[:90]
+
+
 async def generate_project_observable(project_id: str):
     phase = "preparing"
+    repo_name = None
     try:
         with core.db() as con:
             row = con.execute("SELECT * FROM projects WHERE id=?", (project_id,)).fetchone()
@@ -59,18 +68,62 @@ async def generate_project_observable(project_id: str):
             audit2 = await core.ai_audit(files, config)
             issues = audit1["issues"] + audit2.get("issues", [])
 
-        repo_name = re.sub(
-            r"[^a-z0-9-]+",
-            "-",
-            (core.GITHUB_OUTPUT_PREFIX + config["name"]).lower(),
-        ).strip("-")[:90]
+        repo_name = repo_name_for(config)
 
         phase = "GitHub publishing"
         set_status(project_id, "publishing")
         await core.github_put_bundle(repo_name, files, f"Agent build for {config['name']}")
 
+        # Persist repository delivery immediately. Public Pages enablement is a
+        # separate concern and must never erase an otherwise successful build.
+        with core.db() as con:
+            con.execute(
+                "UPDATE projects SET repo_name=?,last_audit_json=?,auto_fix_attempts=?,updated_at=? WHERE id=?",
+                (
+                    repo_name,
+                    json.dumps({
+                        "issues": issues,
+                        "repository_ready": True,
+                        "public_url": None,
+                        "public_live": False,
+                    }, ensure_ascii=False),
+                    attempts,
+                    core.now_iso(),
+                    project_id,
+                ),
+            )
+
         phase = "public website publishing"
-        public_url = await publish_generated_site(repo_name)
+        try:
+            public_url = await publish_generated_site(repo_name)
+        except PagesPermissionError as exc:
+            public_url = f"https://{core.GITHUB_OWNER.lower()}.github.io/{repo_name}/"
+            issues.append({
+                "severity": "medium",
+                "code": "GITHUB_PAGES_PERMISSION",
+                "file": "",
+                "message": str(exc)[:700],
+            })
+            with core.db() as con:
+                con.execute(
+                    "UPDATE projects SET status='needs_review',repo_name=?,last_audit_json=?,auto_fix_attempts=?,updated_at=? WHERE id=?",
+                    (
+                        repo_name,
+                        json.dumps({
+                            "issues": issues,
+                            "repository_ready": True,
+                            "public_url": public_url,
+                            "public_live": False,
+                            "publish_action_required": "github_pages_permission",
+                        }, ensure_ascii=False),
+                        attempts,
+                        core.now_iso(),
+                        project_id,
+                    ),
+                )
+            logger.warning("Website code delivered but Pages permission is missing project=%s repo=%s", project_id, repo_name)
+            return
+
         live = await wait_for_generated_site(public_url, seconds=90)
         if not live:
             issues.append({
@@ -90,7 +143,12 @@ async def generate_project_observable(project_id: str):
                 (
                     final_status,
                     repo_name,
-                    json.dumps({"issues": issues, "public_url": public_url, "public_live": live}, ensure_ascii=False),
+                    json.dumps({
+                        "issues": issues,
+                        "repository_ready": True,
+                        "public_url": public_url,
+                        "public_live": live,
+                    }, ensure_ascii=False),
                     attempts,
                     core.now_iso(),
                     project_id,
@@ -113,13 +171,16 @@ async def generate_project_observable(project_id: str):
             ],
         }
         with core.db() as con:
-            con.execute(
-                "UPDATE projects SET status='failed',last_audit_json=?,updated_at=? WHERE id=?",
-                (json.dumps(failure, ensure_ascii=False), core.now_iso(), project_id),
-            )
+            if repo_name:
+                con.execute(
+                    "UPDATE projects SET status='failed',repo_name=?,last_audit_json=?,updated_at=? WHERE id=?",
+                    (repo_name, json.dumps(failure, ensure_ascii=False), core.now_iso(), project_id),
+                )
+            else:
+                con.execute(
+                    "UPDATE projects SET status='failed',last_audit_json=?,updated_at=? WHERE id=?",
+                    (json.dumps(failure, ensure_ascii=False), core.now_iso(), project_id),
+                )
 
 
-# Route functions in api.main resolve this name from the module at runtime, so
-# replacing it here upgrades create/patch/audit background tasks as well as the
-# scheduler without duplicating endpoints.
 core.generate_project = generate_project_observable
