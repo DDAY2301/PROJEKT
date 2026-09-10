@@ -1,6 +1,16 @@
 (() => {
+  if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+  const resetWorkspaceViewport = () => {
+    if (!location.hash) window.scrollTo({top: 0, left: 0, behavior: 'auto'});
+  };
+  resetWorkspaceViewport();
+  window.addEventListener('pageshow', resetWorkspaceViewport);
+  window.addEventListener('load', () => setTimeout(resetWorkspaceViewport, 0));
+
   const style = document.createElement('style');
   style.textContent = `
+    .intro{padding:0!important}
+    .preview{padding:0!important}
     .revision-card{display:none;margin-top:.85rem;padding:.9rem;border:1px solid var(--line);border-radius:.9rem;background:#f7faf8}
     .revision-card.visible{display:block}.revision-card h4{margin:0;font-size:.9rem}.revision-card p{margin:.25rem 0 .7rem;color:var(--muted);font-size:.72rem;line-height:1.45}
     .revision-card textarea{width:100%;min-height:5.8rem;padding:.7rem .75rem;border:1px solid #b8c7c0;border-radius:.72rem;background:#fff;resize:vertical;font:inherit;font-size:.78rem}
@@ -13,7 +23,7 @@
 
   const actions = document.getElementById('resultActions');
   if (!actions) return;
-  const host = actions.closest('.process-card') || actions.parentElement;
+  const host = actions.closest('.side-card') || actions.closest('.process-card') || actions.parentElement;
 
   const card = document.createElement('div');
   card.id = 'revisionCard';
@@ -34,7 +44,7 @@
   const instruction = document.getElementById('revisionInstruction');
   const apply = document.getElementById('applyRevision');
   const refresh = document.getElementById('refreshLivePreview');
-  const history = document.getElementById('revisionHistory');
+  const historyEl = document.getElementById('revisionHistory');
   const liveMini = document.getElementById('liveMini');
   const liveFrame = document.getElementById('liveMiniFrame');
   const liveLink = document.getElementById('liveMiniLink');
@@ -55,7 +65,7 @@
     if (!activeProjectId || !token) return;
     try {
       const items = await request(`/projects/${activeProjectId}/revisions`);
-      history.innerHTML = items.slice(0, 4).map(item => `<div class="revision-item"><strong>${item.status}</strong><span>${escapeHtml(item.instruction)}</span></div>`).join('');
+      historyEl.innerHTML = items.slice(0, 4).map(item => `<div class="revision-item"><strong>${item.status}</strong><span>${escapeHtml(item.instruction)}</span></div>`).join('');
     } catch {}
   }
   function showForRepo(repoName) {
