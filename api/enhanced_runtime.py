@@ -1,15 +1,15 @@
 """Runtime enhancements for the autonomous website agent.
 
 This module patches the generation coroutine in api.main without duplicating the
-API routes. It adds explicit build states, automatic GitHub Pages publishing and
-guarantees that background task failures are persisted as a project status.
+API routes. It adds explicit build states, automatic GitHub Pages publishing,
+a best-effort live deployment check and persistent failure reporting.
 """
 
 import json
 import re
 
 import api.main as core
-from api.pages_publish import publish_generated_site
+from api.pages_publish import publish_generated_site, wait_for_generated_site
 
 
 def set_status(project_id: str, status: str) -> None:
@@ -58,7 +58,15 @@ async def generate_project_observable(project_id: str):
 
         set_status(project_id, "publishing")
         await core.github_put_bundle(repo_name, files, f"Agent build for {config['name']}")
-        await publish_generated_site(repo_name)
+        public_url = await publish_generated_site(repo_name)
+        live = await wait_for_generated_site(public_url, seconds=90)
+        if not live:
+            issues.append({
+                "severity": "low",
+                "code": "PAGES_PROPAGATING",
+                "file": "",
+                "message": "GitHub Pages was enabled but the public edge is still propagating.",
+            })
 
         final_status = "ready" if not any(
             i.get("severity") in {"critical", "high"} for i in issues
@@ -70,7 +78,7 @@ async def generate_project_observable(project_id: str):
                 (
                     final_status,
                     repo_name,
-                    json.dumps({"issues": issues}, ensure_ascii=False),
+                    json.dumps({"issues": issues, "public_url": public_url, "public_live": live}, ensure_ascii=False),
                     attempts,
                     core.now_iso(),
                     project_id,
