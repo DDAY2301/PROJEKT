@@ -7,6 +7,20 @@ import httpx
 import api.main as core
 
 
+class PagesPermissionError(RuntimeError):
+    """Raised when the configured token cannot manage GitHub Pages settings."""
+
+
+def _pages_permission_message(detail: str = "") -> str:
+    suffix = f" GitHub response: {detail[:220]}" if detail else ""
+    return (
+        "GitHub token cannot manage Pages for the generated repository. "
+        "For a fine-grained personal access token, enable repository permissions "
+        "Pages: Read and write and Administration: Read and write, and make sure "
+        "the token can access generated repositories (prefer All repositories)." + suffix
+    )
+
+
 async def publish_generated_site(repo_name: str) -> str:
     """Make the generated repo public and enable GitHub Pages from main/root.
 
@@ -24,16 +38,22 @@ async def publish_generated_site(repo_name: str) -> str:
         repo_data = repo.json()
         if repo_data.get("private"):
             changed = await client.patch(repo_api, json={"private": False})
+            if changed.status_code == 403:
+                raise PagesPermissionError(_pages_permission_message(changed.text))
             if changed.status_code >= 400:
                 raise RuntimeError(f"Could not make generated repository public: {changed.text[:300]}")
 
         pages_url = f"{repo_api}/pages"
         pages = await client.get(pages_url)
+        if pages.status_code == 403:
+            raise PagesPermissionError(_pages_permission_message(pages.text))
         if pages.status_code == 404:
             created = await client.post(
                 pages_url,
                 json={"source": {"branch": "main", "path": "/"}},
             )
+            if created.status_code == 403:
+                raise PagesPermissionError(_pages_permission_message(created.text))
             if created.status_code not in {201, 202}:
                 raise RuntimeError(f"Could not enable GitHub Pages: {created.text[:300]}")
         elif pages.status_code >= 400:
@@ -46,10 +66,11 @@ async def publish_generated_site(repo_name: str) -> str:
                     pages_url,
                     json={"source": {"branch": "main", "path": "/"}},
                 )
+                if updated.status_code == 403:
+                    raise PagesPermissionError(_pages_permission_message(updated.text))
                 if updated.status_code not in {200, 204}:
                     raise RuntimeError(f"Could not update GitHub Pages source: {updated.text[:300]}")
 
-    # The URL is stable even while GitHub is still building the first version.
     return f"https://{core.GITHUB_OWNER.lower()}.github.io/{repo_name}/"
 
 
