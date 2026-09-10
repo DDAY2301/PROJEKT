@@ -4,174 +4,54 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex">
-  <meta name="description" content="Project Visibility Website Builder za pripravo, prilagoditev, preverjanje in GitHub objavo spletnih strani.">
+  <meta name="description" content="Project Visibility workspace za pripravo, prilagoditev, izdelavo, pregled in objavo spletnih strani.">
   <link rel="icon" href="assets/mark.svg" type="image/svg+xml">
   <link rel="stylesheet" href="assets/site.css">
-  <title>Website Builder | Project Visibility</title>
+  <title>Website Workspace | Project Visibility</title>
   <style>
-    :root{--studio:#0a1d18;--studio-2:#102923;--studio-line:rgba(255,255,255,.1);--studio-muted:#9fb2ac;--ok:#d9ff65;--warn:#ffd166;--bad:#ff8585}
-    body{min-height:100vh;background:linear-gradient(180deg,#081914 0,#102923 29rem,var(--paper) 29rem)}
-    .studio-header{position:sticky;top:0;z-index:40;border-bottom:1px solid rgba(255,255,255,.08);background:rgba(8,25,20,.92);backdrop-filter:blur(18px);color:#fff}
-    .studio-nav{width:min(1380px,calc(100% - 2rem));min-height:4.5rem;margin:auto;display:flex;align-items:center;justify-content:space-between;gap:1rem}
-    .studio-brand{display:inline-flex;align-items:center;gap:.75rem;color:#fff;text-decoration:none;font-weight:900;letter-spacing:-.03em}.studio-brand img{width:2rem;height:2rem;filter:brightness(2)}
-    .studio-nav a:not(.studio-brand){color:#cedbd7;text-decoration:none;font-size:.9rem;font-weight:750}
-    .studio{width:min(1380px,calc(100% - 2rem));margin:0 auto;padding:2rem 0 5rem}
-    .studio-hero{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(20rem,.65fr);gap:1rem;color:#fff;margin:1rem 0 1.2rem}
-    .hero-card,.service-card{border:1px solid var(--studio-line);border-radius:1.6rem;background:rgba(255,255,255,.045)}
-    .hero-card{padding:clamp(1.5rem,4vw,3rem)}.hero-card .eyebrow{color:var(--ok)}.hero-card h1{max-width:12ch;margin:.65rem 0 1rem;color:#fff;font-size:clamp(2.7rem,6vw,5.5rem);line-height:.92}.hero-card h1 span{color:var(--ok)}.hero-card p{max-width:49rem;margin:0;color:#c7d5d0;font-size:1.05rem}
-    .hero-points{display:flex;flex-wrap:wrap;gap:.55rem;margin-top:1.5rem}.hero-points span{padding:.45rem .72rem;border:1px solid var(--studio-line);border-radius:999px;background:rgba(255,255,255,.035);color:#dce6e2;font-size:.76rem;font-weight:780}
-    .service-card{padding:1.3rem;display:flex;flex-direction:column;gap:.85rem;background:#0c211b}.service-card h2{margin:0;color:#fff;font-size:1.35rem;letter-spacing:-.03em}.service-card>p{margin:0;color:var(--studio-muted);font-size:.87rem}
-    .signal-grid{display:grid;gap:.5rem}.signal{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.72rem .8rem;border:1px solid var(--studio-line);border-radius:.85rem;background:rgba(255,255,255,.025)}.signal span{color:#cfdcd7;font-size:.83rem;font-weight:780}.signal-state{display:inline-flex;align-items:center;gap:.4rem;color:#fff;font-size:.78rem;font-weight:850}.signal-state::before{content:"";width:.45rem;height:.45rem;border-radius:50%;background:#667973}.signal-state.ok::before{background:var(--ok);box-shadow:0 0 0 4px rgba(217,255,101,.1)}.signal-state.warn::before{background:var(--warn)}.signal-state.bad::before{background:var(--bad)}
-    .connection-settings{margin-top:.1rem}.connection-settings summary{cursor:pointer;color:#afc1bb;font-size:.78rem;font-weight:800}.connection-settings[open] summary{margin-bottom:.65rem}.api-connect{display:grid;grid-template-columns:1fr auto;gap:.5rem}.api-connect input{min-width:0;border:1px solid rgba(255,255,255,.16);border-radius:.75rem;background:#071713;color:#fff;padding:.72rem .78rem}.api-connect button{border:0;border-radius:.75rem;background:var(--ok);color:#102923;padding:.72rem .9rem;font-weight:900;cursor:pointer}.api-hint{margin:.45rem 0 0!important;color:#7e958d!important;font-size:.73rem!important;word-break:break-word}
-    .workspace{display:grid;grid-template-columns:15rem minmax(0,1fr) minmax(20rem,.82fr);gap:1rem;align-items:start}.rail,.workspace-card,.preview-shell,.process-card{border:1px solid var(--line);border-radius:1.25rem;background:var(--white);box-shadow:0 16px 45px rgba(16,41,35,.07)}
-    .rail{position:sticky;top:5.5rem;padding:.9rem}.rail-title{padding:.45rem .55rem .9rem;color:var(--muted);font-size:.72rem;font-weight:900;letter-spacing:.12em;text-transform:uppercase}.stage{display:flex;gap:.65rem;padding:.72rem .55rem;border-radius:.8rem}.stage.active{background:var(--green-light)}.stage-num{flex:0 0 1.7rem;height:1.7rem;display:grid;place-items:center;border-radius:.5rem;background:var(--ink);color:#fff;font-size:.68rem;font-weight:900}.stage strong{display:block;font-size:.84rem}.stage small{display:block;margin-top:.08rem;color:var(--muted);font-size:.7rem;line-height:1.35}
-    .workspace-main{display:grid;gap:1rem}.workspace-card{padding:1.3rem}.card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1rem}.card-head h2{margin:0;font-size:1.45rem;letter-spacing:-.035em}.card-head p{margin:.25rem 0 0;color:var(--muted);font-size:.86rem}.step-tag{white-space:nowrap;border-radius:999px;background:var(--green-light);color:var(--green);padding:.28rem .58rem;font-size:.69rem;font-weight:900}
-    .field-grid{display:grid;grid-template-columns:1fr 1fr;gap:.82rem}.console-field{display:grid;gap:.34rem}.console-field.full{grid-column:1/-1}.console-field label{font-size:.81rem;font-weight:850}.console-field small{color:var(--muted);font-size:.72rem}.console-field input,.console-field select,.console-field textarea{width:100%;border:1px solid #b8c7c0;border-radius:.75rem;background:#fff;color:var(--ink);padding:.72rem .8rem}.console-field textarea{min-height:6.8rem;resize:vertical}.console-field input:focus,.console-field select:focus,.console-field textarea:focus{outline:0;border-color:var(--green);box-shadow:0 0 0 4px rgba(18,63,53,.08)}
-    .auth-actions{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.8rem}.mini-state{margin:.75rem 0 0;padding:.62rem .72rem;border-radius:.72rem;background:#f0f4f2;color:var(--muted);font-size:.79rem;font-weight:700}.mini-state.ok{background:var(--green-light);color:var(--green)}
-    .package-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem;margin-bottom:.85rem}.pkg{border:1px solid var(--line);border-radius:.8rem;padding:.68rem;background:#fff;cursor:pointer}.pkg strong{display:block;font-size:.82rem}.pkg small{color:var(--muted);font-size:.69rem}.pkg.active{border-color:var(--green);background:var(--green-light)}
-    .palette{display:grid;grid-template-columns:repeat(4,1fr);gap:.55rem}.palette input[type=color]{height:3rem;padding:.18rem;cursor:pointer}
-    .generate-bar{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-top:1rem;padding:1rem;border-radius:1rem;background:var(--ink);color:#fff}.generate-bar p{margin:0;color:#c6d4cf;font-size:.79rem}.generate-bar .button{white-space:nowrap;border-color:var(--lime);background:var(--lime);color:var(--ink)}
-    .preview-column{position:sticky;top:5.5rem;display:grid;gap:1rem}.preview-shell{overflow:hidden}.preview-top{display:flex;align-items:center;justify-content:space-between;padding:.85rem .95rem;border-bottom:1px solid var(--line)}.preview-top strong{font-size:.82rem}.preview-top span{color:var(--muted);font-size:.72rem}.preview-canvas{min-height:29rem;padding:1.2rem;background:var(--preview-bg,#fff);color:var(--preview-text,#102923);transition:.2s}.preview-nav{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:4rem}.preview-logo{font-size:.8rem;font-weight:950}.preview-menu{display:flex;gap:.55rem}.preview-menu span{font-size:.6rem;opacity:.6}.preview-eyebrow{display:inline-block;margin-bottom:.78rem;color:var(--preview-primary,#123f35);font-size:.63rem;font-weight:900;letter-spacing:.1em;text-transform:uppercase}.preview-canvas h3{max-width:10ch;margin:0 0 1rem;font-size:clamp(2.1rem,4vw,3.7rem);line-height:.92;letter-spacing:-.06em}.preview-canvas p{max-width:28rem;opacity:.72;font-size:.82rem}.preview-cta{display:inline-flex;margin-top:1rem;padding:.62rem .88rem;border-radius:999px;background:var(--preview-primary,#123f35);color:#fff;font-size:.69rem;font-weight:900}.preview-accent{width:5rem;height:.35rem;margin-top:2rem;border-radius:999px;background:var(--preview-secondary,#d9ff65)}
-    .process-card{padding:1rem}.process-card h3{margin:0 0 .7rem;font-size:.96rem}.pipeline{display:grid;gap:.42rem}.pipe{display:grid;grid-template-columns:1.15rem 1fr auto;gap:.52rem;align-items:center;padding:.52rem;border-radius:.68rem;background:#f2f5f3}.pipe b{display:grid;place-items:center;width:1.15rem;height:1.15rem;border-radius:50%;background:#d7e1dd;font-size:.58rem}.pipe span{font-size:.74rem;font-weight:780}.pipe em{font-style:normal;color:var(--muted);font-size:.64rem}.pipe.running{background:#fff7d7}.pipe.done{background:var(--green-light)}.pipe.done b{background:var(--green);color:var(--lime)}
-    .status-box{min-height:6.5rem;max-height:15rem;overflow:auto;white-space:pre-wrap;padding:.8rem;border-radius:.78rem;background:#071713;color:#d5e3de;font:500 .7rem/1.55 ui-monospace,SFMono-Regular,Consolas,monospace}.result-actions{display:none;gap:.5rem;flex-wrap:wrap;margin-top:.72rem}.result-actions.visible{display:flex}.result-actions a{font-size:.77rem}
-    @media(max-width:1160px){.workspace{grid-template-columns:13rem minmax(0,1fr)}.preview-column{grid-column:1/-1;position:static;grid-template-columns:1fr 1fr}.studio-hero{grid-template-columns:1fr}}
-    @media(max-width:800px){.studio,.studio-nav{width:min(100% - 1rem,1380px)}.workspace{grid-template-columns:1fr}.rail{display:none}.preview-column{grid-template-columns:1fr}.field-grid,.palette,.package-strip{grid-template-columns:1fr}.generate-bar{align-items:stretch;flex-direction:column}.generate-bar .button{width:100%}}
+    :root{--ws:#071b16;--ws2:#0e2b23;--wsline:rgba(255,255,255,.1);--lime:#d9ff65;--paper:#f4f5ef;--ink:#102923;--muted:#647a73;--line:#d8e0dc;--card:#fff;--good:#1b765f;--warn:#9a6b00;--bad:#b83232}
+    *{box-sizing:border-box}body{margin:0;background:linear-gradient(180deg,var(--ws) 0 25rem,var(--paper) 25rem);color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.button{display:inline-flex;align-items:center;justify-content:center;gap:.4rem;border:1px solid var(--ink);border-radius:.7rem;background:var(--ink);color:#fff;padding:.72rem .95rem;font-weight:850;cursor:pointer;text-decoration:none}.button.secondary{background:#fff;color:var(--ink)}.button.small{padding:.55rem .72rem;font-size:.78rem}.button:hover{transform:translateY(-1px)}
+    .topbar{position:sticky;top:0;z-index:50;border-bottom:1px solid var(--wsline);background:rgba(7,27,22,.92);backdrop-filter:blur(18px)}.topbar-in{width:min(1480px,calc(100% - 2rem));min-height:4.25rem;margin:auto;display:flex;align-items:center;justify-content:space-between;gap:1rem}.brand{display:flex;align-items:center;gap:.7rem;color:#fff;text-decoration:none;font-weight:900}.brand img{width:2rem;height:2rem;filter:brightness(2)}.top-actions{display:flex;align-items:center;gap:.65rem}.top-actions a{color:#c6d4cf;text-decoration:none;font-size:.82rem;font-weight:760}.service-dot{display:inline-flex;align-items:center;gap:.42rem;padding:.48rem .65rem;border:1px solid var(--wsline);border-radius:999px;color:#dce7e3;font-size:.72rem;font-weight:850}.service-dot::before{content:"";width:.45rem;height:.45rem;border-radius:50%;background:#61736e}
+    .shell{width:min(1480px,calc(100% - 2rem));margin:auto;padding:1.25rem 0 5rem}.intro{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(19rem,.75fr);gap:1rem;margin-bottom:1rem}.intro-main,.system-card{border:1px solid var(--wsline);border-radius:1.4rem;background:rgba(255,255,255,.045);color:#fff}.intro-main{padding:clamp(1.35rem,3vw,2.4rem)}.kicker{color:var(--lime);font-size:.72rem;font-weight:950;letter-spacing:.12em;text-transform:uppercase}.intro h1{max-width:13ch;margin:.5rem 0 .8rem;color:#fff;font-size:clamp(2.5rem,5vw,4.8rem);line-height:.93;letter-spacing:-.055em}.intro h1 span{color:var(--lime)}.intro p{max-width:48rem;margin:0;color:#bfd0ca;line-height:1.55}.proofs{display:flex;flex-wrap:wrap;gap:.45rem;margin-top:1.2rem}.proofs span{padding:.38rem .6rem;border:1px solid var(--wsline);border-radius:999px;color:#d7e4df;font-size:.7rem;font-weight:750}
+    .system-card{padding:1rem;background:#0a211a}.system-card h2{margin:0 0 .3rem;color:#fff;font-size:1rem}.system-card>p{margin:0 0 .8rem;color:#92a9a1;font-size:.73rem}.signals{display:grid;gap:.42rem}.signal{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.62rem .68rem;border:1px solid var(--wsline);border-radius:.72rem;background:rgba(255,255,255,.025)}.signal span{color:#c9d7d2;font-size:.76rem;font-weight:750}.signal-state{display:inline-flex;align-items:center;gap:.35rem;color:#fff;font-size:.72rem}.signal-state::before{content:"";width:.42rem;height:.42rem;border-radius:50%;background:#61736e}.signal-state.ok::before{background:var(--lime);box-shadow:0 0 0 3px rgba(217,255,101,.1)}.signal-state.warn::before{background:#ffd166}.signal-state.bad::before{background:#ff8585}.connection{margin-top:.7rem}.connection summary{cursor:pointer;color:#9eb1aa;font-size:.7rem;font-weight:800}.api-row{display:grid;grid-template-columns:1fr auto;gap:.45rem;margin-top:.5rem}.api-row input{min-width:0;border:1px solid rgba(255,255,255,.16);border-radius:.65rem;background:#061611;color:#fff;padding:.65rem}.api-row button{border:0;border-radius:.65rem;background:var(--lime);color:var(--ink);font-weight:900;padding:.65rem .8rem;cursor:pointer}.api-hint{margin:.4rem 0 0;color:#6f8b81;font-size:.66rem;word-break:break-all}
+    .workspace{display:grid;grid-template-columns:13.5rem minmax(0,1fr) minmax(21rem,.72fr);gap:1rem;align-items:start}.rail,.card,.preview,.side-card{border:1px solid var(--line);border-radius:1.1rem;background:var(--card);box-shadow:0 14px 40px rgba(16,41,35,.06)}.rail{position:sticky;top:5.3rem;padding:.78rem}.rail-title{padding:.42rem .5rem .7rem;color:var(--muted);font-size:.66rem;font-weight:900;letter-spacing:.12em;text-transform:uppercase}.stage{display:grid;grid-template-columns:1.6rem 1fr;gap:.55rem;padding:.65rem .5rem;border-radius:.7rem}.stage.active{background:#e6f0eb}.stage-num{display:grid;place-items:center;width:1.6rem;height:1.6rem;border-radius:.45rem;background:var(--ink);color:#fff;font-size:.64rem;font-weight:900}.stage strong{display:block;font-size:.78rem}.stage small{display:block;margin-top:.06rem;color:var(--muted);font-size:.65rem;line-height:1.35}
+    .maincol{display:grid;gap:1rem}.card{padding:1.15rem}.card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:.85rem}.card-head h2{margin:0;font-size:1.18rem;letter-spacing:-.03em}.card-head p{margin:.18rem 0 0;color:var(--muted);font-size:.76rem}.tag{padding:.24rem .48rem;border-radius:999px;background:#e6f0eb;color:var(--good);font-size:.62rem;font-weight:900}.grid{display:grid;grid-template-columns:1fr 1fr;gap:.72rem}.field{display:grid;gap:.28rem}.field.full{grid-column:1/-1}.field label{font-size:.74rem;font-weight:850}.field small{color:var(--muted);font-size:.65rem}.field input,.field select,.field textarea{width:100%;border:1px solid #b9c8c1;border-radius:.68rem;background:#fff;color:var(--ink);padding:.68rem .72rem;font:inherit}.field textarea{min-height:6rem;resize:vertical}.field input:focus,.field select:focus,.field textarea:focus{outline:0;border-color:var(--good);box-shadow:0 0 0 4px rgba(27,118,95,.08)}.auth-actions{display:flex;gap:.45rem;flex-wrap:wrap;margin-top:.72rem}.mini-state{margin:.68rem 0 0;padding:.55rem .65rem;border-radius:.62rem;background:#f0f4f2;color:var(--muted);font-size:.72rem;font-weight:700}.mini-state.ok{background:#e4f4ed;color:var(--good)}
+    .packages{display:grid;grid-template-columns:repeat(3,1fr);gap:.45rem}.pkg{border:1px solid var(--line);border-radius:.72rem;background:#fff;padding:.62rem;text-align:left;cursor:pointer}.pkg strong{display:block;font-size:.76rem}.pkg small{color:var(--muted);font-size:.63rem}.pkg.active{border-color:var(--good);background:#e9f4ef}.palette{display:grid;grid-template-columns:repeat(4,1fr);gap:.48rem}.palette input[type=color]{height:2.7rem;padding:.15rem;cursor:pointer}.generate{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-top:.85rem;padding:.82rem;border-radius:.82rem;background:var(--ink);color:#fff}.generate p{margin:0;color:#c4d2cd;font-size:.7rem}.generate .button{border-color:var(--lime);background:var(--lime);color:var(--ink);white-space:nowrap}
+    .side{position:sticky;top:5.3rem;display:grid;gap:1rem}.preview{overflow:hidden}.preview-top{display:flex;align-items:center;justify-content:space-between;padding:.72rem .8rem;border-bottom:1px solid var(--line)}.preview-top strong{font-size:.76rem}.preview-top span{color:var(--muted);font-size:.65rem}.preview-canvas{min-height:25rem;padding:1rem;background:var(--preview-bg,#fff);color:var(--preview-text,#102923);transition:.2s}.preview-nav{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:3.2rem}.preview-logo{font-size:.72rem;font-weight:950}.preview-menu{display:flex;gap:.45rem}.preview-menu span{font-size:.55rem;opacity:.55}.preview-eyebrow{display:inline-block;margin-bottom:.6rem;color:var(--preview-primary,#123f35);font-size:.56rem;font-weight:950;letter-spacing:.1em;text-transform:uppercase}.preview-canvas h3{max-width:10ch;margin:0 0 .8rem;font-size:clamp(1.9rem,3vw,3rem);line-height:.93;letter-spacing:-.055em}.preview-canvas p{max-width:25rem;opacity:.7;font-size:.73rem;line-height:1.5}.preview-cta{display:inline-flex;margin-top:.8rem;padding:.52rem .72rem;border-radius:999px;background:var(--preview-primary,#123f35);color:#fff;font-size:.62rem;font-weight:900}.preview-accent{width:4.2rem;height:.3rem;margin-top:1.5rem;border-radius:999px;background:var(--preview-secondary,#d9ff65)}
+    .side-card{padding:.85rem}.side-card h3{margin:0 0 .62rem;font-size:.86rem}.pipeline{display:grid;gap:.36rem}.pipe{display:grid;grid-template-columns:1.05rem 1fr auto;gap:.45rem;align-items:center;padding:.46rem;border-radius:.58rem;background:#f1f4f2}.pipe b{display:grid;place-items:center;width:1.05rem;height:1.05rem;border-radius:50%;background:#d6e1dc;font-size:.54rem}.pipe span{font-size:.68rem;font-weight:780}.pipe em{font-style:normal;color:var(--muted);font-size:.58rem}.pipe.running{background:#fff6d1}.pipe.done{background:#e5f3ec}.pipe.done b{background:var(--good);color:#fff}.status-box{min-height:6rem;max-height:13rem;overflow:auto;white-space:pre-wrap;padding:.7rem;border-radius:.68rem;background:#061611;color:#d6e5df;font:500 .65rem/1.55 ui-monospace,SFMono-Regular,Consolas,monospace}.result-actions{display:none;gap:.42rem;flex-wrap:wrap;margin-top:.62rem}.result-actions.visible{display:flex}
+    @media(max-width:1180px){.workspace{grid-template-columns:12rem minmax(0,1fr)}.side{grid-column:1/-1;position:static;grid-template-columns:1fr 1fr 1fr}.intro{grid-template-columns:1fr}}
+    @media(max-width:820px){.topbar-in,.shell{width:min(100% - 1rem,1480px)}.workspace{grid-template-columns:1fr}.rail{display:none}.side{grid-template-columns:1fr}.grid,.packages,.palette{grid-template-columns:1fr}.generate{align-items:stretch;flex-direction:column}.generate .button{width:100%}.top-actions>a{display:none}}
   </style>
 </head>
 <body>
-<header class="studio-header">
-  <nav class="studio-nav" aria-label="Glavna navigacija">
-    <a class="studio-brand" href="./"><img src="assets/mark.svg" alt=""><span>Project Visibility</span></a>
-    <a href="./#paketi">Paketi in informacije</a>
-  </nav>
-</header>
-
-<main class="studio">
-  <section class="studio-hero">
-    <div class="hero-card">
-      <div class="eyebrow">WEBSITE BUILDER</div>
-      <h1>Od briefa do <span>objavljive strani.</span></h1>
-      <p>Določi vsebino, strukturo in vizualno identiteto. Sistem pripravi spletno stran, preveri ključne napake in končno kodo shrani v GitHub repozitorij.</p>
-      <div class="hero-points"><span>Live predogled</span><span>Do 12 strani</span><span>Responsive izvedba</span><span>Kontrola kakovosti</span><span>GitHub source</span></div>
-    </div>
-    <aside class="service-card">
-      <h2>Stanje sistema</h2>
-      <p>Pred začetkom preveri povezavo in objavo kode.</p>
-      <div class="signal-grid">
-        <div class="signal"><span>Storitev</span><strong class="signal-state" id="apiState">Preverjam</strong></div>
-        <div class="signal"><span>Izdelava</span><strong class="signal-state" id="modelState">—</strong></div>
-        <div class="signal"><span>GitHub objava</span><strong class="signal-state" id="githubState">—</strong></div>
-      </div>
-      <details class="connection-settings">
-        <summary>Nastavitve povezave</summary>
-        <div class="api-connect"><input id="apiUrl" type="url" placeholder="https://...trycloudflare.com"><button id="connectApi" type="button">Poveži</button></div>
-        <p class="api-hint" id="apiHint">Naslov povezave se shrani samo v tem brskalniku.</p>
-      </details>
-    </aside>
+<header class="topbar"><div class="topbar-in"><a class="brand" href="./"><img src="assets/mark.svg" alt=""><span>Project Visibility</span></a><div class="top-actions"><a href="./#paketi">Paketi in informacije</a><span class="service-dot">Website workspace</span></div></div></header>
+<main class="shell">
+  <section class="intro">
+    <div class="intro-main"><div class="kicker">WEBSITE WORKSPACE</div><h1>Od briefa do <span>objavljive strani.</span></h1><p>Določi namen, vsebino, strukturo in vizualno smer. Sistem izdela stran, jo preveri, objavi in jo nato lahko spreminjaš z navadnimi zahtevami.</p><div class="proofs"><span>Live predogled</span><span>Responsive izvedba</span><span>Kontrola kakovosti</span><span>Javna objava</span><span>Lastna koda</span></div></div>
+    <aside class="system-card"><h2>Stanje sistema</h2><p>Pred začetkom preveri povezavo in objavo kode.</p><div class="signals"><div class="signal"><span>Storitev</span><strong class="signal-state" id="apiState">Preverjam</strong></div><div class="signal"><span>Izdelava</span><strong class="signal-state" id="modelState">—</strong></div><div class="signal"><span>Objava</span><strong class="signal-state" id="githubState">—</strong></div></div><details class="connection"><summary>Nastavitve povezave</summary><div class="api-row"><input id="apiUrl" type="url" placeholder="http://127.0.0.1:8000"><button id="connectApi" type="button">Poveži</button></div><p class="api-hint" id="apiHint">Naslov se shrani samo v tem brskalniku.</p></details></aside>
   </section>
 
   <div class="workspace">
-    <aside class="rail" aria-label="Koraki konfiguracije">
-      <div class="rail-title">Potek</div>
-      <div class="stage active"><span class="stage-num">01</span><div><strong>Račun</strong><small>Prijava uporabnika</small></div></div>
-      <div class="stage"><span class="stage-num">02</span><div><strong>Projekt</strong><small>Cilj, publika, paket</small></div></div>
-      <div class="stage"><span class="stage-num">03</span><div><strong>Videz</strong><small>Barve in slog</small></div></div>
-      <div class="stage"><span class="stage-num">04</span><div><strong>Struktura</strong><small>Strani in vsebina</small></div></div>
-      <div class="stage"><span class="stage-num">05</span><div><strong>Izdelava</strong><small>Pregled in objava</small></div></div>
-    </aside>
+    <aside class="rail"><div class="rail-title">Potek</div><div class="stage active"><span class="stage-num">01</span><div><strong>Račun</strong><small>Prijava uporabnika</small></div></div><div class="stage"><span class="stage-num">02</span><div><strong>Projekt</strong><small>Cilj, publika, paket</small></div></div><div class="stage"><span class="stage-num">03</span><div><strong>Videz</strong><small>Barve in slog</small></div></div><div class="stage"><span class="stage-num">04</span><div><strong>Struktura</strong><small>Strani in vsebina</small></div></div><div class="stage"><span class="stage-num">05</span><div><strong>Izdelava</strong><small>Pregled, objava, spremembe</small></div></div></aside>
 
-    <div class="workspace-main">
-      <section class="workspace-card">
-        <div class="card-head"><div><h2>Račun</h2><p>Prijavi se ali ustvari račun za svoje projekte.</p></div><span class="step-tag">01</span></div>
-        <div class="field-grid">
-          <div class="console-field"><label for="email">E-pošta</label><input id="email" type="email" autocomplete="email"></div>
-          <div class="console-field"><label for="password">Geslo</label><input id="password" type="password" minlength="8" maxlength="128" autocomplete="current-password"><small>Najmanj 8 znakov.</small></div>
-        </div>
-        <div class="auth-actions"><button class="button small" id="register" type="button">Registracija</button><button class="button secondary small" id="login" type="button">Prijava</button><button class="button secondary small" id="logout" type="button" style="display:none">Odjava</button></div>
-        <p class="mini-state" id="authState">Nisi prijavljen.</p>
-      </section>
+    <div class="maincol">
+      <section class="card"><div class="card-head"><div><h2>Račun</h2><p>Prijavi se ali ustvari račun za svoje projekte.</p></div><span class="tag">01</span></div><div class="grid"><div class="field"><label for="email">E-pošta</label><input id="email" type="email" autocomplete="email"></div><div class="field"><label for="password">Geslo</label><input id="password" type="password" minlength="8" maxlength="128" autocomplete="current-password"><small>Najmanj 8 znakov.</small></div></div><div class="auth-actions"><button class="button small" id="register" type="button">Registracija</button><button class="button secondary small" id="login" type="button">Prijava</button><button class="button secondary small" id="logout" type="button" style="display:none">Odjava</button></div><p class="mini-state" id="authState">Nisi prijavljen.</p></section>
 
-      <section class="workspace-card">
-        <div class="card-head"><div><h2>Projekt</h2><p>Osnovni podatki določijo namen in obseg strani.</p></div><span class="step-tag">02</span></div>
-        <div class="package-strip">
-          <button class="pkg active" type="button" data-package="Start"><strong>Start</strong><small>do 3 strani</small></button>
-          <button class="pkg" type="button" data-package="Standard"><strong>Standard</strong><small>do 6 strani</small></button>
-          <button class="pkg" type="button" data-package="Premium"><strong>Premium</strong><small>do 12 strani</small></button>
-        </div>
-        <select id="package" hidden><option>Start</option><option>Standard</option><option>Premium</option></select>
-        <p class="mini-state" id="pageLimit">Paket Start omogoča največ 3 strani.</p>
-        <div class="field-grid">
-          <div class="console-field"><label for="name">Ime projekta</label><input id="name"></div>
-          <div class="console-field"><label for="organization">Organizacija / podjetje</label><input id="organization"></div>
-          <div class="console-field"><label for="programme">Program ali dejavnost</label><input id="programme" placeholder="npr. Erasmus+ KA2, storitev, produkt"></div>
-          <div class="console-field"><label for="audience">Ciljna publika</label><input id="audience"></div>
-          <div class="console-field full"><label for="goal">Glavni cilj strani</label><textarea id="goal"></textarea></div>
-          <div class="console-field full"><label for="tone">Ton komunikacije</label><input id="tone" value="professional and human"></div>
-        </div>
-      </section>
+      <section class="card"><div class="card-head"><div><h2>Projekt</h2><p>Osnovni podatki določijo namen in obseg strani.</p></div><span class="tag">02</span></div><div class="packages"><button class="pkg active" type="button" data-package="Start"><strong>Start</strong><small>do 3 strani</small></button><button class="pkg" type="button" data-package="Standard"><strong>Standard</strong><small>do 6 strani</small></button><button class="pkg" type="button" data-package="Premium"><strong>Premium</strong><small>do 12 strani</small></button></div><select id="package" hidden><option>Start</option><option>Standard</option><option>Premium</option></select><p class="mini-state" id="pageLimit">Paket Start omogoča največ 3 strani.</p><div class="grid"><div class="field"><label for="name">Ime projekta</label><input id="name"></div><div class="field"><label for="organization">Organizacija / podjetje</label><input id="organization"></div><div class="field"><label for="programme">Program ali dejavnost</label><input id="programme" placeholder="npr. Erasmus+ KA2, storitev, produkt"></div><div class="field"><label for="audience">Ciljna publika</label><input id="audience"></div><div class="field full"><label for="goal">Glavni cilj strani</label><textarea id="goal"></textarea></div><div class="field full"><label for="tone">Ton komunikacije</label><input id="tone" value="professional and human"></div></div></section>
 
-      <section class="workspace-card">
-        <div class="card-head"><div><h2>Vizualna identiteta</h2><p>Barve in slog se sproti prikazujejo v predogledu.</p></div><span class="step-tag">03</span></div>
-        <div class="palette">
-          <div class="console-field"><label for="primary">Primarna</label><input id="primary" type="color" value="#123f35"></div>
-          <div class="console-field"><label for="secondary">Poudarek</label><input id="secondary" type="color" value="#d9ff65"></div>
-          <div class="console-field"><label for="background">Ozadje</label><input id="background" type="color" value="#ffffff"></div>
-          <div class="console-field"><label for="textColor">Besedilo</label><input id="textColor" type="color" value="#102923"></div>
-        </div>
-        <div class="field-grid" style="margin-top:.8rem">
-          <div class="console-field"><label for="fontStyle">Slog</label><select id="fontStyle"><option>modern</option><option>minimal</option><option>editorial</option><option>classic</option><option>tech</option></select></div>
-          <div class="console-field"><label for="mood">Vizualna smer</label><input id="mood" value="clean, trustworthy, contemporary"></div>
-          <div class="console-field full"><label for="imageDirection">Smer fotografij / slik</label><input id="imageDirection" value="authentic, relevant, non-stock feeling"></div>
-        </div>
-      </section>
+      <section class="card"><div class="card-head"><div><h2>Vizualna identiteta</h2><p>Barve in smer se sproti prikazujejo v predogledu.</p></div><span class="tag">03</span></div><div class="palette"><div class="field"><label for="primary">Primarna</label><input id="primary" type="color" value="#123f35"></div><div class="field"><label for="secondary">Poudarek</label><input id="secondary" type="color" value="#d9ff65"></div><div class="field"><label for="background">Ozadje</label><input id="background" type="color" value="#ffffff"></div><div class="field"><label for="textColor">Besedilo</label><input id="textColor" type="color" value="#102923"></div></div><div class="grid" style="margin-top:.7rem"><div class="field"><label for="fontStyle">Slog</label><select id="fontStyle"><option>modern</option><option>minimal</option><option>editorial</option><option>classic</option><option>tech</option></select></div><div class="field"><label for="mood">Vizualna smer</label><input id="mood" value="clean, trustworthy, contemporary"></div><div class="field full"><label for="imageDirection">Smer fotografij / slik</label><input id="imageDirection" value="authentic, relevant, non-stock feeling"></div></div></section>
 
-      <section class="workspace-card">
-        <div class="card-head"><div><h2>Strani in vsebina</h2><p>Vsaka vrstica pomeni eno stran. Po želji dodaj namen za znak |.</p></div><span class="step-tag">04</span></div>
-        <div class="field-grid">
-          <div class="console-field full"><label for="pages">Želene strani</label><textarea id="pages" placeholder="Domov | ključna predstavitev\nO projektu | cilji in aktivnosti\nGalerija | fotografije\nKontakt | kontaktni podatki"></textarea></div>
-          <div class="console-field"><label for="heroTitle">Glavni naslov</label><input id="heroTitle"></div>
-          <div class="console-field"><label for="cta">CTA gumb</label><input id="cta" value="Kontaktirajte nas"></div>
-          <div class="console-field full"><label for="heroSubtitle">Podnaslov</label><input id="heroSubtitle"></div>
-          <div class="console-field"><label for="contact">Kontaktni e-mail</label><input id="contact" type="email"></div>
-          <div class="console-field full"><label for="requirements">Dodatne zahteve</label><textarea id="requirements"></textarea></div>
-        </div>
-        <div class="generate-bar"><p>Pred izdelavo sistem preveri prijavo, povezavo in obseg izbranega paketa.</p><button class="button" id="generate" type="button">Začni izdelavo →</button></div>
-      </section>
+      <section class="card"><div class="card-head"><div><h2>Strani in vsebina</h2><p>Vsaka vrstica pomeni eno stran. Za znak | lahko dodaš njen namen.</p></div><span class="tag">04</span></div><div class="grid"><div class="field full"><label for="pages">Želene strani</label><textarea id="pages" placeholder="Domov | ključna predstavitev&#10;O projektu | cilji in aktivnosti&#10;Galerija | fotografije&#10;Kontakt | kontaktni podatki"></textarea></div><div class="field"><label for="heroTitle">Glavni naslov</label><input id="heroTitle"></div><div class="field"><label for="cta">CTA gumb</label><input id="cta" value="Kontaktirajte nas"></div><div class="field full"><label for="heroSubtitle">Podnaslov</label><input id="heroSubtitle"></div><div class="field"><label for="contact">Kontaktni e-mail</label><input id="contact" type="email"></div><div class="field full"><label for="requirements">Dodatne zahteve</label><textarea id="requirements"></textarea></div></div><div class="generate"><p>Pred izdelavo se preverijo prijava, povezava in obseg paketa.</p><button class="button" id="generate" type="button">Začni izdelavo →</button></div></section>
     </div>
 
-    <aside class="preview-column">
-      <section class="preview-shell">
-        <div class="preview-top"><strong>Predogled</strong><span>osnovna smer</span></div>
-        <div class="preview-canvas" id="previewCanvas">
-          <div class="preview-nav"><span class="preview-logo" id="previewLogo">YOUR PROJECT</span><div class="preview-menu"><span>O projektu</span><span>Novice</span><span>Kontakt</span></div></div>
-          <span class="preview-eyebrow" id="previewEyebrow">PROJECT / DIGITAL EXPERIENCE</span>
-          <h3 id="previewTitle">Spletna stran, ki ima jasen namen.</h3>
-          <p id="previewSubtitle">Vpiši vsebino na levi in predogled se bo sproti prilagajal.</p>
-          <span class="preview-cta" id="previewCta">Kontaktirajte nas</span>
-          <div class="preview-accent"></div>
-        </div>
-      </section>
-
-      <section class="process-card">
-        <h3>Potek izdelave</h3>
-        <div class="pipeline">
-          <div class="pipe"><b>1</b><span>Prejem briefa</span><em>čaka</em></div>
-          <div class="pipe"><b>2</b><span>Struktura</span><em>čaka</em></div>
-          <div class="pipe"><b>3</b><span>Izdelava strani</span><em>čaka</em></div>
-          <div class="pipe"><b>4</b><span>Preverjanje</span><em>čaka</em></div>
-          <div class="pipe"><b>5</b><span>Popravki</span><em>čaka</em></div>
-          <div class="pipe"><b>6</b><span>GitHub objava</span><em>čaka</em></div>
-        </div>
-      </section>
-
-      <section class="process-card">
-        <h3>Dnevnik procesa</h3>
-        <div class="status-box" id="status">Pripravljen.</div>
-        <div class="result-actions" id="resultActions"><a class="button small" id="repoLink" href="#" target="_blank" rel="noopener">Odpri GitHub repo ↗</a><button class="button secondary small" id="newBuild" type="button">Nov projekt</button></div>
-      </section>
+    <aside class="side">
+      <section class="preview"><div class="preview-top"><strong>Predogled smeri</strong><span>v živo</span></div><div class="preview-canvas" id="previewCanvas"><div class="preview-nav"><span class="preview-logo" id="previewLogo">YOUR PROJECT</span><div class="preview-menu"><span>O projektu</span><span>Novice</span><span>Kontakt</span></div></div><span class="preview-eyebrow" id="previewEyebrow">PROJECT / DIGITAL EXPERIENCE</span><h3 id="previewTitle">Spletna stran, ki ima jasen namen.</h3><p id="previewSubtitle">Vpiši vsebino na levi in predogled se bo sproti prilagajal.</p><span class="preview-cta" id="previewCta">Kontaktirajte nas</span><div class="preview-accent"></div></div></section>
+      <section class="side-card"><h3>Potek izdelave</h3><div class="pipeline"><div class="pipe"><b>1</b><span>Prejem briefa</span><em>čaka</em></div><div class="pipe"><b>2</b><span>Struktura</span><em>čaka</em></div><div class="pipe"><b>3</b><span>Izdelava strani</span><em>čaka</em></div><div class="pipe"><b>4</b><span>Preverjanje</span><em>čaka</em></div><div class="pipe"><b>5</b><span>Popravki</span><em>čaka</em></div><div class="pipe"><b>6</b><span>Objava</span><em>čaka</em></div></div></section>
+      <section class="side-card"><h3>Dnevnik procesa</h3><div class="status-box" id="status">Pripravljen.</div><div class="result-actions" id="resultActions"><a class="button small" id="repoLink" href="#" target="_blank" rel="noopener">Odpri GitHub repo ↗</a><button class="button secondary small" id="newBuild" type="button">Nov projekt</button></div></section>
     </aside>
   </div>
 </main>
-<script src="assets/builder.js?v=20260909-4" defer></script>
+<script src="assets/builder.js?v=20260910-1" defer></script>
+<script src="assets/revision-ui.js?v=20260910-1" defer></script>
 </body>
 </html>
