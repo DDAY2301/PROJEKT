@@ -45,7 +45,7 @@
   const mySitesBody = document.getElementById('mySitesBody');
 
   function escapeHtml(value) {
-    return String(value || '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt',"'":'&#39;','"':'&quot;'}[ch]));
+    return String(value || '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
   }
 
   function renderEmptySites(message = 'Izpolni projekt spodaj in klikni “Začni izdelavo”. Ko je objava končana, se tukaj takoj pojavi javna povezava.') {
