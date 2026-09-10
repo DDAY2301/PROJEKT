@@ -17,12 +17,26 @@ jobs:
       - name: Install dependencies
         run: pip install -r api/requirements.txt
       - name: Compile API runtime
-        run: python -m py_compile api/main.py api/enhanced_runtime.py api/server.py
+        run: python -m py_compile api/main.py api/pages_publish.py api/enhanced_runtime.py api/revisions.py api/server.py
       - name: Import complete server
         env:
           APP_SECRET: ci-only-secret
           OLLAMA_MODEL: qwen2.5-coder:3b
-        run: python -c "import api.server; print(api.server.app.title)"
+        run: |
+          python - <<'PY'
+          import api.server
+          routes = {route.path for route in api.server.app.routes}
+          required = {
+              '/health',
+              '/auth/register',
+              '/projects',
+              '/projects/{project_id}/revise',
+              '/projects/{project_id}/revisions',
+          }
+          missing = required - routes
+          assert not missing, f'Missing routes: {missing}'
+          print(api.server.app.title)
+          PY
       - name: Check product files
         run: |
           test -f dist/index.html
@@ -30,4 +44,7 @@ jobs:
           test -f dist/builder/index.html
           test -f dist/404.html
           test -f dist/assets/builder.js
+          test -f dist/assets/revision-ui.js
+          test -f assets/revision-ui.js
           test -f start-product.ps1
+          test -f start-stable-local.ps1
