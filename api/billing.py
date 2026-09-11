@@ -1,9 +1,11 @@
 """Stripe Checkout billing for Project Visibility.
 
-Each generated website is a one-time purchase. Prices are configured with
-Stripe Price IDs in environment variables, so no amount is trusted from the
-browser. The webhook is the source of truth; the success-page verification
-endpoint is a safe fallback when webhook delivery is delayed.
+Each generated website is a one-time purchase. Package amounts are enforced on
+this server and are never accepted from the browser. Optional Stripe Price IDs
+can still override the inline prices later without changing the frontend.
+
+The webhook is the source of truth; the success-page verification endpoint is a
+safe fallback when webhook delivery is delayed.
 """
 
 from __future__ import annotations
@@ -25,11 +27,23 @@ PUBLIC_BUILDER_URL = os.getenv(
     "https://dday2301.github.io/PROJEKT/builder.html",
 ).strip()
 
+# Public commercial prices currently shown on Project Visibility.
+# Values are in euro cents and are intentionally enforced server-side.
+PACKAGE_PRICES = {
+    "Start": {"unit_amount": 49000, "currency": "eur", "label": "Project Visibility — Start"},
+    "Standard": {"unit_amount": 89000, "currency": "eur", "label": "Project Visibility — Standard"},
+    "Premium": {"unit_amount": 149000, "currency": "eur", "label": "Project Visibility — Premium"},
+}
+
+# Optional catalog Price IDs. If present they take precedence over inline
+# price_data. Price IDs are not required for the checkout to work.
 PACKAGE_PRICE_IDS = {
     "Start": os.getenv("STRIPE_PRICE_START", "").strip(),
     "Standard": os.getenv("STRIPE_PRICE_STANDARD", "").strip(),
     "Premium": os.getenv("STRIPE_PRICE_PREMIUM", "").strip(),
 }
+
+STRIPE_AUTOMATIC_TAX = os.getenv("STRIPE_AUTOMATIC_TAX", "false").strip().lower() in {"1", "true", "yes", "on"}
 
 if STRIPE_SECRET_KEY:
     stripe.api_key = STRIPE_SECRET_KEY
@@ -62,7 +76,7 @@ def ensure_billing_schema() -> None:
 
 
 def package_is_configured(package: str) -> bool:
-    return bool(STRIPE_SECRET_KEY and PACKAGE_PRICE_IDS.get(package))
+    return bool(STRIPE_SECRET_KEY and package in PACKAGE_PRICES)
 
 
 def project_is_paid(project_id: str) -> bool:
@@ -76,12 +90,6 @@ def project_is_paid(project_id: str) -> bool:
 
 
 def payments_required(project_id: str, package: str) -> bool:
-    """Require payment only once Stripe and that package price are configured.
-
-    This keeps the local development workflow usable before the merchant has
-    supplied final Price IDs, while production immediately becomes gated as
-    soon as its Stripe configuration is present.
-    """
     return package_is_configured(package) and not project_is_paid(project_id)
 
 
@@ -158,32 +166,58 @@ async def _mark_session_paid(session: Any) -> None:
     with core.db() as con:
         row = con.execute("SELECT status FROM projects WHERE id=?", (project_id,)).fetchone()
     if row and row["status"] in {"queued", "awaiting_payment", "payment_pending", "failed"}:
+        with core.db() as con:
+            con.execute(
+                "UPDATE projects SET status='queued',updated_at=? WHERE id=?",
+                (core.now_iso(), project_id),
+            )
         asyncio.create_task(core.generate_project(project_id))
+
+
+def _line_item(package: str) -> dict[str, Any]:
+    price_id = PACKAGE_PRICE_IDS.get(package, "")
+    if price_id:
+        return {"price": price_id, "quantity": 1}
+    cfg = PACKAGE_PRICES[package]
+    return {
+        "price_data": {
+            "currency": cfg["currency"],
+            "unit_amount": cfg["unit_amount"],
+            "product_data": {
+                "name": cfg["label"],
+                "description": "One-time website design, generation, QA and delivery package.",
+            },
+        },
+        "quantity": 1,
+    }
 
 
 @core.app.get("/billing/config")
 async def billing_config():
     ensure_billing_schema()
     packages: dict[str, dict[str, Any]] = {}
-    for name, price_id in PACKAGE_PRICE_IDS.items():
-        item: dict[str, Any] = {"configured": bool(STRIPE_SECRET_KEY and price_id)}
-        if item["configured"]:
+    for name, cfg in PACKAGE_PRICES.items():
+        item: dict[str, Any] = {
+            "configured": bool(STRIPE_SECRET_KEY),
+            "currency": cfg["currency"],
+            "unit_amount": cfg["unit_amount"],
+        }
+        price_id = PACKAGE_PRICE_IDS.get(name, "")
+        if STRIPE_SECRET_KEY and price_id:
             try:
                 price = stripe.Price.retrieve(price_id)
-                item.update(
-                    {
-                        "currency": price.get("currency"),
-                        "unit_amount": price.get("unit_amount"),
-                    }
-                )
+                item.update({"currency": price.get("currency"), "unit_amount": price.get("unit_amount")})
             except Exception:
-                item["configured"] = False
+                # Keep the server-enforced inline price available if a stale
+                # optional catalog Price ID is ever configured.
+                pass
         packages[name] = item
     return {
         "enabled": bool(STRIPE_SECRET_KEY),
         "packages": packages,
         "mode": "payment",
         "provider": "stripe",
+        "automatic_tax": STRIPE_AUTOMATIC_TAX,
     }
 
 
@@ -199,29 +233,33 @@ async def create_checkout(data: CheckoutIn, user_id: str = Depends(core.current_
         raise HTTPException(404, "Project not found")
 
     package = project["package"]
-    price_id = PACKAGE_PRICE_IDS.get(package, "")
-    if not STRIPE_SECRET_KEY or not price_id:
-        raise HTTPException(503, f"Stripe price for package {package} is not configured")
+    if not STRIPE_SECRET_KEY or package not in PACKAGE_PRICES:
+        raise HTTPException(503, f"Stripe checkout for package {package} is not configured")
     if project_is_paid(project["id"]):
         return {"paid": True, "project_id": project["id"]}
 
+    create_args: dict[str, Any] = {
+        "mode": "payment",
+        "line_items": [_line_item(package)],
+        "success_url": (
+            f"{PUBLIC_BUILDER_URL}?payment=success&project_id={project['id']}"
+            "&session_id={CHECKOUT_SESSION_ID}"
+        ),
+        "cancel_url": f"{PUBLIC_BUILDER_URL}?payment=cancelled&project_id={project['id']}",
+        "client_reference_id": project["id"],
+        "metadata": {
+            "project_id": project["id"],
+            "user_id": user_id,
+            "package": package,
+        },
+        "allow_promotion_codes": True,
+        "billing_address_collection": "auto",
+    }
+    if STRIPE_AUTOMATIC_TAX:
+        create_args["automatic_tax"] = {"enabled": True}
+
     try:
-        session = stripe.checkout.Session.create(
-            mode="payment",
-            line_items=[{"price": price_id, "quantity": 1}],
-            success_url=(
-                f"{PUBLIC_BUILDER_URL}?payment=success&project_id={project['id']}"
-                "&session_id={CHECKOUT_SESSION_ID}"
-            ),
-            cancel_url=f"{PUBLIC_BUILDER_URL}?payment=cancelled&project_id={project['id']}",
-            client_reference_id=project["id"],
-            metadata={
-                "project_id": project["id"],
-                "user_id": user_id,
-                "package": package,
-            },
-            allow_promotion_codes=True,
-        )
+        session = stripe.checkout.Session.create(**create_args)
     except Exception as exc:
         raise HTTPException(502, f"Could not create Stripe Checkout session: {str(exc)[:300]}") from exc
 
@@ -267,10 +305,7 @@ async def payment_status(project_id: str, user_id: str = Depends(core.current_us
 async def verify_checkout(project_id: str, session_id: str, user_id: str = Depends(core.current_user)):
     ensure_billing_schema()
     with core.db() as con:
-        project = con.execute(
-            "SELECT id FROM projects WHERE id=? AND user_id=?",
-            (project_id, user_id),
-        ).fetchone()
+        project = con.execute("SELECT id FROM projects WHERE id=? AND user_id=?", (project_id, user_id)).fetchone()
     if not project:
         raise HTTPException(404, "Project not found")
     if not STRIPE_SECRET_KEY:
