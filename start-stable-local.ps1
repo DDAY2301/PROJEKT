@@ -29,15 +29,15 @@ function Wait-Json([string]$Url, [int]$Seconds = 60) {
 Write-Host ""
 Write-Host "PROJECT VISIBILITY - STABLE LOCAL START" -ForegroundColor Green
 Write-Host "=======================================" -ForegroundColor Green
-Write-Host "GitHub Pages frontend + local loopback agent (no Quick Tunnel)" -ForegroundColor DarkCyan
+Write-Host "GitHub Pages frontend + local loopback agent" -ForegroundColor DarkCyan
 Write-Host ""
 
 if (Get-Command git -ErrorAction SilentlyContinue) {
-  Write-Host "[1/5] Updating repository..."
+  Write-Host "[1/6] Updating repository..."
   git pull --ff-only | Out-Host
 }
 
-Write-Host "[2/5] Checking local engine..."
+Write-Host "[2/6] Checking local engine..."
 try {
   $tags = Invoke-RestMethod -Uri "http://127.0.0.1:11434/api/tags" -TimeoutSec 3
 } catch {
@@ -52,7 +52,7 @@ if ($models -notcontains $Model) {
 }
 Write-Host "Local engine: ONLINE / $Model" -ForegroundColor Green
 
-Write-Host "[3/5] Preparing GitHub publishing..."
+Write-Host "[3/6] Preparing GitHub publishing..."
 if (-not $env:GITHUB_TOKEN) {
   $env:GITHUB_TOKEN = Read-SecretText "Paste GitHub token (hidden)"
 }
@@ -65,7 +65,36 @@ try {
 }
 Write-Host "GitHub: CONNECTED as $($gh.login)" -ForegroundColor Green
 
-Write-Host "[4/5] Starting fresh website service..."
+Write-Host "[4/6] Preparing Stripe Checkout..."
+$stripeSecretFile = Join-Path $repoRoot "api\data\.stripe-secret"
+if (-not $env:STRIPE_SECRET_KEY -and (Test-Path $stripeSecretFile)) {
+  $env:STRIPE_SECRET_KEY = (Get-Content $stripeSecretFile -Raw).Trim()
+}
+if (-not $env:STRIPE_SECRET_KEY) {
+  $candidate = Read-SecretText "Paste Stripe secret key (hidden; Enter = checkout disabled)"
+  if ($candidate) {
+    $env:STRIPE_SECRET_KEY = $candidate.Trim()
+    $secretDir = Split-Path $stripeSecretFile -Parent
+    New-Item -ItemType Directory -Force -Path $secretDir | Out-Null
+    Set-Content -Path $stripeSecretFile -Value $env:STRIPE_SECRET_KEY -NoNewline
+  }
+}
+if (-not $env:PUBLIC_BUILDER_URL) {
+  $env:PUBLIC_BUILDER_URL = "https://dday2301.github.io/PROJEKT/builder.html"
+}
+if ($env:STRIPE_SECRET_KEY) {
+  if ($env:STRIPE_SECRET_KEY -like 'sk_live_*') {
+    Write-Host "Stripe Checkout: LIVE / Start 490 EUR / Standard 890 EUR / Premium 1490 EUR" -ForegroundColor Yellow
+  } elseif ($env:STRIPE_SECRET_KEY -like 'sk_test_*') {
+    Write-Host "Stripe Checkout: TEST / Start 490 EUR / Standard 890 EUR / Premium 1490 EUR" -ForegroundColor Green
+  } else {
+    Write-Warning "Stripe key format was not recognized. Checkout may fail until a valid secret key is supplied."
+  }
+} else {
+  Write-Host "Stripe Checkout: DISABLED (development fallback)" -ForegroundColor DarkYellow
+}
+
+Write-Host "[5/6] Starting fresh website service..."
 $listener = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($listener) {
   $proc = Get-Process -Id $listener.OwningProcess -ErrorAction SilentlyContinue
@@ -85,6 +114,17 @@ if (-not $health -or -not $health.ok) { throw "Website service did not start on 
 if (-not $health.github_configured) { throw "Website service is online but GitHub publishing is not enabled." }
 Write-Host "Service: ONLINE / GitHub enabled" -ForegroundColor Green
 
+try {
+  $billing = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/billing/config" -Method Get -TimeoutSec 10
+  if ($billing.enabled) {
+    Write-Host "Payments: READY / hosted Stripe Checkout" -ForegroundColor Green
+  } else {
+    Write-Host "Payments: OFF / development mode" -ForegroundColor DarkYellow
+  }
+} catch {
+  Write-Warning "Could not verify Stripe billing endpoint."
+}
+
 # Verify the browser's private-network preflight opt-in is present.
 try {
   $preflightHeaders = @{
@@ -100,7 +140,7 @@ try {
   Write-Warning "Could not verify browser local-network preflight. The API itself is still online."
 }
 
-Write-Host "[5/5] Opening public builder..."
+Write-Host "[6/6] Opening public builder..."
 $localApi = "http://127.0.0.1:$Port"
 $encodedApi = [Uri]::EscapeDataString($localApi)
 $builder = "https://dday2301.github.io/PROJEKT/builder.html?api=$encodedApi&v=stable-local"
