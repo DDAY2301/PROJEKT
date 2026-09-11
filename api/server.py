@@ -9,6 +9,7 @@ import api.premium_generation  # noqa: F401 - enforces premium deterministic des
 import api.binary_publish  # noqa: F401 - allows image bytes in GitHub bundles
 import api.billing  # noqa: F401 - registers Stripe Checkout/payment routes
 import api.media  # noqa: F401 - registers authenticated image upload routes
+import api.media_render  # noqa: F401 - integrates uploaded images in generated pages
 import api.enhanced_runtime  # noqa: F401 - patches core.generate_project
 import api.revisions  # noqa: F401 - registers post-build revision routes
 import api.retry_routes  # noqa: F401 - registers failed-build retry route
