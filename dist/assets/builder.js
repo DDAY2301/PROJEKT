@@ -4,6 +4,8 @@ let token = localStorage.getItem('pv_token') || '';
 let API = '';
 let activeProjectId = null;
 const GITHUB_OWNER = 'DDAY2301';
+let billingConfig = {enabled:false, packages:{}};
+let selectedImages = [];
 
 function cleanApi(value) {
   return (value || '').trim().replace(/\/$/, '');
@@ -64,7 +66,56 @@ async function request(path, options = {}) {
   return data;
 }
 
+async function requestForm(path, form) {
+  if (!API) throw new Error('Povezava storitve ni nastavljena.');
+  const headers = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+  let response;
+  try {
+    response = await fetch(`${API}${path}`, {method:'POST', headers, body:form});
+  } catch {
+    throw new Error('Nalaganju slike ni uspelo povezati storitve.');
+  }
+  const text = await response.text();
+  let data;
+  try { data = JSON.parse(text); } catch { data = {detail:text}; }
+  if (!response.ok) throw new Error(errorMessage(data, `HTTP ${response.status}`));
+  return data;
+}
+
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+function money(amount, currency) {
+  if (typeof amount !== 'number' || !currency) return '';
+  try {
+    return new Intl.NumberFormat('sl-SI', {style:'currency', currency:String(currency).toUpperCase()}).format(amount / 100);
+  } catch {
+    return `${(amount / 100).toFixed(2)} ${String(currency).toUpperCase()}`;
+  }
+}
+
+async function loadBillingConfig() {
+  try {
+    billingConfig = await request('/billing/config');
+  } catch {
+    billingConfig = {enabled:false, packages:{}};
+  }
+  document.querySelectorAll('.pkg').forEach(btn => {
+    const name = btn.dataset.package;
+    const pkg = billingConfig.packages?.[name] || {};
+    let price = btn.querySelector('.pkg-price');
+    if (!price) {
+      price = document.createElement('span');
+      price.className = 'pkg-price';
+      price.style.cssText = 'display:block;margin-top:.25rem;font-size:.7rem;font-weight:900;color:var(--good)';
+      btn.appendChild(price);
+    }
+    price.textContent = pkg.configured && typeof pkg.unit_amount === 'number'
+      ? money(pkg.unit_amount, pkg.currency)
+      : (billingConfig.enabled ? 'Cena ni nastavljena' : 'Testni način');
+  });
+  updateCheckoutHint();
+}
 
 async function checkHealth(showStatus = true) {
   if ($('apiUrl')) $('apiUrl').value = API;
@@ -75,11 +126,9 @@ async function checkHealth(showStatus = true) {
     if (showStatus) status('Builder je pripravljen. V nastavitvah povezave vnesi naslov storitve.');
     return false;
   }
-
   setSignal('apiState', 'Preverjam');
   setSignal('modelState', 'Preverjam');
   let lastError = null;
-
   for (let attempt = 1; attempt <= 5; attempt++) {
     try {
       const health = await request('/health');
@@ -87,18 +136,16 @@ async function checkHealth(showStatus = true) {
       setSignal('modelState', 'Pripravljen', 'ok');
       setSignal('githubState', health.github_configured ? 'Povezan' : 'Ni povezano', health.github_configured ? 'ok' : 'warn');
       if ($('apiHint')) $('apiHint').textContent = API;
-      if (showStatus) {
-        status(health.github_configured
-          ? 'SISTEM ONLINE\nPovezava je aktivna. Izdelava in GitHub objava sta pripravljeni.'
-          : 'SISTEM ONLINE\nIzdelava je pripravljena, GitHub objava pa še ni povezana.');
-      }
+      await loadBillingConfig();
+      if (showStatus) status(health.github_configured
+        ? 'SISTEM ONLINE\nPovezava je aktivna. Izdelava, slike, plačilo in GitHub objava so pripravljeni.'
+        : 'SISTEM ONLINE\nIzdelava je pripravljena, GitHub objava pa še ni povezana.');
       return true;
     } catch (e) {
       lastError = e;
       if (attempt < 5) await sleep(1800);
     }
   }
-
   setSignal('apiState', 'Nedosegljivo', 'bad');
   setSignal('modelState', '—');
   setSignal('githubState', '—');
@@ -136,23 +183,25 @@ function validateAuth() {
 
 function updateAuthUi(message) {
   const logged = Boolean(token);
-  $('logout').style.display = logged ? 'inline-flex' : 'none';
-  $('register').style.display = logged ? 'none' : 'inline-flex';
-  $('login').style.display = logged ? 'none' : 'inline-flex';
-  $('authState').classList.toggle('ok', logged);
-  $('authState').textContent = message || (logged ? 'Prijavna seja je aktivna.' : 'Nisi prijavljen.');
+  if ($('logout')) $('logout').style.display = logged ? 'inline-flex' : 'none';
+  if ($('register')) $('register').style.display = logged ? 'none' : 'inline-flex';
+  if ($('login')) $('login').style.display = logged ? 'none' : 'inline-flex';
+  if ($('authState')) {
+    $('authState').classList.toggle('ok', logged);
+    $('authState').textContent = message || (logged ? 'Prijavna seja je aktivna.' : 'Nisi prijavljen.');
+  }
 }
 
 $('register')?.addEventListener('click', async () => {
   try {
     validateAuth();
     status('Ustvarjam račun ...');
-    const data = await request('/auth/register', {method: 'POST', body: JSON.stringify(authBody())});
+    const data = await request('/auth/register', {method:'POST', body:JSON.stringify(authBody())});
     token = data.token;
     localStorage.setItem('pv_token', token);
     updateAuthUi('Registriran in prijavljen.');
     status('Račun je pripravljen. Zdaj lahko začneš izdelavo projekta.');
-    loadRecentProjects();
+    await loadRecentProjects();
   } catch (e) {
     const hint = /already registered/i.test(e.message) ? '\nTa e-pošta že obstaja — uporabi Prijava.' : '';
     status(`REGISTRACIJA NI USPELA\n${e.message}${hint}`);
@@ -163,12 +212,13 @@ $('login')?.addEventListener('click', async () => {
   try {
     validateAuth();
     status('Prijavljam ...');
-    const data = await request('/auth/login', {method: 'POST', body: JSON.stringify(authBody())});
+    const data = await request('/auth/login', {method:'POST', body:JSON.stringify(authBody())});
     token = data.token;
     localStorage.setItem('pv_token', token);
     updateAuthUi('Prijava uspešna.');
     status('Prijava je uspešna. Projektni workspace je pripravljen.');
-    loadRecentProjects();
+    await loadRecentProjects();
+    await handlePaymentReturn();
   } catch (e) {
     status(`PRIJAVA NI USPELA\n${e.message}`);
   }
@@ -181,13 +231,14 @@ $('logout')?.addEventListener('click', () => {
   status('Prijavna seja je zaključena.');
 });
 
-const packageLimits = {Start: 3, Standard: 6, Premium: 12};
+const packageLimits = {Start:3, Standard:6, Premium:12};
 
 function selectPackage(name) {
   if (!packageLimits[name]) return;
   $('package').value = name;
   document.querySelectorAll('.pkg').forEach(el => el.classList.toggle('active', el.dataset.package === name));
   $('pageLimit').textContent = `Paket ${name} omogoča največ ${packageLimits[name]} strani.`;
+  updateCheckoutHint();
 }
 
 document.querySelectorAll('.pkg').forEach(el => el.addEventListener('click', () => selectPackage(el.dataset.package)));
@@ -197,7 +248,7 @@ function parsePages() {
   const limit = packageLimits[$('package').value];
   if (rows.length > limit) throw new Error(`Paket ${$('package').value} omogoča največ ${limit} strani. Trenutno jih je ${rows.length}.`);
   return rows.map((line, i) => {
-    const [title, purpose = ''] = line.split('|').map(x => x.trim());
+    const [title, purpose=''] = line.split('|').map(x => x.trim());
     const slug = i === 0 ? 'index' : title.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     return {slug, title, purpose};
   });
@@ -214,86 +265,173 @@ function validateProject() {
 
 function payload() {
   return {
-    name: $('name').value.trim(),
-    organization: $('organization').value.trim(),
-    package: $('package').value,
-    programme: $('programme').value.trim(),
-    goal: $('goal').value.trim(),
-    audience: $('audience').value.trim(),
-    tone: $('tone').value.trim(),
-    brand: {
-      primary_color: $('primary').value,
-      secondary_color: $('secondary').value,
-      background_color: $('background').value,
-      text_color: $('textColor').value,
-      font_style: $('fontStyle').value,
-      mood: $('mood').value.trim()
+    name:$('name').value.trim(),
+    organization:$('organization').value.trim(),
+    package:$('package').value,
+    programme:$('programme').value.trim(),
+    goal:$('goal').value.trim(),
+    audience:$('audience').value.trim(),
+    tone:$('tone').value.trim(),
+    brand:{
+      primary_color:$('primary').value,
+      secondary_color:$('secondary').value,
+      background_color:$('background').value,
+      text_color:$('textColor').value,
+      font_style:$('fontStyle').value,
+      mood:$('mood').value.trim()
     },
-    pages: parsePages(),
-    hero_title: $('heroTitle').value.trim(),
-    hero_subtitle: $('heroSubtitle').value.trim(),
-    cta_text: $('cta').value.trim(),
-    contact_email: $('contact').value.trim() || null,
-    image_direction: $('imageDirection').value.trim(),
-    custom_requirements: $('requirements').value.trim()
+    pages:parsePages(),
+    hero_title:$('heroTitle').value.trim(),
+    hero_subtitle:$('heroSubtitle').value.trim(),
+    cta_text:$('cta').value.trim(),
+    contact_email:$('contact').value.trim() || null,
+    image_direction:$('imageDirection').value.trim(),
+    custom_requirements:$('requirements').value.trim()
   };
+}
+
+function installMediaUi() {
+  if ($('projectImages')) return;
+  const direction = $('imageDirection');
+  const card = direction?.closest('.card');
+  if (!card) return;
+  const wrap = document.createElement('div');
+  wrap.className = 'field full';
+  wrap.style.marginTop = '.75rem';
+  wrap.innerHTML = `
+    <label for="projectImages">Fotografije / slike projekta</label>
+    <input id="projectImages" type="file" accept="image/jpeg,image/png,image/webp" multiple>
+    <small>Do 12 slik. JPG, PNG ali WebP, največ 8 MB na sliko. Prva slika je privzeto uporabljena kot hero, ostale v galeriji.</small>
+    <div id="imageQueue" style="display:grid;gap:.45rem;margin-top:.55rem"></div>`;
+  card.appendChild(wrap);
+  $('projectImages').addEventListener('change', e => {
+    const files = Array.from(e.target.files || []).slice(0, 12);
+    selectedImages = files.map((file, index) => ({file, placement:index === 0 ? 'hero' : 'gallery', alt:file.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ')}));
+    renderImageQueue();
+  });
+}
+
+function renderImageQueue() {
+  const host = $('imageQueue');
+  if (!host) return;
+  host.innerHTML = '';
+  selectedImages.forEach((item, index) => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:grid;grid-template-columns:1fr 8rem 2rem;gap:.45rem;align-items:center;padding:.5rem;border:1px solid var(--line);border-radius:.65rem;background:#f7faf8';
+    row.innerHTML = `<div><strong style="display:block;font-size:.72rem">${escapeHtmlLocal(item.file.name)}</strong><input data-alt="${index}" value="${escapeHtmlLocal(item.alt)}" aria-label="Opis slike" style="width:100%;margin-top:.28rem;border:1px solid #b9c8c1;border-radius:.5rem;padding:.45rem"></div><select data-placement="${index}" aria-label="Postavitev slike" style="border:1px solid #b9c8c1;border-radius:.5rem;padding:.45rem"><option value="hero" ${item.placement==='hero'?'selected':''}>Hero</option><option value="gallery" ${item.placement==='gallery'?'selected':''}>Galerija</option><option value="content" ${item.placement==='content'?'selected':''}>Vsebina</option><option value="auto" ${item.placement==='auto'?'selected':''}>Samodejno</option></select><button type="button" data-remove="${index}" aria-label="Odstrani sliko" style="border:0;background:transparent;font-size:1.15rem;cursor:pointer">×</button>`;
+    host.appendChild(row);
+  });
+  host.querySelectorAll('[data-alt]').forEach(input => input.addEventListener('input', e => { selectedImages[Number(e.target.dataset.alt)].alt = e.target.value; }));
+  host.querySelectorAll('[data-placement]').forEach(select => select.addEventListener('change', e => { selectedImages[Number(e.target.dataset.placement)].placement = e.target.value; }));
+  host.querySelectorAll('[data-remove]').forEach(btn => btn.addEventListener('click', e => { selectedImages.splice(Number(e.currentTarget.dataset.remove), 1); renderImageQueue(); }));
+}
+
+function escapeHtmlLocal(value) {
+  return String(value || '').replace(/[&<>\"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[ch]));
+}
+
+async function uploadSelectedImages(projectId) {
+  if (!selectedImages.length) return [];
+  const uploaded = [];
+  for (let i = 0; i < selectedImages.length; i++) {
+    const item = selectedImages[i];
+    status(`NALAGAM SLIKE\n${i + 1}/${selectedImages.length}: ${item.file.name}`);
+    const form = new FormData();
+    form.append('file', item.file);
+    form.append('alt_text', item.alt || item.file.name);
+    form.append('placement', item.placement || 'auto');
+    uploaded.push(await requestForm(`/projects/${projectId}/images`, form));
+  }
+  return uploaded;
+}
+
+function installCheckoutHint() {
+  if ($('checkoutHint')) return;
+  const generate = document.querySelector('.generate');
+  if (!generate) return;
+  const note = document.createElement('div');
+  note.id = 'checkoutHint';
+  note.style.cssText = 'margin-top:.55rem;padding:.6rem .7rem;border-radius:.65rem;background:#edf3f0;color:#49605a;font-size:.7rem;line-height:1.45';
+  generate.parentElement.appendChild(note);
+  updateCheckoutHint();
+}
+
+function updateCheckoutHint() {
+  const hint = $('checkoutHint');
+  if (!hint || !$('package')) return;
+  const name = $('package').value;
+  const pkg = billingConfig.packages?.[name] || {};
+  if (pkg.configured && typeof pkg.unit_amount === 'number') {
+    hint.innerHTML = `<strong>Plačilo pred izdelavo:</strong> ${money(pkg.unit_amount, pkg.currency)} · varno plačilo prek Stripe Checkout. Po uspešnem plačilu se izdelava začne samodejno.`;
+  } else if (billingConfig.enabled) {
+    hint.innerHTML = `<strong>Paket ${name} še nima nastavljene Stripe cene.</strong> Plačilo se ne more zagnati, dokler ni nastavljen Price ID.`;
+  } else {
+    hint.innerHTML = '<strong>Testni način:</strong> Stripe še ni konfiguriran. Lokalna izdelava lahko teče brez plačila.';
+  }
 }
 
 function resetPipeline() {
   document.querySelectorAll('.pipe').forEach(el => {
-    el.classList.remove('running', 'done');
+    el.classList.remove('running','done');
     const state = el.querySelector('em');
     if (state) state.textContent = 'čaka';
   });
 }
 
 const stageIndex = {
-  queued: 0,
-  designing: 1,
-  building: 2,
-  auditing: 3,
-  fixing: 4,
-  publishing: 5,
-  ready: 5,
-  needs_review: 5,
-  failed: -1
+  queued:0,
+  awaiting_payment:0,
+  payment_pending:0,
+  designing:1,
+  building:2,
+  auditing:3,
+  fixing:4,
+  publishing:5,
+  ready:5,
+  needs_review:5,
+  failed:-1
 };
 
 function updatePipeline(current) {
   const active = stageIndex[current] ?? 0;
   document.querySelectorAll('.pipe').forEach((el, i) => {
-    el.classList.remove('running', 'done');
+    el.classList.remove('running','done');
     const state = el.querySelector('em');
     if (!state) return;
     if (current === 'failed') {
-      state.textContent = i === Math.max(active, 0) ? 'ustavljeno' : 'čaka';
+      state.textContent = i === Math.max(active,0) ? 'ustavljeno' : 'čaka';
+      return;
+    }
+    if (current === 'awaiting_payment' || current === 'payment_pending') {
+      if (i === 0) { el.classList.add('running'); state.textContent = current === 'payment_pending' ? 'plačilo' : 'čaka plačilo'; }
+      else state.textContent = 'čaka';
       return;
     }
     if (i < active || (current === 'ready' && i <= active)) {
       el.classList.add('done');
       state.textContent = 'končano';
-    } else if (i === active && !['ready', 'needs_review'].includes(current)) {
+    } else if (i === active && !['ready','needs_review'].includes(current)) {
       el.classList.add('running');
       state.textContent = 'teče';
     } else if (current === 'needs_review' && i === active) {
       el.classList.add('running');
       state.textContent = 'pregled';
-    } else {
-      state.textContent = 'čaka';
-    }
+    } else state.textContent = 'čaka';
   });
 }
 
 const statusLabels = {
-  queued: 'V čakalni vrsti',
-  designing: 'Priprava strukture',
-  building: 'Izdelava strani',
-  auditing: 'Preverjanje kakovosti',
-  fixing: 'Samodejni popravki',
-  publishing: 'Objava kode in spletne strani',
-  ready: 'Končano',
-  needs_review: 'Potreben pregled',
-  failed: 'Ustavljeno'
+  queued:'V čakalni vrsti',
+  awaiting_payment:'Čaka na plačilo',
+  payment_pending:'Plačilo v teku',
+  designing:'Priprava strukture',
+  building:'Izdelava strani',
+  auditing:'Preverjanje kakovosti',
+  fixing:'Samodejni popravki',
+  publishing:'Objava kode in spletne strani',
+  ready:'Končano',
+  needs_review:'Potreben pregled',
+  failed:'Ustavljeno'
 };
 
 function finalSiteUrl(repoName) {
@@ -304,8 +442,8 @@ function setResultLinks(repoName) {
   if (!repoName) return;
   const actions = $('resultActions');
   const repoLink = $('repoLink');
-  repoLink.href = `https://github.com/${GITHUB_OWNER}/${repoName}`;
-
+  if (repoLink) repoLink.href = `https://github.com/${GITHUB_OWNER}/${repoName}`;
+  if (!actions) return;
   let siteLink = $('siteLink');
   if (!siteLink) {
     siteLink = document.createElement('a');
@@ -314,12 +452,12 @@ function setResultLinks(repoName) {
     siteLink.target = '_blank';
     siteLink.rel = 'noopener';
     siteLink.textContent = 'Odpri spletno stran ↗';
-    actions.insertBefore(siteLink, repoLink);
+    actions.insertBefore(siteLink, repoLink || actions.firstChild);
   }
   siteLink.href = finalSiteUrl(repoName);
 }
 
-$('generate')?.addEventListener('click', async () => {
+async function startProjectFlow() {
   if (!token) {
     status('IZDELAVA JE BLOKIRANA\nNajprej se registriraj ali prijavi.');
     return;
@@ -330,25 +468,46 @@ $('generate')?.addEventListener('click', async () => {
     if (!healthy) throw new Error('Storitev trenutno ni dosegljiva.');
     resetPipeline();
     updatePipeline('queued');
-    $('resultActions').classList.remove('visible');
-    status('Projekt pošiljam v izdelavo ...');
-    const created = await request('/projects', {method: 'POST', body: JSON.stringify(payload())});
+    $('resultActions')?.classList.remove('visible');
+    status('Projekt ustvarjam ...');
+    const created = await request('/projects', {method:'POST', body:JSON.stringify(payload())});
     activeProjectId = created.id;
-    status(`IZDELAVA ZAČETA\nProjekt: ${created.id}\n\nPripravljam strukturo in vsebino.`);
+    await uploadSelectedImages(created.id);
+
+    const pkg = billingConfig.packages?.[$('package').value] || {};
+    if (pkg.configured) {
+      status('SLIKE SO SHRANJENE\nPripravljam varno Stripe plačilo ...');
+      const checkout = await request('/billing/checkout', {method:'POST', body:JSON.stringify({project_id:created.id})});
+      if (checkout.paid) {
+        status('PLAČILO JE ŽE POTRJENO\nZačenjam izdelavo.');
+        watch(created.id);
+        return;
+      }
+      if (!checkout.checkout_url) throw new Error('Stripe Checkout povezava ni bila ustvarjena.');
+      window.location.assign(checkout.checkout_url);
+      return;
+    }
+
+    // Development fallback when Stripe prices are not configured yet. Re-run
+    // after uploads so the generated website definitely sees the media files.
+    if (selectedImages.length) await request(`/projects/${created.id}/audit`, {method:'POST'});
+    status(`IZDELAVA ZAČETA\nProjekt: ${created.id}\n${selectedImages.length ? `Slike: ${selectedImages.length}\n` : ''}\nPripravljam strukturo in vsebino.`);
     watch(created.id);
   } catch (e) {
     status(`IZDELAVA NI ZAGNANA\n${e.message}`);
   }
-});
+}
+
+$('generate')?.addEventListener('click', startProjectFlow);
 
 async function watch(id) {
-  for (let i = 0; i < 180; i++) {
-    await sleep(4000);
+  for (let i = 0; i < 240; i++) {
+    await sleep(3500);
     try {
       const project = await request(`/projects/${id}`);
       const issues = project.last_audit?.issues || [];
       updatePipeline(project.status);
-      const severe = issues.filter(x => ['critical', 'high'].includes(x.severity)).length;
+      const severe = issues.filter(x => ['critical','high'].includes(x.severity)).length;
       const lines = [
         statusLabels[project.status] || project.status,
         `Projekt: ${id}`,
@@ -356,93 +515,89 @@ async function watch(id) {
         `Samodejni popravki: ${project.auto_fix_attempts || 0}`,
         `Najdene težave: ${issues.length}${severe ? ` (${severe} pomembnih)` : ''}`
       ];
+      if (project.status === 'awaiting_payment') lines.push('', 'Projekt čaka na uspešno Stripe plačilo.');
+      if (project.status === 'payment_pending') lines.push('', 'Stripe Checkout je odprt oziroma plačilo še ni potrjeno.');
       if (project.repo_name) {
         setResultLinks(project.repo_name);
         lines.push(`Javna stran: ${finalSiteUrl(project.repo_name)}`);
       }
-      if (issues.length) {
-        lines.push('', ...issues.slice(0, 6).map(x => `• ${x.message}`));
-      }
+      if (issues.length) lines.push('', ...issues.slice(0,6).map(x => `• ${x.message}`));
       status(lines.join('\n'));
-      if (['ready', 'needs_review', 'failed'].includes(project.status)) {
-        if (project.repo_name) $('resultActions').classList.add('visible');
+      if (['ready','needs_review','failed'].includes(project.status)) {
+        if (project.repo_name) $('resultActions')?.classList.add('visible');
+        if (typeof loadRecentProjects === 'function') loadRecentProjects();
         return;
       }
     } catch (e) {
-      status(`STATUSA NI MOGOČE PREVERITI\n${e.message}`);
+      status(`PREVERJANJE PROJEKTA NI USPELO\n${e.message}`);
       return;
     }
   }
-  status('Izdelava še vedno teče. Status lahko preveriš nekoliko pozneje.');
+}
+
+function syncPreview() {
+  const canvas = $('previewCanvas');
+  if (!canvas) return;
+  canvas.style.setProperty('--preview-bg', $('background')?.value || '#fff');
+  canvas.style.setProperty('--preview-text', $('textColor')?.value || '#102923');
+  canvas.style.setProperty('--preview-primary', $('primary')?.value || '#123f35');
+  canvas.style.setProperty('--preview-secondary', $('secondary')?.value || '#d9ff65');
+  if ($('previewLogo')) $('previewLogo').textContent = ($('organization')?.value || $('name')?.value || 'YOUR PROJECT').toUpperCase();
+  if ($('previewEyebrow')) $('previewEyebrow').textContent = ($('programme')?.value || 'PROJECT / DIGITAL EXPERIENCE').toUpperCase();
+  if ($('previewTitle')) $('previewTitle').textContent = $('heroTitle')?.value || 'Spletna stran, ki ima jasen namen.';
+  if ($('previewSubtitle')) $('previewSubtitle').textContent = $('heroSubtitle')?.value || $('goal')?.value || 'Vpiši vsebino na levi in predogled se bo sproti prilagajal.';
+  if ($('previewCta')) $('previewCta').textContent = $('cta')?.value || 'Kontaktirajte nas';
+}
+
+['background','textColor','primary','secondary','organization','name','programme','heroTitle','heroSubtitle','goal','cta'].forEach(id => $(id)?.addEventListener('input', syncPreview));
+
+async function loadRecentProjects() {
+  if (!token) return [];
+  try { return await request('/projects'); } catch { return []; }
+}
+
+async function handlePaymentReturn() {
+  const state = params.get('payment');
+  const projectId = params.get('project_id');
+  const sessionId = params.get('session_id');
+  if (!state || !projectId) return;
+  activeProjectId = projectId;
+  if (state === 'cancelled') {
+    status('PLAČILO JE BILO PREKINJENO\nProjekt in naložene slike so shranjeni. Plačilo lahko ponovno začneš iz istega projekta.');
+    return;
+  }
+  if (state !== 'success') return;
+  if (!token) {
+    status('PLAČILO JE BILO OPRAVLJENO\nZa preverjanje plačila se ponovno prijavi.');
+    return;
+  }
+  try {
+    status('PREVERJAM PLAČILO\nStripe potrjuje transakcijo ...');
+    const result = await request(`/billing/verify/${encodeURIComponent(projectId)}?session_id=${encodeURIComponent(sessionId || '')}`, {method:'POST'});
+    if (!result.paid) throw new Error('Plačilo še ni potrjeno.');
+    status('PLAČILO POTRJENO\nZačenjam izdelavo spletne strani.');
+    history.replaceState({}, '', location.pathname + (API ? `?api=${encodeURIComponent(API)}` : ''));
+    watch(projectId);
+  } catch (e) {
+    status(`PLAČILA NI BILO MOGOČE POTRDITI\n${e.message}`);
+  }
 }
 
 $('newBuild')?.addEventListener('click', () => {
   activeProjectId = null;
+  selectedImages = [];
+  if ($('projectImages')) $('projectImages').value = '';
+  renderImageQueue();
   resetPipeline();
-  $('resultActions').classList.remove('visible');
+  $('resultActions')?.classList.remove('visible');
   status('Pripravljen za nov projekt.');
-  window.scrollTo({top: 0, behavior: 'smooth'});
+  window.scrollTo({top:0, behavior:'smooth'});
 });
 
-async function loadRecentProjects() {
-  if (!token) return;
-  try {
-    const projects = await request('/projects');
-    if (!projects.length) return;
-    const project = projects[0];
-    activeProjectId = project.id;
-    if (project.status) updatePipeline(project.status);
-    if (project.repo_name) {
-      setResultLinks(project.repo_name);
-      $('resultActions').classList.add('visible');
-    }
-  } catch {}
-}
-
-function updatePreview() {
-  const canvas = $('previewCanvas');
-  if (!canvas) return;
-  canvas.style.setProperty('--preview-bg', $('background').value);
-  canvas.style.setProperty('--preview-text', $('textColor').value);
-  canvas.style.setProperty('--preview-primary', $('primary').value);
-  canvas.style.setProperty('--preview-secondary', $('secondary').value);
-  $('previewLogo').textContent = ($('organization').value || $('name').value || 'YOUR PROJECT').toUpperCase().slice(0, 28);
-  $('previewEyebrow').textContent = ($('programme').value || 'PROJECT / DIGITAL EXPERIENCE').toUpperCase().slice(0, 42);
-  $('previewTitle').textContent = $('heroTitle').value || $('name').value || 'Spletna stran, ki ima jasen namen.';
-  $('previewSubtitle').textContent = $('heroSubtitle').value || $('goal').value || 'Vpiši vsebino na levi in predogled se bo sproti prilagajal.';
-  $('previewCta').textContent = $('cta').value || 'Kontaktirajte nas';
-}
-
-['name','organization','programme','goal','heroTitle','heroSubtitle','cta','primary','secondary','background','textColor'].forEach(id => {
-  $(id)?.addEventListener('input', updatePreview);
-});
-
-const requestedPackage = params.get('paket');
-if (packageLimits[requestedPackage]) selectPackage(requestedPackage); else selectPackage('Start');
-
-try {
-  const rawPrefill = localStorage.getItem('pv_prefill');
-  if (rawPrefill) {
-    const p = JSON.parse(rawPrefill);
-    if (p.organization) $('organization').value = p.organization;
-    if (p.programme) $('programme').value = p.programme;
-    if (p.goal) $('goal').value = p.goal;
-    if (p.contact_email) {
-      $('contact').value = p.contact_email;
-      if (!$('email').value) $('email').value = p.contact_email;
-    }
-    if (packageLimits[p.package]) selectPackage(p.package);
-    const extras = [];
-    if (p.contact_name) extras.push(`Kontaktna oseba: ${p.contact_name}`);
-    if (p.deadline) extras.push(`Želeni rok: ${p.deadline}`);
-    if (p.existing_url) extras.push(`Obstoječa povezava: ${p.existing_url}`);
-    if (extras.length && !$('requirements').value) $('requirements').value = extras.join('; ');
-    localStorage.removeItem('pv_prefill');
-  }
-} catch {}
-
-if ($('apiUrl')) $('apiUrl').value = API;
+installMediaUi();
+installCheckoutHint();
+selectPackage($('package')?.value || 'Start');
 updateAuthUi();
-updatePreview();
-resetPipeline();
-checkHealth(true).then(ok => { if (ok && token) loadRecentProjects(); });
+syncPreview();
+checkHealth(true).then(() => handlePaymentReturn());
+if (token) loadRecentProjects();
