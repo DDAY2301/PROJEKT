@@ -6,7 +6,8 @@ from fastapi.staticfiles import StaticFiles
 import api.main as core
 import api.robust_generation  # noqa: F401 - patches planning/build/QA for local models
 import api.premium_generation  # noqa: F401 - enforces premium deterministic design quality floor
-import api.premium_quality  # noqa: F401 - rejects weak or fabricated output before publishing
+import api.billing  # noqa: F401 - registers Stripe Checkout/payment routes
+import api.media  # noqa: F401 - registers authenticated image upload routes
 import api.enhanced_runtime  # noqa: F401 - patches core.generate_project
 import api.revisions  # noqa: F401 - registers post-build revision routes
 import api.retry_routes  # noqa: F401 - registers failed-build retry route
