@@ -7,11 +7,14 @@ $ErrorActionPreference = "Stop"
 $repoRoot = $PSScriptRoot
 Set-Location $repoRoot
 
-function Read-SecretText([string]$Prompt) {
-  $secure = Read-Host $Prompt -AsSecureString
-  $ptr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+function Secure-ToText([System.Security.SecureString]$Secure) {
+  $ptr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($Secure)
   try { return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr) }
   finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr) }
+}
+
+function Read-SecretText([string]$Prompt) {
+  return Secure-ToText (Read-Host $Prompt -AsSecureString)
 }
 
 function Wait-Json([string]$Url, [int]$Seconds = 60) {
@@ -68,15 +71,23 @@ Write-Host "GitHub: CONNECTED as $($gh.login)" -ForegroundColor Green
 Write-Host "[4/6] Preparing Stripe Checkout..."
 $stripeSecretFile = Join-Path $repoRoot "api\data\.stripe-secret"
 if (-not $env:STRIPE_SECRET_KEY -and (Test-Path $stripeSecretFile)) {
-  $env:STRIPE_SECRET_KEY = (Get-Content $stripeSecretFile -Raw).Trim()
+  try {
+    # ConvertTo/From-SecureString uses Windows DPAPI by default, binding the
+    # encrypted value to the current Windows user. No plaintext secret is kept.
+    $savedSecure = (Get-Content $stripeSecretFile -Raw).Trim() | ConvertTo-SecureString
+    $env:STRIPE_SECRET_KEY = Secure-ToText $savedSecure
+  } catch {
+    Remove-Item $stripeSecretFile -Force -ErrorAction SilentlyContinue
+  }
 }
 if (-not $env:STRIPE_SECRET_KEY) {
-  $candidate = Read-SecretText "Paste Stripe secret key (hidden; Enter = checkout disabled)"
+  $secureCandidate = Read-Host "Paste Stripe secret key (hidden; Enter = checkout disabled)" -AsSecureString
+  $candidate = Secure-ToText $secureCandidate
   if ($candidate) {
     $env:STRIPE_SECRET_KEY = $candidate.Trim()
     $secretDir = Split-Path $stripeSecretFile -Parent
     New-Item -ItemType Directory -Force -Path $secretDir | Out-Null
-    Set-Content -Path $stripeSecretFile -Value $env:STRIPE_SECRET_KEY -NoNewline
+    $secureCandidate | ConvertFrom-SecureString | Set-Content -Path $stripeSecretFile -NoNewline
   }
 }
 if (-not $env:PUBLIC_BUILDER_URL) {
@@ -125,7 +136,6 @@ try {
   Write-Warning "Could not verify Stripe billing endpoint."
 }
 
-# Verify the browser's private-network preflight opt-in is present.
 try {
   $preflightHeaders = @{
     Origin = 'https://dday2301.github.io'
