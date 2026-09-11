@@ -8,6 +8,7 @@ import api.robust_generation  # noqa: F401 - patches planning/build/QA for local
 import api.premium_generation  # noqa: F401 - enforces premium deterministic design quality floor
 import api.binary_publish  # noqa: F401 - allows image bytes in GitHub bundles
 import api.billing  # noqa: F401 - registers Stripe Checkout/payment routes
+import api.billing_gate  # noqa: F401 - waits for successful payment before generation
 import api.media  # noqa: F401 - registers authenticated image upload routes
 import api.media_render  # noqa: F401 - integrates uploaded images in generated pages
 import api.enhanced_runtime  # noqa: F401 - patches core.generate_project
