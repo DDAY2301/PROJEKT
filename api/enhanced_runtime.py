@@ -1,19 +1,23 @@
-"""Runtime enhancements for the autonomous website agent.
+"""Observable generation runtime with payment, media, visual QA and publishing.
 
-This module patches the generation coroutine in api.main without duplicating the
-API routes. It adds explicit build states, payment gating, uploaded-media
-injection, automatic GitHub Pages publishing, a best-effort live deployment
-check and persistent failure reporting.
+The runtime keeps explicit build states, waits for payment, injects optimised
+customer media, performs text/design QA, renders every page in Chromium at
+three responsive viewports, repairs severe render defects, publishes the source
+and then enables the public site.
 """
+
+from __future__ import annotations
 
 import json
 import logging
 import re
 from pathlib import Path
+from typing import Any
 
-import api.main as core
 import api.billing as billing
+import api.main as core
 import api.media as media
+import api.visual_qa as visual_qa
 from api.pages_publish import PagesPermissionError, publish_generated_site, wait_for_generated_site
 
 logger = logging.getLogger("project_visibility.build")
@@ -35,40 +39,136 @@ def repo_name_for(config: dict) -> str:
     ).strip("-")[:90]
 
 
-def _inject_uploaded_image_metadata(project_id: str, config: dict) -> list[dict]:
+def _inject_uploaded_image_metadata(project_id: str, config: dict) -> list[dict[str, Any]]:
     rows = media.images_for_project(project_id)
-    images = []
+    images: list[dict[str, Any]] = []
+    public_images: list[dict[str, Any]] = []
     for row in rows:
-        images.append(
-            {
-                "id": row["id"],
-                "repo_path": row["repo_path"],
-                "alt_text": row["alt_text"] or row["original_name"],
-                "placement": row["placement"],
-                "original_name": row["original_name"],
-                "stored_path": row["stored_path"],
-            }
-        )
-    config["uploaded_images"] = [
-        {k: v for k, v in image.items() if k != "stored_path"}
-        for image in images
-    ]
+        variants = row.get("variants") or []
+        full = {
+            "id": row["id"],
+            "repo_path": row["repo_path"],
+            "alt_text": row["alt_text"] or row["original_name"],
+            "placement": row["placement"],
+            "original_name": row["original_name"],
+            "stored_path": row["stored_path"],
+            "width": int(row.get("width") or 0),
+            "height": int(row.get("height") or 0),
+            "focal_x": float(row.get("focal_x") or 50),
+            "focal_y": float(row.get("focal_y") or 50),
+            "kind": row.get("kind") or "image",
+            "variants": variants,
+        }
+        images.append(full)
+        public_images.append({
+            **{k: v for k, v in full.items() if k not in {"stored_path", "variants"}},
+            "variants": [
+                {k: v for k, v in variant.items() if k != "stored_path"}
+                for variant in variants
+            ],
+        })
+    config["uploaded_images"] = public_images
     return images
 
 
-def _attach_uploaded_image_bytes(files: dict, images: list[dict]) -> None:
+def _attach_uploaded_image_bytes(files: dict[str, Any], images: list[dict[str, Any]]) -> None:
+    attached: set[str] = set()
     for image in images:
-        try:
-            data = Path(image["stored_path"]).read_bytes()
-        except OSError as exc:
-            logger.warning("Could not read uploaded image path=%s error=%s", image.get("stored_path"), exc)
-            continue
-        files[image["repo_path"]] = data
+        variants = image.get("variants") or []
+        for variant in variants:
+            repo_path = str(variant.get("repo_path") or "")
+            stored_path = str(variant.get("stored_path") or "")
+            if not repo_path or not stored_path or repo_path in attached:
+                continue
+            try:
+                files[repo_path] = Path(stored_path).read_bytes()
+                attached.add(repo_path)
+            except OSError as exc:
+                logger.warning("Could not read image variant path=%s error=%s", stored_path, exc)
+        repo_path = str(image.get("repo_path") or "")
+        stored_path = str(image.get("stored_path") or "")
+        if repo_path and stored_path and repo_path not in attached:
+            try:
+                files[repo_path] = Path(stored_path).read_bytes()
+                attached.add(repo_path)
+            except OSError as exc:
+                logger.warning("Could not read uploaded image path=%s error=%s", stored_path, exc)
+
+
+def _severe(issues: list[dict[str, Any]]) -> bool:
+    return any(item.get("severity") in {"critical", "high"} for item in issues)
+
+
+def _visual_summary(report: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "available": bool(report.get("available")),
+        "passed": bool(report.get("passed")),
+        "score": report.get("score"),
+        "pages_checked": int(report.get("pages_checked") or 0),
+        "render_count": int(report.get("render_count") or 0),
+        "version": report.get("version") or "visual-qa-v1",
+        "screenshots": report.get("screenshots") or [],
+    }
+
+
+def _audit_payload(issues: list[dict[str, Any]], visual_report: dict[str, Any], *, repository_ready: bool, public_url: str | None, public_live: bool, uploaded_images: int, extra: dict[str, Any] | None = None) -> str:
+    data: dict[str, Any] = {
+        "issues": issues,
+        "repository_ready": repository_ready,
+        "public_url": public_url,
+        "public_live": public_live,
+        "uploaded_images": uploaded_images,
+        "visual_qa": _visual_summary(visual_report),
+    }
+    if extra:
+        data.update(extra)
+    return json.dumps(data, ensure_ascii=False)
+
+
+async def _quality_cycle(files: dict[str, Any], config: dict[str, Any], project_id: str, uploaded_images: list[dict[str, Any]]) -> tuple[dict[str, Any], list[dict[str, Any]], int, dict[str, Any]]:
+    """Run textual + rendered QA with one shared bounded repair budget."""
+    attempts = 0
+    audit1 = core.static_audit(files)
+    audit2 = await core.ai_audit(files, config)
+    text_issues = audit1["issues"] + audit2.get("issues", [])
+
+    while _severe(text_issues) and attempts < core.MAX_AUTO_FIX_ATTEMPTS:
+        attempts += 1
+        set_status(project_id, "fixing")
+        files = await core.fix_files(files, text_issues, config)
+        set_status(project_id, "auditing")
+        audit1 = core.static_audit(files)
+        audit2 = await core.ai_audit(files, config)
+        text_issues = audit1["issues"] + audit2.get("issues", [])
+
+    # Render after textual QA has stabilised. If Chromium finds severe problems,
+    # feed those concrete findings through the same repair mechanism and render
+    # the corrected bundle again. This prevents "valid HTML, bad website" builds.
+    set_status(project_id, "visual_qa")
+    visual_report = await visual_qa.audit_files(files, project_id, config, uploaded_images)
+    visual_issues = list(visual_report.get("issues") or [])
+    combined = text_issues + visual_issues
+
+    while _severe(visual_issues) and attempts < core.MAX_AUTO_FIX_ATTEMPTS:
+        attempts += 1
+        set_status(project_id, "fixing")
+        files = await core.fix_files(files, combined, config)
+        set_status(project_id, "auditing")
+        audit1 = core.static_audit(files)
+        audit2 = await core.ai_audit(files, config)
+        text_issues = audit1["issues"] + audit2.get("issues", [])
+        set_status(project_id, "visual_qa")
+        visual_report = await visual_qa.audit_files(files, project_id, config, uploaded_images)
+        visual_issues = list(visual_report.get("issues") or [])
+        combined = text_issues + visual_issues
+
+    return files, combined, attempts, visual_report
 
 
 async def generate_project_observable(project_id: str):
     phase = "preparing"
     repo_name = None
+    visual_report: dict[str, Any] = {"available": False, "passed": False, "screenshots": []}
     try:
         with core.db() as con:
             row = con.execute("SELECT * FROM projects WHERE id=?", (project_id,)).fetchone()
@@ -91,49 +191,25 @@ async def generate_project_observable(project_id: str):
         set_status(project_id, "building")
         files = await core.build_files(config, spec)
 
-        phase = "quality review"
+        phase = "quality and visual review"
         set_status(project_id, "auditing")
-        audit1 = core.static_audit(files)
-        audit2 = await core.ai_audit(files, config)
-        issues = audit1["issues"] + audit2.get("issues", [])
+        files, issues, attempts, visual_report = await _quality_cycle(files, config, project_id, uploaded_images)
 
-        attempts = 0
-        while any(i.get("severity") in {"critical", "high"} for i in issues) and attempts < core.MAX_AUTO_FIX_ATTEMPTS:
-            attempts += 1
-            phase = f"automatic repair {attempts}"
-            set_status(project_id, "fixing")
-            files = await core.fix_files(files, issues, config)
-
-            phase = "quality re-check"
-            set_status(project_id, "auditing")
-            audit1 = core.static_audit(files)
-            audit2 = await core.ai_audit(files, config)
-            issues = audit1["issues"] + audit2.get("issues", [])
-
-        # Binary assets are added only after text QA so the model never receives
-        # image bytes and static text checks remain deterministic.
+        # Binary assets are attached after the text repair loop. They were still
+        # rendered during visual QA from the private processed-media store.
         _attach_uploaded_image_bytes(files, uploaded_images)
-
         repo_name = repo_name_for(config)
 
         phase = "GitHub publishing"
         set_status(project_id, "publishing")
         await core.github_put_bundle(repo_name, files, f"Agent build for {config['name']}")
 
-        # Persist repository delivery immediately. Public Pages enablement is a
-        # separate concern and must never erase an otherwise successful build.
         with core.db() as con:
             con.execute(
                 "UPDATE projects SET repo_name=?,last_audit_json=?,auto_fix_attempts=?,updated_at=? WHERE id=?",
                 (
                     repo_name,
-                    json.dumps({
-                        "issues": issues,
-                        "repository_ready": True,
-                        "public_url": None,
-                        "public_live": False,
-                        "uploaded_images": len(uploaded_images),
-                    }, ensure_ascii=False),
+                    _audit_payload(issues, visual_report, repository_ready=True, public_url=None, public_live=False, uploaded_images=len(uploaded_images)),
                     attempts,
                     core.now_iso(),
                     project_id,
@@ -156,14 +232,15 @@ async def generate_project_observable(project_id: str):
                     "UPDATE projects SET status='needs_review',repo_name=?,last_audit_json=?,auto_fix_attempts=?,updated_at=? WHERE id=?",
                     (
                         repo_name,
-                        json.dumps({
-                            "issues": issues,
-                            "repository_ready": True,
-                            "public_url": public_url,
-                            "public_live": False,
-                            "publish_action_required": "github_pages_permission",
-                            "uploaded_images": len(uploaded_images),
-                        }, ensure_ascii=False),
+                        _audit_payload(
+                            issues,
+                            visual_report,
+                            repository_ready=True,
+                            public_url=public_url,
+                            public_live=False,
+                            uploaded_images=len(uploaded_images),
+                            extra={"publish_action_required": "github_pages_permission"},
+                        ),
                         attempts,
                         core.now_iso(),
                         project_id,
@@ -181,43 +258,33 @@ async def generate_project_observable(project_id: str):
                 "message": "GitHub Pages was enabled but the public edge is still propagating.",
             })
 
-        final_status = "ready" if not any(
-            i.get("severity") in {"critical", "high"} for i in issues
-        ) else "needs_review"
-
+        final_status = "ready" if not _severe(issues) else "needs_review"
         with core.db() as con:
             con.execute(
                 "UPDATE projects SET status=?,repo_name=?,last_audit_json=?,auto_fix_attempts=?,updated_at=? WHERE id=?",
                 (
                     final_status,
                     repo_name,
-                    json.dumps({
-                        "issues": issues,
-                        "repository_ready": True,
-                        "public_url": public_url,
-                        "public_live": live,
-                        "uploaded_images": len(uploaded_images),
-                    }, ensure_ascii=False),
+                    _audit_payload(issues, visual_report, repository_ready=True, public_url=public_url, public_live=live, uploaded_images=len(uploaded_images)),
                     attempts,
                     core.now_iso(),
                     project_id,
                 ),
             )
-        logger.info("Website build completed project=%s status=%s repo=%s", project_id, final_status, repo_name)
+        logger.info("Website build completed project=%s status=%s repo=%s visual_score=%s", project_id, final_status, repo_name, visual_report.get("score"))
     except Exception as exc:
         logger.exception("Website build failed project=%s phase=%s", project_id, phase)
         detail = str(exc).strip() or exc.__class__.__name__
         failure = {
             "failure_stage": phase,
             "error_type": exc.__class__.__name__,
-            "issues": [
-                {
-                    "severity": "critical",
-                    "code": "BUILD_FAILED",
-                    "file": "",
-                    "message": f"Build failed during {phase}: {detail}"[:700],
-                }
-            ],
+            "visual_qa": _visual_summary(visual_report),
+            "issues": [{
+                "severity": "critical",
+                "code": "BUILD_FAILED",
+                "file": "",
+                "message": f"Build failed during {phase}: {detail}"[:700],
+            }],
         }
         with core.db() as con:
             if repo_name:
