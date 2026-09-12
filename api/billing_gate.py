@@ -4,6 +4,11 @@ When Stripe is configured, creating a project stores the brief and waits for a
 successful Checkout payment before the autonomous generation task starts.
 When Stripe is not configured, local development keeps the historical immediate
 build behaviour.
+
+A narrowly scoped sandbox bypass exists for the dedicated QA account
+maj@klemec.org. It is active only when the configured Stripe key is a TEST key.
+It can therefore never bypass payment when the service is using a live Stripe
+secret key.
 """
 
 import asyncio
@@ -14,6 +19,19 @@ from fastapi import Depends
 
 import api.main as core
 import api.billing as billing
+
+
+TEST_BYPASS_EMAILS = {"maj@klemec.org"}
+
+
+def sandbox_payment_bypass(user_id: str) -> bool:
+    """Return True only for an approved QA account while Stripe is in test mode."""
+    if not billing.STRIPE_SECRET_KEY.startswith("sk_test_"):
+        return False
+    with core.db() as con:
+        row = con.execute("SELECT email FROM users WHERE id=?", (user_id,)).fetchone()
+    email = str(row["email"] if row else "").strip().lower()
+    return email in TEST_BYPASS_EMAILS
 
 
 # Remove the original POST /projects route registered by api.main. Revisions,
@@ -35,7 +53,8 @@ async def create_project_with_payment_gate(
 ):
     pid = str(uuid.uuid4())
     cfg = data.model_dump(mode="json")
-    requires_payment = billing.package_is_configured(data.package)
+    bypass = sandbox_payment_bypass(user_id)
+    requires_payment = billing.package_is_configured(data.package) and not bypass
     initial_status = "awaiting_payment" if requires_payment else "queued"
 
     with core.db() as con:
@@ -60,4 +79,5 @@ async def create_project_with_payment_gate(
         "id": pid,
         "status": initial_status,
         "payment_required": requires_payment,
+        "payment_bypassed": bypass,
     }
