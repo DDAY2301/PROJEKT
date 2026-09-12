@@ -1,11 +1,11 @@
 """Stripe Checkout billing for Project Visibility.
 
-Each generated website is a one-time purchase. Package amounts are enforced on
-this server and are never accepted from the browser. Optional Stripe Price IDs
-can still override the inline prices later without changing the frontend.
+Each generated website is a one-time purchase. The website is fully generated,
+quality-checked and stored first. Stripe Checkout is offered only when that build
+is ready. Successful payment then releases the existing website for publication.
 
-The webhook is the source of truth; the success-page verification endpoint is a
-safe fallback when webhook delivery is delayed.
+Package amounts are enforced server-side and are never accepted from the browser.
+The webhook is the source of truth; success-page verification is a safe fallback.
 """
 
 from __future__ import annotations
@@ -27,16 +27,12 @@ PUBLIC_BUILDER_URL = os.getenv(
     "https://dday2301.github.io/PROJEKT/builder.html",
 ).strip()
 
-# Public commercial prices currently shown on Project Visibility.
-# Values are in euro cents and are intentionally enforced server-side.
 PACKAGE_PRICES = {
     "Start": {"unit_amount": 49000, "currency": "eur", "label": "Project Visibility — Start"},
     "Standard": {"unit_amount": 89000, "currency": "eur", "label": "Project Visibility — Standard"},
     "Premium": {"unit_amount": 149000, "currency": "eur", "label": "Project Visibility — Premium"},
 }
 
-# Optional catalog Price IDs. If present they take precedence over inline
-# price_data. Price IDs are not required for the checkout to work.
 PACKAGE_PRICE_IDS = {
     "Start": os.getenv("STRIPE_PRICE_START", "").strip(),
     "Standard": os.getenv("STRIPE_PRICE_STANDARD", "").strip(),
@@ -163,9 +159,11 @@ async def _mark_session_paid(session: Any) -> None:
         currency=str(currency) if currency else None,
     )
 
+    # Payment releases the ALREADY generated project. enhanced_runtime detects
+    # repository_ready and publishes the existing repo without rebuilding it.
     with core.db() as con:
         row = con.execute("SELECT status FROM projects WHERE id=?", (project_id,)).fetchone()
-    if row and row["status"] in {"queued", "awaiting_payment", "payment_pending", "failed"}:
+    if row and row["status"] in {"ready_for_payment", "payment_pending", "awaiting_payment", "failed"}:
         with core.db() as con:
             con.execute(
                 "UPDATE projects SET status='queued',updated_at=? WHERE id=?",
@@ -208,8 +206,6 @@ async def billing_config():
                 price = stripe.Price.retrieve(price_id)
                 item.update({"currency": price.get("currency"), "unit_amount": price.get("unit_amount")})
             except Exception:
-                # Keep the server-enforced inline price available if a stale
-                # optional catalog Price ID is ever configured.
                 pass
         packages[name] = item
     return {
@@ -218,6 +214,7 @@ async def billing_config():
         "mode": "payment",
         "provider": "stripe",
         "automatic_tax": STRIPE_AUTOMATIC_TAX,
+        "payment_stage": "after_build",
     }
 
 
@@ -226,7 +223,7 @@ async def create_checkout(data: CheckoutIn, user_id: str = Depends(core.current_
     ensure_billing_schema()
     with core.db() as con:
         project = con.execute(
-            "SELECT id,user_id,package,name,status FROM projects WHERE id=? AND user_id=?",
+            "SELECT id,user_id,package,name,status,repo_name FROM projects WHERE id=? AND user_id=?",
             (data.project_id, user_id),
         ).fetchone()
     if not project:
@@ -237,6 +234,8 @@ async def create_checkout(data: CheckoutIn, user_id: str = Depends(core.current_
         raise HTTPException(503, f"Stripe checkout for package {package} is not configured")
     if project_is_paid(project["id"]):
         return {"paid": True, "project_id": project["id"]}
+    if project["status"] not in {"ready_for_payment", "payment_pending"} or not project["repo_name"]:
+        raise HTTPException(409, "Website is not finished yet. Payment becomes available after build and QA.")
 
     create_args: dict[str, Any] = {
         "mode": "payment",
@@ -283,7 +282,7 @@ async def payment_status(project_id: str, user_id: str = Depends(core.current_us
     ensure_billing_schema()
     with core.db() as con:
         project = con.execute(
-            "SELECT id,package FROM projects WHERE id=? AND user_id=?",
+            "SELECT id,package,status,repo_name FROM projects WHERE id=? AND user_id=?",
             (project_id, user_id),
         ).fetchone()
         payment = con.execute(
@@ -296,6 +295,7 @@ async def payment_status(project_id: str, user_id: str = Depends(core.current_us
         "project_id": project_id,
         "package": project["package"],
         "required": package_is_configured(project["package"]),
+        "ready_for_payment": bool(project["status"] in {"ready_for_payment", "payment_pending"} and project["repo_name"]),
         "paid": bool(payment and payment["status"] == "paid"),
         "payment": dict(payment) if payment else None,
     }
