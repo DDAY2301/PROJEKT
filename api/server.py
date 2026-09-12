@@ -12,6 +12,7 @@ import api.billing_gate  # noqa: F401 - waits for successful payment before gene
 import api.media  # noqa: F401 - registers authenticated image upload routes
 import api.media_render  # noqa: F401 - integrates uploaded images in generated pages
 import api.premium_quality  # noqa: F401 - blocks technically valid but low-quality websites
+import api.vision_review  # noqa: F401 - adds local multimodal art-direction review to Chromium QA
 import api.enhanced_runtime  # noqa: F401 - adds media, rendered visual QA and publishing states
 import api.learning_runtime  # noqa: F401 - persistent anonymous operational learning memory
 import api.revisions  # noqa: F401 - registers post-build revision routes
