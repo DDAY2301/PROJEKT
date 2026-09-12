@@ -21,12 +21,15 @@ jobs:
           python -m py_compile
           api/main.py api/robust_generation.py api/premium_generation.py api/premium_quality.py
           api/billing.py api/billing_gate.py api/media.py api/media_render.py api/binary_publish.py
-          api/pages_publish.py api/visual_qa.py api/enhanced_runtime.py api/learning_runtime.py api/revisions.py
-          api/retry_routes.py api/dashboard.py api/server.py api/create_test_user.py
+          api/pages_publish.py api/visual_qa.py api/vision_review.py api/enhanced_runtime.py
+          api/learning_runtime.py api/revisions.py api/retry_routes.py api/dashboard.py
+          api/server.py api/create_test_user.py
       - name: Import complete server
         env:
           APP_SECRET: ci-only-secret
           OLLAMA_MODEL: qwen2.5-coder:3b
+          VISUAL_QA_MODEL: qwen2.5vl:3b
+          VISUAL_QA_VISION: 'false'
         run: |
           python - <<'PY'
           import api.server
@@ -83,6 +86,7 @@ jobs:
           test -f dist/assets/workspace-upgrades.js
           test -f dist/assets/dashboard.js
           test -f api/visual_qa.py
+          test -f api/vision_review.py
           test -f api/dashboard.py
           test -f api/learning_runtime.py
           test -f api/create_test_user.py
