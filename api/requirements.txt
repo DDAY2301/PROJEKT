@@ -7,3 +7,5 @@ pydantic[email]==2.11.7
 apscheduler==3.11.0
 stripe==12.5.1
 python-multipart==0.0.20
+Pillow==11.3.0
+playwright==1.55.0
