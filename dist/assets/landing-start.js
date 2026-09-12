@@ -4,42 +4,28 @@
   const validPackages = new Set(['Start','Standard','Premium']);
   const prices = {Start:'490 €', Standard:'890 €', Premium:'1.490 €'};
 
-  function cleanApi(value) {
-    return String(value || '').trim().replace(/\/$/, '');
-  }
+  function cleanApi(value) { return String(value || '').trim().replace(/\/$/, ''); }
   function apiFromLanding() {
     const params = new URLSearchParams(location.search);
     const fromUrl = cleanApi(params.get('api'));
-    if (fromUrl && /^https?:\/\//i.test(fromUrl)) {
-      localStorage.setItem(API_STORAGE_KEY, fromUrl);
-      return fromUrl;
-    }
+    if (fromUrl && /^https?:\/\//i.test(fromUrl)) { localStorage.setItem(API_STORAGE_KEY, fromUrl); return fromUrl; }
     const saved = cleanApi(localStorage.getItem(API_STORAGE_KEY));
     return /^https?:\/\//i.test(saved) ? saved : '';
   }
   const activeApi = apiFromLanding();
 
-  function readDraft() {
-    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') || {}; }
-    catch { return {}; }
-  }
-  function writeDraft(patch = {}) {
-    const next = {...readDraft(), ...patch, updated_at:new Date().toISOString()};
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    return next;
-  }
-  function chosenPackage() {
-    const draft = readDraft();
-    return validPackages.has(draft.package) ? draft.package : 'Standard';
-  }
+  function readDraft() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') || {}; } catch { return {}; } }
+  function writeDraft(patch = {}) { const next={...readDraft(),...patch,updated_at:new Date().toISOString()}; localStorage.setItem(STORAGE_KEY,JSON.stringify(next)); return next; }
+  function chosenPackage() { const draft=readDraft(); return validPackages.has(draft.package) ? draft.package : 'Standard'; }
   function builderUrl(pkg) {
-    const url = new URL('builder.html', location.href);
-    url.search = '';
-    url.hash = '';
-    url.searchParams.set('paket', pkg);
-    if (activeApi) url.searchParams.set('api', activeApi);
-    url.searchParams.set('v', 'landing-flow');
-    return url.href;
+    const url = new URL('builder.html', location.href); url.search=''; url.hash=''; url.searchParams.set('paket',pkg); if(activeApi)url.searchParams.set('api',activeApi); url.searchParams.set('v','landing-flow'); return url.href;
+  }
+  function dashboardUrl() { const url=new URL('dashboard.html',location.href); url.search=''; if(activeApi)url.searchParams.set('api',activeApi); return url.href; }
+
+  const navLinks=document.querySelector('.nav-links');
+  if(navLinks && !navLinks.querySelector('[data-dashboard-link]')){
+    const a=document.createElement('a'); a.href=dashboardUrl(); a.dataset.dashboardLink='1'; a.textContent='Moji projekti';
+    const button=navLinks.querySelector('.button'); navLinks.insertBefore(a,button||null);
   }
 
   const packageSection = document.querySelector('#paketi .wrap');
@@ -61,10 +47,7 @@
   const card = document.createElement('div');
   card.className = 'landing-start';
   card.innerHTML = `
-    <div class="landing-start-head">
-      <div><div class="eyebrow">Začni že na prvi strani</div><h3>Osnovni brief se prenese v builder.</h3><p>Vpiši ključne podatke, izberi paket in nadaljuj. Vnos se shrani samo v tvojem brskalniku in se v builderju samodejno izpolni.</p></div>
-      <span class="landing-start-badge">SHRANI IN NADALJUJ</span>
-    </div>
+    <div class="landing-start-head"><div><div class="eyebrow">Začni že na prvi strani</div><h3>Osnovni brief se prenese v builder.</h3><p>Vpiši ključne podatke, izberi paket in nadaljuj. Vnos se shrani samo v tvojem brskalniku in se v builderju samodejno izpolni.</p></div><span class="landing-start-badge">SHRANI IN NADALJUJ</span></div>
     <div class="landing-start-grid">
       <div class="landing-field"><label for="landingName">Ime projekta</label><input id="landingName" autocomplete="off"></div>
       <div class="landing-field"><label for="landingOrg">Organizacija / podjetje</label><input id="landingOrg" autocomplete="organization"></div>
@@ -72,59 +55,16 @@
       <div class="landing-field"><label for="landingProgramme">Program / dejavnost</label><input id="landingProgramme" placeholder="npr. storitev, Erasmus+, produkt"></div>
       <div class="landing-field full"><label for="landingGoal">Kaj mora spletna stran doseči?</label><textarea id="landingGoal" placeholder="Na kratko opiši namen, ponudbo in želeni rezultat."></textarea></div>
     </div>
-    <div class="landing-package-row" aria-label="Izbira paketa">
-      ${['Start','Standard','Premium'].map(name => `<button type="button" class="landing-package" data-landing-package="${name}"><strong>${name}</strong><span>${prices[name]}</span></button>`).join('')}
-    </div>
+    <div class="landing-package-row" aria-label="Izbira paketa">${['Start','Standard','Premium'].map(name=>`<button type="button" class="landing-package" data-landing-package="${name}"><strong>${name}</strong><span>${prices[name]}</span></button>`).join('')}</div>
     <div class="landing-start-actions"><span class="landing-saved" id="landingSaved">Osnutek se shranjuje samodejno.</span><button class="button" id="landingContinue" type="button">Nadaljuj v builder →</button></div>`;
   priceGrid.parentNode.insertBefore(card, priceGrid);
 
-  const fields = {
-    name: document.getElementById('landingName'),
-    organization: document.getElementById('landingOrg'),
-    audience: document.getElementById('landingAudience'),
-    programme: document.getElementById('landingProgramme'),
-    goal: document.getElementById('landingGoal'),
-  };
-  Object.entries(fields).forEach(([key, el]) => {
-    el.value = draft[key] || '';
-    el.addEventListener('input', () => {
-      writeDraft({[key]:el.value});
-      const saved = document.getElementById('landingSaved');
-      if (saved) saved.textContent = 'Shranjeno v tem brskalniku.';
-    });
-  });
-
-  let pkg = chosenPackage();
-  function paintPackage() {
-    document.querySelectorAll('[data-landing-package]').forEach(btn => btn.classList.toggle('active', btn.dataset.landingPackage === pkg));
-  }
+  const fields={name:document.getElementById('landingName'),organization:document.getElementById('landingOrg'),audience:document.getElementById('landingAudience'),programme:document.getElementById('landingProgramme'),goal:document.getElementById('landingGoal')};
+  Object.entries(fields).forEach(([key,el])=>{el.value=draft[key]||'';el.addEventListener('input',()=>{writeDraft({[key]:el.value});const saved=document.getElementById('landingSaved');if(saved)saved.textContent='Shranjeno v tem brskalniku.';});});
+  let pkg=chosenPackage();
+  function paintPackage(){document.querySelectorAll('[data-landing-package]').forEach(btn=>btn.classList.toggle('active',btn.dataset.landingPackage===pkg));}
   paintPackage();
-  document.querySelectorAll('[data-landing-package]').forEach(btn => btn.addEventListener('click', () => {
-    pkg = btn.dataset.landingPackage;
-    writeDraft({package:pkg});
-    paintPackage();
-  }));
-
-  document.getElementById('landingContinue')?.addEventListener('click', () => {
-    writeDraft({
-      package:pkg,
-      name:fields.name.value,
-      organization:fields.organization.value,
-      audience:fields.audience.value,
-      programme:fields.programme.value,
-      goal:fields.goal.value,
-    });
-    location.href = builderUrl(pkg);
-  });
-
-  document.querySelectorAll('a[href*="builder.html"]').forEach(link => {
-    link.addEventListener('click', event => {
-      event.preventDefault();
-      const href = new URL(link.href, location.href);
-      const explicit = href.searchParams.get('paket');
-      const selected = validPackages.has(explicit) ? explicit : pkg;
-      writeDraft({package:selected});
-      location.href = builderUrl(selected);
-    });
-  });
+  document.querySelectorAll('[data-landing-package]').forEach(btn=>btn.addEventListener('click',()=>{pkg=btn.dataset.landingPackage;writeDraft({package:pkg});paintPackage();}));
+  document.getElementById('landingContinue')?.addEventListener('click',()=>{writeDraft({package:pkg,name:fields.name.value,organization:fields.organization.value,audience:fields.audience.value,programme:fields.programme.value,goal:fields.goal.value});location.href=builderUrl(pkg);});
+  document.querySelectorAll('a[href*="builder.html"]').forEach(link=>link.addEventListener('click',event=>{event.preventDefault();const href=new URL(link.href,location.href);const explicit=href.searchParams.get('paket');const selected=validPackages.has(explicit)?explicit:pkg;writeDraft({package:selected});location.href=builderUrl(selected);}));
 })();
