@@ -17,7 +17,12 @@ jobs:
       - name: Install dependencies
         run: pip install -r api/requirements.txt
       - name: Compile API runtime
-        run: python -m py_compile api/main.py api/pages_publish.py api/enhanced_runtime.py api/revisions.py api/server.py
+        run: >-
+          python -m py_compile
+          api/main.py api/robust_generation.py api/premium_generation.py api/premium_quality.py
+          api/billing.py api/billing_gate.py api/media.py api/media_render.py api/binary_publish.py
+          api/pages_publish.py api/enhanced_runtime.py api/learning_runtime.py api/revisions.py
+          api/retry_routes.py api/server.py api/create_test_user.py
       - name: Import complete server
         env:
           APP_SECRET: ci-only-secret
@@ -29,14 +34,34 @@ jobs:
           required = {
               '/health',
               '/auth/register',
+              '/auth/login',
               '/projects',
+              '/projects/{project_id}/images',
               '/projects/{project_id}/revise',
               '/projects/{project_id}/revisions',
+              '/billing/config',
+              '/billing/checkout',
+              '/agent/learning',
           }
           missing = required - routes
           assert not missing, f'Missing routes: {missing}'
           print(api.server.app.title)
           PY
+      - name: Validate media placement rules
+        run: |
+          python - <<'PY'
+          from api.media import _safe_placement
+          assert _safe_placement('hero') == 'hero'
+          assert _safe_placement('page:programme:content') == 'page:programme:content'
+          assert _safe_placement('page:stories:gallery') == 'page:stories:gallery'
+          assert _safe_placement('../unsafe') == 'auto'
+          PY
+      - name: Check browser JavaScript syntax
+        run: |
+          node --check dist/assets/builder.js
+          node --check dist/assets/revision-ui.js
+          node --check dist/assets/landing-start.js
+          node --check dist/assets/workspace-upgrades.js
       - name: Check product files
         run: |
           test -f dist/index.html
@@ -45,6 +70,9 @@ jobs:
           test -f dist/404.html
           test -f dist/assets/builder.js
           test -f dist/assets/revision-ui.js
-          test -f assets/revision-ui.js
+          test -f dist/assets/landing-start.js
+          test -f dist/assets/workspace-upgrades.js
+          test -f api/learning_runtime.py
+          test -f api/create_test_user.py
           test -f start-product.ps1
           test -f start-stable-local.ps1
