@@ -11,7 +11,9 @@ import api.billing  # noqa: F401 - registers Stripe Checkout/payment routes
 import api.billing_gate  # noqa: F401 - waits for successful payment before generation
 import api.media  # noqa: F401 - registers authenticated image upload routes
 import api.media_render  # noqa: F401 - integrates uploaded images in generated pages
+import api.premium_quality  # noqa: F401 - blocks technically valid but low-quality websites
 import api.enhanced_runtime  # noqa: F401 - patches core.generate_project
+import api.learning_runtime  # noqa: F401 - persistent anonymous operational learning memory
 import api.revisions  # noqa: F401 - registers post-build revision routes
 import api.retry_routes  # noqa: F401 - registers failed-build retry route
 
