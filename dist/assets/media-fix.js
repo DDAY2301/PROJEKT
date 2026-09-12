@@ -34,14 +34,24 @@
     if (accepted.length) status(`SLIKE DODANE\n${accepted.length} datotek je pripravljenih. Za vsako lahko nastaviš stran, vlogo in focal point.`);
   }
 
+  function loadPostbuildPaymentFlow() {
+    if (document.querySelector('script[data-pv-payment-flow]')) return;
+    const script = document.createElement('script');
+    script.src = 'assets/payment-flow-v2.js?v=20260912-2';
+    script.defer = true;
+    script.dataset.pvPaymentFlow = '1';
+    document.body.appendChild(script);
+  }
+
   function bind() {
     const input = document.getElementById('projectImages');
-    if (!input || input.dataset.pvPickerBound === '1') return;
-    input.dataset.pvPickerBound = '1';
-    input.addEventListener('change', event => {
-      addPickedFiles(event.target.files);
-      event.target.value = '';
-    });
+    if (input && input.dataset.pvPickerBound !== '1') {
+      input.dataset.pvPickerBound = '1';
+      input.addEventListener('change', event => {
+        addPickedFiles(event.target.files);
+        event.target.value = '';
+      });
+    }
 
     document.querySelectorAll('.stage').forEach(stage => {
       if (/Media studio|Videz/.test(stage.textContent || '')) {
@@ -49,6 +59,8 @@
         stage.addEventListener('click', () => document.getElementById('mediaStudioCard')?.scrollIntoView({behavior:'smooth', block:'start'}));
       }
     });
+
+    loadPostbuildPaymentFlow();
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind);
