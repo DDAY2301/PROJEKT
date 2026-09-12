@@ -64,6 +64,26 @@ def _safe_stem(name: str) -> str:
     return (stem or "image")[:48]
 
 
+def _safe_placement(value: str) -> str:
+    """Allow generic placement or an explicit page+role target.
+
+    Examples:
+      hero
+      gallery
+      content
+      auto
+      page:index:hero
+      page:programme:content
+      page:stories:gallery
+    """
+    value = (value or "auto").strip().lower()
+    if value in {"auto", "hero", "gallery", "content"}:
+        return value
+    if re.fullmatch(r"page:[a-z0-9][a-z0-9-]{0,70}:(?:hero|gallery|content)", value):
+        return value
+    return "auto"
+
+
 @core.app.post("/projects/{project_id}/images")
 async def upload_project_image(
     project_id: str,
@@ -96,7 +116,7 @@ async def upload_project_image(
     if not data:
         raise HTTPException(400, "Image file is empty")
 
-    placement = placement if placement in {"auto", "hero", "gallery", "content"} else "auto"
+    placement = _safe_placement(placement)
     image_id = str(uuid.uuid4())
     ext = ALLOWED_TYPES[mime]
     filename = f"{count + 1:02d}-{_safe_stem(file.filename or 'image')}-{image_id[:8]}{ext}"
