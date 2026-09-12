@@ -1,7 +1,23 @@
 (() => {
   const STORAGE_KEY = 'pv_draft_v1';
+  const API_STORAGE_KEY = 'pv_api_url';
   const validPackages = new Set(['Start','Standard','Premium']);
   const prices = {Start:'490 €', Standard:'890 €', Premium:'1.490 €'};
+
+  function cleanApi(value) {
+    return String(value || '').trim().replace(/\/$/, '');
+  }
+  function apiFromLanding() {
+    const params = new URLSearchParams(location.search);
+    const fromUrl = cleanApi(params.get('api'));
+    if (fromUrl && /^https?:\/\//i.test(fromUrl)) {
+      localStorage.setItem(API_STORAGE_KEY, fromUrl);
+      return fromUrl;
+    }
+    const saved = cleanApi(localStorage.getItem(API_STORAGE_KEY));
+    return /^https?:\/\//i.test(saved) ? saved : '';
+  }
+  const activeApi = apiFromLanding();
 
   function readDraft() {
     try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') || {}; }
@@ -18,7 +34,11 @@
   }
   function builderUrl(pkg) {
     const url = new URL('builder.html', location.href);
+    url.search = '';
+    url.hash = '';
     url.searchParams.set('paket', pkg);
+    if (activeApi) url.searchParams.set('api', activeApi);
+    url.searchParams.set('v', 'landing-flow');
     return url.href;
   }
 
@@ -99,14 +119,12 @@
 
   document.querySelectorAll('a[href*="builder.html"]').forEach(link => {
     link.addEventListener('click', event => {
+      event.preventDefault();
       const href = new URL(link.href, location.href);
       const explicit = href.searchParams.get('paket');
       const selected = validPackages.has(explicit) ? explicit : pkg;
       writeDraft({package:selected});
-      if (!href.searchParams.get('paket')) {
-        event.preventDefault();
-        location.href = builderUrl(selected);
-      }
+      location.href = builderUrl(selected);
     });
   });
 })();
