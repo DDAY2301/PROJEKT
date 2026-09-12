@@ -1,5 +1,6 @@
 param(
   [string]$Model = "qwen2.5-coder:3b",
+  [string]$VisualModel = "qwen2.5vl:3b",
   [int]$Port = 8000,
   [switch]$SkipGitHub
 )
@@ -23,7 +24,7 @@ function Find-Python {
   throw "Python 3.12+ was not found."
 }
 
-Write-Host "[1/8] Checking Python and Ollama..."
+Write-Host "[1/9] Checking Python and Ollama..."
 $pythonCmd = Find-Python
 $version = & $pythonCmd.Command @($pythonCmd.Args) -c "import sys; print('.'.join(map(str,sys.version_info[:3])))"
 if ($LASTEXITCODE -ne 0) { throw "Python check failed." }
@@ -32,7 +33,7 @@ Write-Host "Using Python $version"
 $ollama = Get-Command ollama -ErrorAction SilentlyContinue
 if (-not $ollama) { throw "Ollama was not found in PATH." }
 
-Write-Host "[2/8] Checking local Ollama API..."
+Write-Host "[2/9] Checking local Ollama API..."
 try {
   $tags = Invoke-RestMethod -Uri "http://127.0.0.1:11434/api/tags" -TimeoutSec 5
 } catch {
@@ -40,15 +41,24 @@ try {
   Start-Sleep -Seconds 3
   $tags = Invoke-RestMethod -Uri "http://127.0.0.1:11434/api/tags" -TimeoutSec 10
 }
-$hasModel = $false
-foreach ($m in $tags.models) { if ($m.name -eq $Model) { $hasModel = $true } }
-if (-not $hasModel) {
+$models = @($tags.models | ForEach-Object { $_.name })
+if ($models -notcontains $Model) {
   Write-Host "Model $Model is missing. Pulling it now..."
   & $ollama.Source pull $Model
   if ($LASTEXITCODE -ne 0) { throw "Failed to pull Ollama model $Model." }
 }
 
-Write-Host "[3/8] Checking port $Port..."
+Write-Host "[3/9] Preparing local vision reviewer..."
+$tags = Invoke-RestMethod -Uri "http://127.0.0.1:11434/api/tags" -TimeoutSec 5
+$models = @($tags.models | ForEach-Object { $_.name })
+if ($models -notcontains $VisualModel) {
+  Write-Host "Downloading $VisualModel for screenshot art-direction QA (one-time download)..." -ForegroundColor Cyan
+  & $ollama.Source pull $VisualModel
+  if ($LASTEXITCODE -ne 0) { throw "Failed to pull visual QA model $VisualModel." }
+}
+Write-Host "Vision reviewer: READY / $VisualModel" -ForegroundColor Green
+
+Write-Host "[4/9] Checking port $Port..."
 $listener = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($listener) {
   try {
@@ -65,7 +75,7 @@ if ($listener) {
   }
 }
 
-Write-Host "[4/8] Preparing isolated Python environment..."
+Write-Host "[5/9] Preparing isolated Python environment..."
 $recreateVenv = $false
 if (Test-Path ".venv\Scripts\python.exe") {
   try {
@@ -85,18 +95,20 @@ if ($LASTEXITCODE -ne 0) { throw "Dependency installation failed." }
 & ".\.venv\Scripts\python.exe" -c "import fastapi, pydantic, uvicorn, PIL, playwright; print('Dependencies OK')"
 if ($LASTEXITCODE -ne 0) { throw "Dependency verification failed." }
 
-Write-Host "[5/8] Preparing Chromium visual QA engine..."
+Write-Host "[6/9] Preparing Chromium visual QA engine..."
 $browserProbe = & ".\.venv\Scripts\python.exe" -c "from pathlib import Path; from playwright.sync_api import sync_playwright; p=sync_playwright().start(); x=Path(p.chromium.executable_path); p.stop(); print('ok' if x.exists() else 'missing')"
 if ($browserProbe -ne 'ok') {
   Write-Host "Installing headless Chromium for desktop/tablet/mobile QA..."
   & ".\.venv\Scripts\python.exe" -m playwright install chromium
   if ($LASTEXITCODE -ne 0) { throw "Could not install Chromium required for visual QA." }
 }
-Write-Host "Visual QA: READY / Chromium" -ForegroundColor Green
+Write-Host "Visual QA browser: READY / Chromium" -ForegroundColor Green
 
-Write-Host "[6/8] Configuring local agent..."
+Write-Host "[7/9] Configuring local agent..."
 $env:OLLAMA_BASE_URL = "http://127.0.0.1:11434"
 $env:OLLAMA_MODEL = $Model
+$env:VISUAL_QA_MODEL = $VisualModel
+$env:VISUAL_QA_VISION = "true"
 $env:GITHUB_OWNER = "DDAY2301"
 
 $secretFile = Join-Path $repoRoot "api\data\.app-secret"
@@ -113,7 +125,7 @@ if (-not $env:APP_SECRET) {
 if (-not $env:APP_SECRET) { throw "Could not prepare APP_SECRET." }
 Write-Host "Local login sessions: PERSISTENT across restarts" -ForegroundColor Green
 
-Write-Host "[7/8] Connecting GitHub repository access..."
+Write-Host "[8/9] Connecting GitHub repository access..."
 if (-not $SkipGitHub -and -not $env:GITHUB_TOKEN) {
   Write-Host "The token is kept only in this process and is NOT saved to the repository."
   Write-Host "For full automatic publishing use a fine-grained token with:" -ForegroundColor Yellow
@@ -137,7 +149,7 @@ if ($env:GITHUB_TOKEN) {
   Write-Warning "GitHub repository publishing is disabled."
 }
 
-Write-Host "[8/8] Starting API and builder..."
+Write-Host "[9/9] Starting API and builder..."
 Write-Host "Health:  http://127.0.0.1:$Port/health"
 Write-Host "Builder: http://127.0.0.1:$Port/builder/"
 Write-Host "Dashboard: http://127.0.0.1:$Port/dashboard.html"
