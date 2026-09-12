@@ -10,7 +10,7 @@
     visual_qa:'Visual QA',
     fixing:'Samodejni popravki',
     repository_ready:'Končna koda je pripravljena',
-    ready_for_payment:'Stran je izdelana — čaka na plačilo',
+    ready_for_payment:'Stran je izdelana — pripravljena za plačilo',
     payment_pending:'Plačilo v teku',
     publishing:'Plačilo potrjeno — objavljam stran',
     ready:'Končano',
@@ -19,6 +19,23 @@
   };
 
   let checkoutStarted = false;
+
+  // Replace the old "payment before build" note with the actual commercial flow.
+  window.updateCheckoutHint = function updateCheckoutHintPostbuild() {
+    const hint = document.getElementById('checkoutHint');
+    const packageEl = document.getElementById('package');
+    if (!hint || !packageEl) return;
+    const name = packageEl.value;
+    const pkg = billingConfig.packages?.[name] || {};
+    if (pkg.configured && typeof pkg.unit_amount === 'number') {
+      hint.innerHTML = `<strong>Najprej izdelamo stran.</strong> Po končanem buildu in Visual QA plačaš ${money(pkg.unit_amount, pkg.currency)}. Šele nato se stran javno objavi.`;
+    } else if (billingConfig.enabled) {
+      hint.innerHTML = `<strong>Paket ${name} še nima aktivnega plačila.</strong> Stran se lahko izdela, javna objava pa sledi po urejeni ceni.`;
+    } else {
+      hint.innerHTML = '<strong>Testni način:</strong> izdelava in objava lahko tečeta brez plačila.';
+    }
+  };
+  setTimeout(() => window.updateCheckoutHint(), 0);
 
   function updatePostbuildPipeline(projectStatus) {
     if (typeof updatePipeline === 'function') updatePipeline(projectStatus);
@@ -33,7 +50,7 @@
         } else {
           el.classList.add('running');
           el.classList.remove('done');
-          if (state) state.textContent = 'čaka plačilo';
+          if (state) state.textContent = 'plačilo';
         }
       });
     }
@@ -43,7 +60,7 @@
     if (checkoutStarted) return;
     checkoutStarted = true;
     try {
-      status('STRAN JE IZDELANA IN PREVERJENA\nPlačilo odklene javno objavo. Odpiram varno Stripe Checkout stran ...');
+      status('STRAN JE IZDELANA IN PREVERJENA\nOdpiram varno Stripe plačilo. Po uspešnem plačilu gre ista stran takoj v javno objavo ...');
       const checkout = await request('/billing/checkout', {
         method:'POST',
         body:JSON.stringify({project_id:projectId})
@@ -58,8 +75,31 @@
       window.location.assign(checkout.checkout_url);
     } catch (e) {
       checkoutStarted = false;
-      status(`PLAČILA NI MOGOČE ODPRETI\n${e.message}\n\nStran je izdelana in ostaja shranjena. Poskusi ponovno iz projekta.`);
+      status(`PLAČILA NI MOGOČE ODPRETI\n${e.message}\n\nStran je izdelana in ostaja shranjena. Poskusi ponovno.`);
     }
+  }
+
+  function showPayButton(projectId) {
+    const actions = document.getElementById('resultActions');
+    if (!actions) return;
+    actions.classList.add('visible');
+    let pay = document.getElementById('payPublishButton');
+    if (!pay) {
+      pay = document.createElement('button');
+      pay.id = 'payPublishButton';
+      pay.type = 'button';
+      pay.className = 'button small';
+      pay.textContent = 'Plačaj in objavi →';
+      actions.insertBefore(pay, actions.firstChild);
+    }
+    pay.onclick = () => beginCheckout(projectId);
+
+    const siteLink = document.getElementById('siteLink');
+    if (siteLink) siteLink.remove();
+  }
+
+  function clearPayButton() {
+    document.getElementById('payPublishButton')?.remove();
   }
 
   async function watchPostbuild(id) {
@@ -74,16 +114,16 @@
         const lines = [
           localLabels[project.status] || project.status,
           `Projekt: ${id}`,
-          `GitHub repo: ${project.repo_name || 'še ni ustvarjen'}`,
+          `Koda: ${project.repo_name ? 'pripravljena' : 'v izdelavi'}`,
           `Visual QA: ${audit.visual_qa?.score ?? '—'}`,
           `Najdene težave: ${issues.length}`
         ];
 
         if (project.status === 'ready_for_payment') {
-          lines.push('', 'Spletna stran je v celoti izdelana in preverjena.', 'Še ni javno objavljena. Plačilo jo odklene za objavo.');
+          lines.push('', 'Spletna stran je v celoti izdelana in je prestala zaključni pregled.', 'Še NI javno dostopna.', 'Klikni »Plačaj in objavi«; po potrditvi plačila bo ista izdelana stran šla live brez ponovne generacije.');
           status(lines.join('\n'));
-          await sleep(700);
-          await beginCheckout(id);
+          showPayButton(id);
+          if (typeof loadRecentProjects === 'function') loadRecentProjects();
           return;
         }
 
@@ -91,9 +131,11 @@
           lines.push('', 'Stripe Checkout čaka na zaključek plačila.');
         }
         if (project.status === 'publishing') {
+          clearPayButton();
           lines.push('', 'Plačilo je potrjeno. Objavljam že izdelano stran — brez ponovne generacije.');
         }
         if (project.status === 'ready' && project.repo_name) {
+          clearPayButton();
           setResultLinks(project.repo_name);
           document.getElementById('resultActions')?.classList.add('visible');
           lines.push('', `Javna stran: ${finalSiteUrl(project.repo_name)}`);
@@ -102,6 +144,7 @@
           return;
         }
         if (project.status === 'needs_review' || project.status === 'failed') {
+          clearPayButton();
           if (project.repo_name) document.getElementById('resultActions')?.classList.add('visible');
           if (issues.length) lines.push('', ...issues.slice(0,6).map(x => `• ${x.message}`));
           status(lines.join('\n'));
@@ -129,10 +172,11 @@
       if (!healthy) throw new Error('Storitev trenutno ni dosegljiva.');
 
       checkoutStarted = false;
+      clearPayButton();
       resetPipeline();
       updatePipeline('queued');
       document.getElementById('resultActions')?.classList.remove('visible');
-      status('ZAČENJAM IZDELAVO\nPlačilo bo zahtevano šele, ko bo stran izdelana in uspešno prestala QA.');
+      status('ZAČENJAM IZDELAVO\nPlačilo bo zahtevano šele, ko bo stran izdelana in uspešno prestala Visual QA.');
 
       const created = await request('/projects', {
         method:'POST',
@@ -149,7 +193,7 @@
       if (created.payment_bypassed) {
         status(`TESTNI RAČUN — PAYMENT BYPASS\nProjekt: ${created.id}\nStran se bo izdelala, preverila in objavila brez plačila.`);
       } else if (created.payment_required) {
-        status(`IZDELAVA ZAČETA\nProjekt: ${created.id}\n${selectedImages.length ? `Slike: ${selectedImages.length}\n` : ''}Plačilo sledi šele po končanem buildu in Visual QA.`);
+        status(`IZDELAVA ZAČETA\nProjekt: ${created.id}\n${selectedImages.length ? `Slike: ${selectedImages.length}\n` : ''}Najprej izdelava + QA. Plačilo sledi čisto na koncu pred objavo.`);
       } else {
         status(`IZDELAVA ZAČETA\nProjekt: ${created.id}\n${selectedImages.length ? `Slike: ${selectedImages.length}\n` : ''}Testni način brez plačila.`);
       }
@@ -166,9 +210,6 @@
     startProjectBuildFirst();
   }, true);
 
-  // When Stripe returns after a successful end-of-build payment, the legacy
-  // handler verifies the session. This observer updates the message to reflect
-  // the new model: the site already exists; only publication remains.
   const params = new URLSearchParams(location.search);
   if (params.get('payment') === 'success' && params.get('project_id')) {
     setTimeout(() => {
