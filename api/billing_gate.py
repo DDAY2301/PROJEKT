@@ -1,14 +1,11 @@
-"""Payment gate for new website projects.
+"""Project creation with post-build payment gating.
 
-When Stripe is configured, creating a project stores the brief and waits for a
-successful Checkout payment before the autonomous generation task starts.
-When Stripe is not configured, local development keeps the historical immediate
-build behaviour.
+All projects are generated and quality-checked before payment. If Stripe is
+configured, the finished source is held unpublished until payment succeeds.
+Only after payment does the existing generated repository get published live.
 
 A narrowly scoped sandbox bypass exists for the dedicated QA account
 maj@klemec.org. It is active only when the configured Stripe key is a TEST key.
-It can therefore never bypass payment when the service is using a live Stripe
-secret key.
 """
 
 import asyncio
@@ -25,7 +22,6 @@ TEST_BYPASS_EMAILS = {"maj@klemec.org"}
 
 
 def sandbox_payment_bypass(user_id: str) -> bool:
-    """Return True only for an approved QA account while Stripe is in test mode."""
     if not billing.STRIPE_SECRET_KEY.startswith("sk_test_"):
         return False
     with core.db() as con:
@@ -34,8 +30,8 @@ def sandbox_payment_bypass(user_id: str) -> bool:
     return email in TEST_BYPASS_EMAILS
 
 
-# Remove the original POST /projects route registered by api.main. Revisions,
-# reads and other project routes remain untouched.
+# Replace the original POST /projects route so project creation always starts a
+# build immediately. Payment is enforced only after QA and repository creation.
 core.app.router.routes[:] = [
     route
     for route in core.app.router.routes
@@ -47,15 +43,14 @@ core.app.router.routes[:] = [
 
 
 @core.app.post("/projects")
-async def create_project_with_payment_gate(
+async def create_project_with_postbuild_payment(
     data: core.ProjectCreate,
     user_id: str = Depends(core.current_user),
 ):
     pid = str(uuid.uuid4())
     cfg = data.model_dump(mode="json")
     bypass = sandbox_payment_bypass(user_id)
-    requires_payment = billing.package_is_configured(data.package) and not bypass
-    initial_status = "awaiting_payment" if requires_payment else "queued"
+    payment_required = billing.package_is_configured(data.package) and not bypass
 
     with core.db() as con:
         con.execute(
@@ -64,7 +59,7 @@ async def create_project_with_payment_gate(
                 pid,
                 user_id,
                 data.package,
-                initial_status,
+                "queued",
                 data.name,
                 json.dumps(cfg, ensure_ascii=False),
                 core.now_iso(),
@@ -72,12 +67,12 @@ async def create_project_with_payment_gate(
             ),
         )
 
-    if not requires_payment:
-        asyncio.create_task(core.generate_project(pid))
+    asyncio.create_task(core.generate_project(pid))
 
     return {
         "id": pid,
-        "status": initial_status,
-        "payment_required": requires_payment,
+        "status": "queued",
+        "payment_required": payment_required,
         "payment_bypassed": bypass,
+        "payment_stage": "after_build",
     }
