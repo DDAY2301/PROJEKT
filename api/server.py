@@ -12,10 +12,11 @@ import api.billing_gate  # noqa: F401 - waits for successful payment before gene
 import api.media  # noqa: F401 - registers authenticated image upload routes
 import api.media_render  # noqa: F401 - integrates uploaded images in generated pages
 import api.premium_quality  # noqa: F401 - blocks technically valid but low-quality websites
-import api.enhanced_runtime  # noqa: F401 - patches core.generate_project
+import api.enhanced_runtime  # noqa: F401 - adds media, rendered visual QA and publishing states
 import api.learning_runtime  # noqa: F401 - persistent anonymous operational learning memory
 import api.revisions  # noqa: F401 - registers post-build revision routes
 import api.retry_routes  # noqa: F401 - registers failed-build retry route
+import api.dashboard  # noqa: F401 - customer dashboard, domains and source delivery
 
 app = core.app
 DIST_DIR = Path(__file__).resolve().parent.parent / "dist"
@@ -42,8 +43,6 @@ async def builder_redirect():
     return RedirectResponse(url="/builder.html", status_code=307)
 
 
-# API routes are registered before the static mount. The enhanced runtime adds
-# observable design/build/audit/fix/publish states while keeping the same API.
-# Static files are mounted last so /health, /auth/* and /projects/* remain API
-# endpoints and the landing page / builder share the same origin locally.
+# API routes are registered before the static mount. Static files are mounted
+# last so /health, /auth/*, /projects/* and /dashboard/* remain API endpoints.
 app.mount("/", StaticFiles(directory=str(DIST_DIR), html=True), name="site")
