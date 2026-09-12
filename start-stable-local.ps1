@@ -150,15 +150,17 @@ try {
   Write-Warning "Could not verify browser local-network preflight. The API itself is still online."
 }
 
-Write-Host "[6/6] Opening public builder..."
+Write-Host "[6/6] Opening public landing page..."
 $localApi = "http://127.0.0.1:$Port"
 $encodedApi = [Uri]::EscapeDataString($localApi)
+$landing = "https://dday2301.github.io/PROJEKT/?api=$encodedApi&v=stable-local"
 $builder = "https://dday2301.github.io/PROJEKT/builder.html?api=$encodedApi&v=stable-local"
 Write-Host ""
-Write-Host "PUBLIC SITE: https://dday2301.github.io/PROJEKT/" -ForegroundColor Cyan
-Write-Host "BUILDER: $builder" -ForegroundColor Cyan
+Write-Host "PUBLIC LANDING: $landing" -ForegroundColor Cyan
+Write-Host "BUILDER (opens only after landing choice): $builder" -ForegroundColor DarkCyan
 Write-Host "LOCAL HEALTH: $localApi/health" -ForegroundColor Cyan
 Write-Host ""
+Write-Host "Flow: landing page -> choose package / brief -> builder -> build / publish." -ForegroundColor Green
 Write-Host "If Chrome asks whether this site may access devices on your local network, choose Allow." -ForegroundColor Yellow
 Write-Host "Keep the Ollama/API window open while building sites." -ForegroundColor Yellow
-Start-Process $builder
+Start-Process $landing
