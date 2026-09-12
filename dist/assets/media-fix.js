@@ -37,7 +37,7 @@
   function loadPostbuildPaymentFlow() {
     if (document.querySelector('script[data-pv-payment-flow]')) return;
     const script = document.createElement('script');
-    script.src = 'assets/payment-flow-v2.js?v=20260912-2';
+    script.src = 'assets/payment-flow-v2.js?v=20260912-3';
     script.defer = true;
     script.dataset.pvPaymentFlow = '1';
     document.body.appendChild(script);
