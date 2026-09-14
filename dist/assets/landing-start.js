@@ -1,7 +1,7 @@
 (() => {
   const STORAGE_KEY = 'pv_draft_v1';
   const API_STORAGE_KEY = 'pv_api_url';
-  const PUBLIC_BUILD_ID = 'media-20260914-3';
+  const PUBLIC_BUILD_ID = 'media-20260914-4';
   const validPackages = new Set(['Start','Standard','Premium']);
   const prices = {Start:'490 €', Standard:'890 €', Premium:'1.490 €'};
 
@@ -19,7 +19,7 @@
   function writeDraft(patch = {}) { const next={...readDraft(),...patch,updated_at:new Date().toISOString()}; localStorage.setItem(STORAGE_KEY,JSON.stringify(next)); return next; }
   function chosenPackage() { const draft=readDraft(); return validPackages.has(draft.package) ? draft.package : 'Standard'; }
   function builderUrl(pkg) {
-    const url = new URL('builder.html', location.href); url.search=''; url.hash='';
+    const url = new URL('builder/', location.href); url.search=''; url.hash='';
     url.searchParams.set('paket',pkg);
     if(activeApi)url.searchParams.set('api',activeApi);
     url.searchParams.set('v',PUBLIC_BUILD_ID);
@@ -76,5 +76,5 @@
   paintPackage();
   document.querySelectorAll('[data-landing-package]').forEach(btn=>btn.addEventListener('click',()=>{pkg=btn.dataset.landingPackage;writeDraft({package:pkg});paintPackage();}));
   document.getElementById('landingContinue')?.addEventListener('click',()=>{writeDraft({package:pkg,name:fields.name.value,organization:fields.organization.value,audience:fields.audience.value,programme:fields.programme.value,goal:fields.goal.value});location.href=builderUrl(pkg);});
-  document.querySelectorAll('a[href*="builder.html"]').forEach(link=>link.addEventListener('click',event=>{event.preventDefault();const href=new URL(link.href,location.href);const explicit=href.searchParams.get('paket');const selected=validPackages.has(explicit)?explicit:pkg;writeDraft({package:selected});location.href=builderUrl(selected);}));
+  document.querySelectorAll('a[href*="builder.html"],a[href*="builder/"]').forEach(link=>link.addEventListener('click',event=>{event.preventDefault();const href=new URL(link.href,location.href);const explicit=href.searchParams.get('paket');const selected=validPackages.has(explicit)?explicit:pkg;writeDraft({package:selected});location.href=builderUrl(selected);}));
 })();
