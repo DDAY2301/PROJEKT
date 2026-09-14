@@ -1,6 +1,7 @@
 (() => {
   const STORAGE_KEY = 'pv_draft_v1';
   const API_STORAGE_KEY = 'pv_api_url';
+  const PUBLIC_BUILD_ID = 'media-20260914-3';
   const validPackages = new Set(['Start','Standard','Premium']);
   const prices = {Start:'490 €', Standard:'890 €', Premium:'1.490 €'};
 
@@ -18,9 +19,18 @@
   function writeDraft(patch = {}) { const next={...readDraft(),...patch,updated_at:new Date().toISOString()}; localStorage.setItem(STORAGE_KEY,JSON.stringify(next)); return next; }
   function chosenPackage() { const draft=readDraft(); return validPackages.has(draft.package) ? draft.package : 'Standard'; }
   function builderUrl(pkg) {
-    const url = new URL('builder.html', location.href); url.search=''; url.hash=''; url.searchParams.set('paket',pkg); if(activeApi)url.searchParams.set('api',activeApi); url.searchParams.set('v','landing-flow'); return url.href;
+    const url = new URL('builder.html', location.href); url.search=''; url.hash='';
+    url.searchParams.set('paket',pkg);
+    if(activeApi)url.searchParams.set('api',activeApi);
+    url.searchParams.set('v',PUBLIC_BUILD_ID);
+    return url.href;
   }
-  function dashboardUrl() { const url=new URL('dashboard.html',location.href); url.search=''; if(activeApi)url.searchParams.set('api',activeApi); return url.href; }
+  function dashboardUrl() {
+    const url=new URL('dashboard.html',location.href); url.search='';
+    if(activeApi)url.searchParams.set('api',activeApi);
+    url.searchParams.set('v',PUBLIC_BUILD_ID);
+    return url.href;
+  }
 
   const navLinks=document.querySelector('.nav-links');
   if(navLinks && !navLinks.querySelector('[data-dashboard-link]')){
