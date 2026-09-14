@@ -35,12 +35,17 @@ Write-Host "=======================================" -ForegroundColor Green
 Write-Host "GitHub Pages frontend + local loopback agent" -ForegroundColor DarkCyan
 Write-Host ""
 
+Write-Host "[1/7] Updating approved agent source..."
 if (Get-Command git -ErrorAction SilentlyContinue) {
-  Write-Host "[1/6] Updating repository..."
   git pull --ff-only | Out-Host
+  try { $env:PV_SOURCE_COMMIT = (git rev-parse --short HEAD).Trim() } catch { $env:PV_SOURCE_COMMIT = "unknown" }
+  Write-Host "Source version: $env:PV_SOURCE_COMMIT" -ForegroundColor Green
+} else {
+  $env:PV_SOURCE_COMMIT = "unknown"
+  Write-Warning "Git was not found; newest approved source cannot be checked automatically."
 }
 
-Write-Host "[2/6] Checking local engine..."
+Write-Host "[2/7] Checking local engine and latest model tag..."
 try {
   $tags = Invoke-RestMethod -Uri "http://127.0.0.1:11434/api/tags" -TimeoutSec 3
 } catch {
@@ -49,13 +54,18 @@ try {
 }
 if (-not $tags) { throw "Ollama did not start." }
 $models = @($tags.models | ForEach-Object { $_.name })
-if ($models -notcontains $Model) {
-  & ollama pull $Model
-  if ($LASTEXITCODE -ne 0) { throw "Could not download $Model." }
+$hadModel = $models -contains $Model
+try {
+  & ollama pull $Model | Out-Host
+  if ($LASTEXITCODE -ne 0 -and -not $hadModel) { throw "Could not download $Model." }
+  if ($LASTEXITCODE -ne 0 -and $hadModel) { Write-Warning "Could not check for a newer model digest; using the installed $Model." }
+} catch {
+  if (-not $hadModel) { throw }
+  Write-Warning "Could not check for a newer model digest; using the installed $Model."
 }
 Write-Host "Local engine: ONLINE / $Model" -ForegroundColor Green
 
-Write-Host "[3/6] Preparing GitHub publishing..."
+Write-Host "[3/7] Preparing GitHub publishing..."
 if (-not $env:GITHUB_TOKEN) {
   $env:GITHUB_TOKEN = Read-SecretText "Paste GitHub token (hidden)"
 }
@@ -68,12 +78,10 @@ try {
 }
 Write-Host "GitHub: CONNECTED as $($gh.login)" -ForegroundColor Green
 
-Write-Host "[4/6] Preparing Stripe Checkout..."
+Write-Host "[4/7] Preparing Stripe Checkout..."
 $stripeSecretFile = Join-Path $repoRoot "api\data\.stripe-secret"
 if (-not $env:STRIPE_SECRET_KEY -and (Test-Path $stripeSecretFile)) {
   try {
-    # ConvertTo/From-SecureString uses Windows DPAPI by default, binding the
-    # encrypted value to the current Windows user. No plaintext secret is kept.
     $savedSecure = (Get-Content $stripeSecretFile -Raw).Trim() | ConvertTo-SecureString
     $env:STRIPE_SECRET_KEY = Secure-ToText $savedSecure
   } catch {
@@ -93,6 +101,9 @@ if (-not $env:STRIPE_SECRET_KEY) {
 if (-not $env:PUBLIC_BUILDER_URL) {
   $env:PUBLIC_BUILDER_URL = "https://dday2301.github.io/PROJEKT/builder.html"
 }
+if (-not $env:PUBLIC_DASHBOARD_URL) {
+  $env:PUBLIC_DASHBOARD_URL = "https://dday2301.github.io/PROJEKT/dashboard.html"
+}
 if ($env:STRIPE_SECRET_KEY) {
   if ($env:STRIPE_SECRET_KEY -like 'sk_live_*') {
     Write-Host "Stripe Checkout: LIVE / Start 490 EUR / Standard 890 EUR / Premium 1490 EUR" -ForegroundColor Yellow
@@ -105,7 +116,28 @@ if ($env:STRIPE_SECRET_KEY) {
   Write-Host "Stripe Checkout: DISABLED (development fallback)" -ForegroundColor DarkYellow
 }
 
-Write-Host "[5/6] Starting fresh website service..."
+Write-Host "[5/7] Loading customer email delivery..."
+$resendSecretFile = Join-Path $repoRoot "api\data\.resend-secret"
+$resendFromFile = Join-Path $repoRoot "api\data\.resend-from"
+if (-not $env:RESEND_API_KEY -and (Test-Path $resendSecretFile)) {
+  try {
+    $savedResend = (Get-Content $resendSecretFile -Raw).Trim() | ConvertTo-SecureString
+    $env:RESEND_API_KEY = Secure-ToText $savedResend
+  } catch {
+    Write-Warning "Saved email key could not be loaded. Run .\configure-email.ps1 again."
+  }
+}
+if (-not $env:RESEND_FROM_EMAIL -and (Test-Path $resendFromFile)) {
+  $env:RESEND_FROM_EMAIL = (Get-Content $resendFromFile -Raw).Trim()
+}
+if ($env:RESEND_API_KEY) {
+  if (-not $env:RESEND_FROM_EMAIL) { $env:RESEND_FROM_EMAIL = "Project Visibility <onboarding@resend.dev>" }
+  Write-Host "Customer email: ENABLED / $env:RESEND_FROM_EMAIL" -ForegroundColor Green
+} else {
+  Write-Host "Customer email: DISABLED / run .\configure-email.ps1 once to enable handoff emails" -ForegroundColor DarkYellow
+}
+
+Write-Host "[6/7] Starting fresh website service..."
 $listener = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($listener) {
   $proc = Get-Process -Id $listener.OwningProcess -ErrorAction SilentlyContinue
@@ -150,7 +182,7 @@ try {
   Write-Warning "Could not verify browser local-network preflight. The API itself is still online."
 }
 
-Write-Host "[6/6] Opening public landing page..."
+Write-Host "[7/7] Opening public landing page..."
 $localApi = "http://127.0.0.1:$Port"
 $encodedApi = [Uri]::EscapeDataString($localApi)
 $landing = "https://dday2301.github.io/PROJEKT/?api=$encodedApi&v=stable-local"
@@ -159,8 +191,10 @@ Write-Host ""
 Write-Host "PUBLIC LANDING: $landing" -ForegroundColor Cyan
 Write-Host "BUILDER (opens only after landing choice): $builder" -ForegroundColor DarkCyan
 Write-Host "LOCAL HEALTH: $localApi/health" -ForegroundColor Cyan
+Write-Host "SOURCE: $env:PV_SOURCE_COMMIT / newest approved GitHub main" -ForegroundColor Green
 Write-Host ""
-Write-Host "Flow: landing page -> choose package / brief -> builder -> build / publish." -ForegroundColor Green
+Write-Host "Flow: landing -> package/brief -> builder/media -> generation -> private preview -> payment -> live." -ForegroundColor Green
+Write-Host "The agent reloads persistent learning from SQLite on every build and updates approved source/model tags on restart." -ForegroundColor Green
 Write-Host "If Chrome asks whether this site may access devices on your local network, choose Allow." -ForegroundColor Yellow
 Write-Host "Keep the Ollama/API window open while building sites." -ForegroundColor Yellow
 Start-Process $landing
