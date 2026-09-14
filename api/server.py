@@ -14,10 +14,13 @@ import api.media_render  # noqa: F401 - integrates uploaded images in generated 
 import api.premium_quality  # noqa: F401 - blocks technically valid but low-quality websites
 import api.vision_review  # noqa: F401 - adds local multimodal art-direction review to Chromium QA
 import api.enhanced_runtime  # noqa: F401 - adds media, rendered visual QA and publishing states
-import api.learning_runtime  # noqa: F401 - persistent anonymous operational learning memory
+import api.learning_runtime  # noqa: F401 - persistent versioned operational learning memory
 import api.revisions  # noqa: F401 - registers post-build revision routes
 import api.retry_routes  # noqa: F401 - registers failed-build retry route
 import api.dashboard  # noqa: F401 - customer dashboard, domains and source delivery
+import api.preview  # noqa: F401 - secure private pre-payment preview sessions
+import api.notifications  # noqa: F401 - customer deployment handoff email routes
+import api.handoff_runtime  # noqa: F401 - deployment guide + automatic notification wrapper
 
 app = core.app
 DIST_DIR = Path(__file__).resolve().parent.parent / "dist"
