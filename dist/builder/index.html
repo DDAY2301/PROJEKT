@@ -4,16 +4,20 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>Project Visibility</title>
   <script>
     (function () {
-      var target = '../builder.html' + window.location.search + window.location.hash;
+      var params = new URLSearchParams(window.location.search);
+      params.set('v', 'media-20260914-4');
+      var target = '../builder.html?' + params.toString() + window.location.hash;
       window.location.replace(target);
     }());
   </script>
 </head>
 <body>
-  <p>Odpiram builder … <a id="fallback" href="../builder.html">Nadaljuj</a></p>
-  <script>document.getElementById('fallback').href='../builder.html'+location.search+location.hash;</script>
+  <p>Odpiram najnovejši builder …</p>
 </body>
 </html>
