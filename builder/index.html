@@ -4,16 +4,17 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex">
-  <title>Project Visibility</title>
-  <script>
-    (function () {
-      var target = '../builder.html' + window.location.search + window.location.hash;
-      window.location.replace(target);
-    }());
-  </script>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <title>Project Visibility Studio</title>
 </head>
 <body>
-  <p>Odpiram builder … <a id="fallback" href="../builder.html">Nadaljuj</a></p>
-  <script>document.getElementById('fallback').href='../builder.html'+location.search+location.hash;</script>
+<script>
+(function () {
+  var target = '../studio/' + window.location.search + window.location.hash;
+  window.location.replace(target);
+}());
+</script>
+<p>Odpiram Project Visibility Studio … <a id="fallback" href="../studio/">Nadaljuj</a></p>
+<script>document.getElementById('fallback').href='../studio/'+location.search+location.hash;</script>
 </body>
 </html>
