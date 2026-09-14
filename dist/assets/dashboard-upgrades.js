@@ -1,4 +1,26 @@
 (() => {
+  const qs = new URLSearchParams(location.search);
+  const API = (qs.get('api') || localStorage.getItem('pv_api_url') || '').trim().replace(/\/$/, '');
+  const token = () => localStorage.getItem('pv_token') || '';
+
+  function state(text, good=false) {
+    const el = document.getElementById('state');
+    if (!el) return;
+    el.textContent = text;
+    el.style.color = good ? '#d9ff65' : '#a7bbb3';
+  }
+
+  async function apiRequest(path, options={}) {
+    if (!API) throw new Error('API povezava ni nastavljena.');
+    const headers = {'Content-Type':'application/json', ...(options.headers || {})};
+    if (token()) headers.Authorization = `Bearer ${token()}`;
+    const res = await fetch(`${API}${path}`, {...options, headers});
+    const text = await res.text();
+    let data; try { data = JSON.parse(text); } catch { data = {detail:text}; }
+    if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : `HTTP ${res.status}`);
+    return data;
+  }
+
   function button(label, attr, id) {
     const el = document.createElement('button');
     el.type = 'button';
@@ -11,7 +33,7 @@
   async function openPreview(projectId) {
     const popup = window.open('about:blank', '_blank');
     try {
-      const session = await request(`/projects/${projectId}/preview-session`, {method:'POST'});
+      const session = await apiRequest(`/projects/${projectId}/preview-session`, {method:'POST'});
       if (!session.url) throw new Error('Preview URL ni bil ustvarjen.');
       if (popup) popup.location = session.url;
       else window.location.href = session.url;
@@ -25,7 +47,7 @@
   async function sendHandoff(projectId) {
     try {
       state('Pošiljam deployment napotke …');
-      const result = await request(`/projects/${projectId}/handoff-email`, {method:'POST'});
+      const result = await apiRequest(`/projects/${projectId}/handoff-email`, {method:'POST'});
       state(`Napotki so poslani na ${result.recipient || 'e-pošto uporabnika'}.`, true);
     } catch (err) {
       state(err.message);
