@@ -24,53 +24,20 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
 
-      - name: Prepare canonical public studio
+      - name: Validate public builder
         shell: bash
         run: |
           set -euo pipefail
-          ASSET_V="${GITHUB_SHA::12}"
-          STUDIO="studio-v3.html"
-
-          # Publish the actual current builder under a brand-new canonical file name.
-          # This path has never been used by the old UI, so stale browser/CDN copies
-          # of builder.html cannot affect it.
-          cp dist/builder.html "dist/${STUDIO}"
-
-          # Bust CSS/JS assets with this exact release SHA.
-          sed -i -E "s#v=202609[0-9-]+#v=${ASSET_V}#g" "dist/${STUDIO}"
-          sed -i -E "s#v=202609[0-9-]+#v=${ASSET_V}#g" dist/index.html
-          sed -i -E "s#v=202609[0-9-]+#v=${ASSET_V}#g" dist/dashboard.html
-
-          # Point every public entry point at the canonical studio file.
-          sed -i "s#builder\.html#${STUDIO}#g" dist/index.html
-          sed -i "s#new URL('builder/', location.href)#new URL('${STUDIO}', location.href)#" dist/assets/landing-start.js
-          sed -i "s#builder\.html#${STUDIO}#g" dist/dashboard.html
-
-          # Also version the landing script itself so old browser copies cannot
-          # intercept package buttons and send the user to the retired builder path.
-          sed -i -E "s#landing-start\.js\?v=[^\"']+#landing-start.js?v=${ASSET_V}#g" dist/index.html
-
-          # Old bookmarks remain valid but immediately converge on studio-v3.
-          cat > dist/builder.html <<EOF
-          <!doctype html>
-          <html lang="sl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Pragma" content="no-cache"><meta http-equiv="Expires" content="0"><title>Project Visibility</title></head>
-          <body><script>location.replace('./${STUDIO}'+location.search+location.hash)</script><p>Odpiram Project Visibility studio …</p></body></html>
-          EOF
-
-          cat > dist/builder/index.html <<EOF
-          <!doctype html>
-          <html lang="sl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><title>Project Visibility</title></head>
-          <body><script>location.replace('../${STUDIO}'+location.search+location.hash)</script><p>Odpiram Project Visibility studio …</p></body></html>
-          EOF
-
-          printf '%s\n' "${STUDIO}" > dist/current-workspace.txt
-          printf '%s\n' "${GITHUB_SHA}" > dist/release.txt
-
-          # Hard fail the deployment if Media Studio is missing from the published HTML.
-          grep -q 'id="mediaStudioCard"' "dist/${STUDIO}"
-          grep -q 'id="projectImages"' "dist/${STUDIO}"
-          grep -q 'Fotografije in logotip' "dist/${STUDIO}"
-          grep -q "${STUDIO}" dist/index.html
+          test -f dist/index.html
+          test -f dist/builder.html
+          test -f dist/dashboard.html
+          test -f dist/assets/builder.js
+          test -f dist/assets/media-fix.js
+          grep -q 'id="mediaStudioCard"' dist/builder.html
+          grep -q 'id="projectImages"' dist/builder.html
+          grep -q 'Fotografije in logotip' dist/builder.html
+          grep -q 'Drag & drop' dist/builder.html
+          grep -q 'assets/media-fix.js' dist/builder.html
 
       - uses: actions/upload-pages-artifact@v3
         with:
