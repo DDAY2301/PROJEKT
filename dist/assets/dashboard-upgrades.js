@@ -54,23 +54,34 @@
     }
   }
 
+  function sourceReady(card) {
+    const text = card.textContent || '';
+    return !/Repo:\s*še ni ustvarjen/i.test(text);
+  }
+
   function enhanceCard(card) {
-    if (!card || card.dataset.pvUpgraded === '1') return;
+    if (!card) return;
     const projectId = card.dataset.project;
     if (!projectId) return;
-    card.dataset.pvUpgraded = '1';
 
+    const ready = sourceReady(card);
     const mainActions = card.querySelector('.project-main .project-actions');
-    if (mainActions && !mainActions.querySelector('[data-private-preview]')) {
+    const existingPreview = mainActions?.querySelector('[data-private-preview]');
+    if (ready && mainActions && !existingPreview) {
       const preview = button('Private preview ↗', 'privatePreview', projectId);
       mainActions.insertBefore(preview, mainActions.firstChild);
+    } else if (!ready) {
+      existingPreview?.remove();
     }
 
     const handoffPanel = Array.from(card.querySelectorAll('.panel')).find(panel => /Predaja in koda/.test(panel.textContent || ''));
     const handoffActions = handoffPanel?.querySelector('.project-actions');
-    if (handoffActions && !handoffActions.querySelector('[data-handoff-email]')) {
+    const existingEmail = handoffActions?.querySelector('[data-handoff-email]');
+    if (ready && handoffActions && !existingEmail) {
       const email = button('Pošlji napotke na e-mail', 'handoffEmail', projectId);
       handoffActions.appendChild(email);
+    } else if (!ready) {
+      existingEmail?.remove();
     }
   }
 
