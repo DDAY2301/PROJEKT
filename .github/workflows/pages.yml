@@ -36,13 +36,19 @@ jobs:
           # of builder.html cannot affect it.
           cp dist/builder.html "dist/${STUDIO}"
 
-          # Bust all builder CSS/JS assets with this exact release SHA.
-          sed -i -E "s#v=20260914-[0-9]+#v=${ASSET_V}#g" "dist/${STUDIO}"
+          # Bust CSS/JS assets with this exact release SHA.
+          sed -i -E "s#v=202609[0-9-]+#v=${ASSET_V}#g" "dist/${STUDIO}"
+          sed -i -E "s#v=202609[0-9-]+#v=${ASSET_V}#g" dist/index.html
+          sed -i -E "s#v=202609[0-9-]+#v=${ASSET_V}#g" dist/dashboard.html
 
           # Point every public entry point at the canonical studio file.
           sed -i "s#builder\.html#${STUDIO}#g" dist/index.html
           sed -i "s#new URL('builder/', location.href)#new URL('${STUDIO}', location.href)#" dist/assets/landing-start.js
           sed -i "s#builder\.html#${STUDIO}#g" dist/dashboard.html
+
+          # Also version the landing script itself so old browser copies cannot
+          # intercept package buttons and send the user to the retired builder path.
+          sed -i -E "s#landing-start\.js\?v=[^\"']+#landing-start.js?v=${ASSET_V}#g" dist/index.html
 
           # Old bookmarks remain valid but immediately converge on studio-v3.
           cat > dist/builder.html <<EOF
@@ -64,6 +70,7 @@ jobs:
           grep -q 'id="mediaStudioCard"' "dist/${STUDIO}"
           grep -q 'id="projectImages"' "dist/${STUDIO}"
           grep -q 'Fotografije in logotip' "dist/${STUDIO}"
+          grep -q "${STUDIO}" dist/index.html
 
       - uses: actions/upload-pages-artifact@v3
         with:
