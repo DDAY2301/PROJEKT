@@ -81,6 +81,15 @@ jobs:
           node --check dist/assets/preview-email-ui.js
           node --check dist/assets/dashboard.js
           node --check dist/assets/dashboard-upgrades.js
+      - name: Check public Media Studio contract
+        run: |
+          grep -q 'id="mediaStudioCard"' dist/builder.html
+          grep -q 'id="projectImages"' dist/builder.html
+          grep -q 'Fotografije in logotip' dist/builder.html
+          grep -q 'Drag & drop' dist/builder.html
+          grep -q 'assets/media-fix.js' dist/builder.html
+          grep -q 'assets/workspace-upgrades.js' dist/builder.html
+          grep -q 'studio-v3.html' .github/workflows/pages.yml
       - name: Check product files
         run: |
           test -f dist/index.html
