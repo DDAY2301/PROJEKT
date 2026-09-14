@@ -63,11 +63,10 @@ def _audit(value: str | None) -> dict[str, Any]:
 
 
 def _public_url(project: dict[str, Any], audit: dict[str, Any]) -> str | None:
-    if audit.get("public_url"):
+    # A deterministic GitHub Pages URL is not the same thing as a live site.
+    # Only expose the public link after the publisher has confirmed public_live.
+    if audit.get("public_live") and audit.get("public_url"):
         return str(audit["public_url"])
-    repo = project.get("repo_name")
-    if repo:
-        return f"https://{core.GITHUB_OWNER.lower()}.github.io/{repo}/"
     return None
 
 
@@ -118,6 +117,7 @@ async def dashboard_projects(user_id: str = Depends(core.current_user)):
                 "created_at": project["created_at"],
                 "updated_at": project["updated_at"],
                 "auto_fix_attempts": int(project.get("auto_fix_attempts") or 0),
+                "preview_ready": bool(project.get("repo_name") and audit.get("repository_ready")),
                 "public_url": _public_url(project, audit),
                 "public_live": bool(audit.get("public_live")),
                 "payment": dict(payment) if payment else None,
@@ -169,7 +169,7 @@ async def download_project_source(project_id: str, user_id: str = Depends(core.c
     if not project:
         raise HTTPException(404, "Project not found")
     if not project["repo_name"]:
-        raise HTTPException(409, "Project source is not published yet")
+        raise HTTPException(409, "Project source is not ready yet")
     url = f"https://api.github.com/repos/{core.GITHUB_OWNER}/{project['repo_name']}/zipball/main"
     async with httpx.AsyncClient(timeout=120, headers=core.github_headers(), follow_redirects=True) as client:
         response = await client.get(url)
