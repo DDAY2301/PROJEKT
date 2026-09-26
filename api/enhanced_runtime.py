@@ -21,6 +21,7 @@ import api.visual_qa as visual_qa
 from api.pages_publish import PagesPermissionError, publish_generated_site, wait_for_generated_site
 
 logger = logging.getLogger("project_visibility.build")
+MIN_VISUAL_QA_SCORE = 80
 
 TEST_BYPASS_EMAILS = {"maj@klemec.org"}
 
@@ -110,6 +111,18 @@ def _severe(issues: list[dict[str, Any]]) -> bool:
     return any(item.get("severity") in {"critical", "high"} for item in issues)
 
 
+def _quality_gate_passed(issues: list[dict[str, Any]], visual_report: dict[str, Any]) -> bool:
+    if _severe(issues):
+        return False
+    if not visual_report.get("available") or not visual_report.get("passed"):
+        return False
+    score = visual_report.get("score")
+    try:
+        return float(score) >= MIN_VISUAL_QA_SCORE
+    except (TypeError, ValueError):
+        return False
+
+
 def _visual_summary(report: dict[str, Any]) -> dict[str, Any]:
     return {
         "available": bool(report.get("available")),
@@ -158,13 +171,14 @@ async def _quality_cycle(
     project_id: str,
     uploaded_images: list[dict[str, Any]],
 ) -> tuple[dict[str, Any], list[dict[str, Any]], int, dict[str, Any]]:
-    attempts = 0
+    text_attempts = 0
+    visual_attempts = 0
     audit1 = core.static_audit(files)
     audit2 = await core.ai_audit(files, config)
     text_issues = audit1["issues"] + audit2.get("issues", [])
 
-    while _severe(text_issues) and attempts < core.MAX_AUTO_FIX_ATTEMPTS:
-        attempts += 1
+    while _severe(text_issues) and text_attempts < core.MAX_AUTO_FIX_ATTEMPTS:
+        text_attempts += 1
         set_status(project_id, "fixing")
         files = await core.fix_files(files, text_issues, config)
         set_status(project_id, "auditing")
@@ -177,8 +191,8 @@ async def _quality_cycle(
     visual_issues = list(visual_report.get("issues") or [])
     combined = text_issues + visual_issues
 
-    while _severe(visual_issues) and attempts < core.MAX_AUTO_FIX_ATTEMPTS:
-        attempts += 1
+    while _severe(visual_issues) and visual_attempts < core.MAX_AUTO_FIX_ATTEMPTS:
+        visual_attempts += 1
         set_status(project_id, "fixing")
         files = await core.fix_files(files, combined, config)
         set_status(project_id, "auditing")
@@ -190,7 +204,7 @@ async def _quality_cycle(
         visual_issues = list(visual_report.get("issues") or [])
         combined = text_issues + visual_issues
 
-    return files, combined, attempts, visual_report
+    return files, combined, text_attempts + visual_attempts, visual_report
 
 
 async def _publish_existing_project(project_id: str, row: Any, audit: dict[str, Any]) -> None:
@@ -281,11 +295,17 @@ async def generate_project_observable(project_id: str):
         # Payment/webhook resume path: if the site was already generated and held
         # for payment, never regenerate it. Publish the exact approved repository.
         if row["repo_name"] and audit.get("repository_ready") and not audit.get("public_live"):
-            if stripe_required and not billing.project_is_paid(project_id):
-                set_status(project_id, "ready_for_payment")
+            existing_issues = list(audit.get("issues") or [])
+            existing_visual = dict(audit.get("visual_qa") or {})
+            if _quality_gate_passed(existing_issues, existing_visual):
+                if stripe_required and not billing.project_is_paid(project_id):
+                    set_status(project_id, "ready_for_payment")
+                    return
+                await _publish_existing_project(project_id, row, audit)
                 return
-            await _publish_existing_project(project_id, row, audit)
-            return
+            # Existing repository did not pass the release gate. Continue into a
+            # fresh self-heal/build cycle instead of exposing payment/publication.
+            set_status(project_id, "needs_review")
 
         uploaded_images = _inject_uploaded_image_metadata(project_id, config)
 
@@ -318,7 +338,15 @@ async def generate_project_observable(project_id: str):
             uploaded_images=len(uploaded_images),
             extra={
                 "payment_required": stripe_required,
-                "payment_stage": "after_build" if stripe_required else "not_required",
+                "payment_stage": (
+                    "after_build"
+                    if stripe_required and _quality_gate_passed(issues, visual_report)
+                    else "blocked_by_quality"
+                    if stripe_required
+                    else "not_required"
+                ),
+                "payment_blocked": not _quality_gate_passed(issues, visual_report),
+                "quality_gate_passed": _quality_gate_passed(issues, visual_report),
                 "preview_ready": True,
             },
         )
@@ -328,9 +356,20 @@ async def generate_project_observable(project_id: str):
                 (repo_name, audit_json, attempts, core.now_iso(), project_id),
             )
 
+        if not _quality_gate_passed(issues, visual_report):
+            set_status(project_id, "needs_review")
+            logger.warning(
+                "Website held by quality gate project=%s repo=%s visual_score=%s severe=%s",
+                project_id,
+                repo_name,
+                visual_report.get("score"),
+                _severe(issues),
+            )
+            return
+
         if stripe_required and not billing.project_is_paid(project_id):
             set_status(project_id, "ready_for_payment")
-            logger.info("Website generated and held for payment project=%s repo=%s", project_id, repo_name)
+            logger.info("Website generated, quality-approved and held for payment project=%s repo=%s", project_id, repo_name)
             return
 
         # Development mode and the dedicated sandbox QA account publish without
