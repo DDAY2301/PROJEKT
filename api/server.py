@@ -46,6 +46,18 @@ async def allow_loopback_private_network(request, call_next):
     return response
 
 
+@app.middleware("http")
+async def cache_control_for_product_shell(request, call_next):
+    """Avoid stale app shells when the local agent is updated in place."""
+    response = await call_next(request)
+    path = request.url.path.lower()
+    if path.endswith(".html") or path in {"/", "/builder/"} or path.endswith("/assets/i18n-v1.js"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
+
 # Keep the historical /builder/ URL working everywhere, but always route it to
 # the stable single-file entry point. This route is registered before the
 # static mount, so it takes precedence locally and through a tunnel.
