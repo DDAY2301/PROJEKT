@@ -113,6 +113,30 @@ jobs:
           cropped.close()
           print('ZIP, repo map and focal crop smoke tests passed')
           PY
+      - name: Validate release quality gate
+        env:
+          APP_SECRET: ci-only-secret
+          VISUAL_QA_VISION: 'false'
+        run: |
+          python - <<'PY'
+          from api.robust_generation import _repair_deterministic_bundle
+          from api.enhanced_runtime import _quality_gate_passed
+
+          files = {
+              'index.html': '<!doctype html><html><body><main><a href="contact.html">Kontakt</a><button class="menu"><span></span><span></span></button></main></body></html>',
+              'kontakt.html': '<!doctype html><html><body><main>Kontakt</main></body></html>',
+          }
+          repaired = _repair_deterministic_bundle(files)
+          assert 'href="kontakt.html"' in repaired['index.html']
+          assert 'aria-label="Open navigation menu"' in repaired['index.html']
+
+          good_visual = {'available': True, 'passed': True, 'score': 80}
+          assert _quality_gate_passed([], good_visual)
+          assert not _quality_gate_passed([{'severity':'high'}], good_visual)
+          assert not _quality_gate_passed([], {'available': True, 'passed': True, 'score': 79})
+          assert not _quality_gate_passed([], {'available': False, 'passed': False, 'score': None})
+          print('Release gate and deterministic repair tests passed')
+          PY
       - name: Check browser JavaScript syntax
         run: |
           node --check dist/assets/builder.js
@@ -127,6 +151,7 @@ jobs:
           node --check dist/assets/readiness-v3.js
           node --check dist/assets/import-v1.js
           node --check dist/assets/editor-v1.js
+          node --check dist/assets/agent-console-v1.js
       - name: Check public Media Studio contract
         run: |
           grep -q 'id="mediaStudioCard"' dist/builder.html
