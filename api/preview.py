@@ -30,7 +30,7 @@ def _safe_path(value: str) -> str:
     return str(path)
 
 
-def _preview_token(project_id: str, user_id: str, repo_name: str) -> str:
+def _preview_token(project_id: str, user_id: str, repo_name: str, ref_sha: str) -> str:
     exp = datetime.now(timezone.utc) + timedelta(minutes=PREVIEW_TTL_MINUTES)
     return jwt.encode(
         {
@@ -38,11 +38,25 @@ def _preview_token(project_id: str, user_id: str, repo_name: str) -> str:
             "project_id": project_id,
             "user_id": user_id,
             "repo_name": repo_name,
+            "ref_sha": ref_sha,
             "exp": exp,
         },
         core.APP_SECRET,
         algorithm="HS256",
     )
+
+
+async def _repo_head_sha(repo_name: str) -> str:
+    headers = dict(core.github_headers())
+    url = f"https://api.github.com/repos/{core.GITHUB_OWNER}/{repo_name}/git/ref/heads/main"
+    async with httpx.AsyncClient(timeout=30, headers=headers) as client:
+        response = await client.get(url)
+    if response.status_code >= 400:
+        raise HTTPException(502, "Could not resolve preview repository version")
+    sha = str((response.json().get("object") or {}).get("sha") or "")
+    if not sha:
+        raise HTTPException(502, "Preview repository has no main-branch version")
+    return sha
 
 
 def _decode_preview_token(token: str) -> dict:
@@ -71,13 +85,16 @@ async def create_preview_session(
     if not row["repo_name"]:
         raise HTTPException(409, "Preview becomes available after the generated source is ready")
 
-    token = _preview_token(project_id, user_id, str(row["repo_name"]))
+    repo_name = str(row["repo_name"])
+    ref_sha = await _repo_head_sha(repo_name)
+    token = _preview_token(project_id, user_id, repo_name, ref_sha)
     base = str(request.base_url).rstrip("/")
     return {
         "project_id": project_id,
         "url": f"{base}/preview/{token}/index.html",
         "expires_in": PREVIEW_TTL_MINUTES * 60,
         "status": row["status"],
+        "version": ref_sha,
     }
 
 
@@ -93,6 +110,7 @@ async def preview_asset(token: str, asset_path: str):
     project_id = str(payload.get("project_id") or "")
     repo_name = str(payload.get("repo_name") or "")
     user_id = str(payload.get("user_id") or "")
+    ref_sha = str(payload.get("ref_sha") or "main")
     if not project_id or not repo_name or not user_id:
         raise HTTPException(401, "Invalid preview token")
 
@@ -109,7 +127,7 @@ async def preview_asset(token: str, asset_path: str):
     headers["Accept"] = "application/vnd.github.raw+json"
     url = f"https://api.github.com/repos/{core.GITHUB_OWNER}/{repo_name}/contents/{path}"
     async with httpx.AsyncClient(timeout=45, headers=headers, follow_redirects=True) as client:
-        response = await client.get(url, params={"ref": "main"})
+        response = await client.get(url, params={"ref": ref_sha})
     if response.status_code == 404:
         raise HTTPException(404, "Preview file not found")
     if response.status_code >= 400:
@@ -135,7 +153,7 @@ async def preview_asset(token: str, asset_path: str):
         content=content,
         media_type=media_type,
         headers={
-            "Cache-Control": "private, max-age=60",
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
             "X-Robots-Tag": "noindex, nofollow, noarchive",
             "Content-Security-Policy": "frame-ancestors *",
         },
