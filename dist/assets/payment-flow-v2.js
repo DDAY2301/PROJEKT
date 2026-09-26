@@ -226,6 +226,7 @@
 
   async function watchPostbuild(id) {
     rememberActive(id);
+    if(typeof window.pvInstallImageStudioLink==='function')window.pvInstallImageStudioLink(id);
     const myVersion = ++watcherVersion;
     setBuildButtonBusy(true);
 
