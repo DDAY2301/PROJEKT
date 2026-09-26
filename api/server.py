@@ -21,6 +21,7 @@ import api.learning_runtime  # noqa: F401 - persistent versioned operational lea
 import api.design_critic  # noqa: F401 - independent second-pass design review
 import api.revisions  # noqa: F401 - registers post-build revision routes
 import api.retry_routes  # noqa: F401 - registers failed-build retry route
+import api.autonomous_supervisor  # noqa: F401 - typed decisions + bounded autonomous recovery watchdog
 import api.dashboard  # noqa: F401 - customer dashboard, domains and source delivery
 import api.preview  # noqa: F401 - secure private pre-payment preview sessions
 import api.notifications  # noqa: F401 - customer deployment handoff email routes
