@@ -8,13 +8,14 @@ symlinks, executable/server-side code and archive-bomb style payloads.
 
 from __future__ import annotations
 
+import asyncio
 import io
 import json
 import re
 import stat
 import uuid
 import zipfile
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from fastapi import Depends, File, Form, HTTPException, UploadFile
@@ -86,6 +87,150 @@ def _visual_summary(report: dict[str, Any]) -> dict[str, Any]:
         "version": report.get("version") or "visual-qa-v1",
         "screenshots": report.get("screenshots") or [],
     }
+
+
+IMPORT_STAGE_ROOT = Path(core.DB_PATH).resolve().parent / "site-imports"
+IMPORT_STAGE_ROOT.mkdir(parents=True, exist_ok=True)
+_import_tasks: dict[str, asyncio.Task] = {}
+
+
+def _stage_dir(project_id: str) -> Path:
+    return IMPORT_STAGE_ROOT / project_id
+
+
+def _write_stage(project_id: str, files: dict[str, bytes], manifest: dict[str, Any]) -> None:
+    root = _stage_dir(project_id)
+    if root.exists():
+        import shutil
+        shutil.rmtree(root, ignore_errors=True)
+    root.mkdir(parents=True, exist_ok=True)
+    for rel, data in files.items():
+        target = root.joinpath(*PurePosixPath(rel).parts)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+    (root / ".manifest.json").write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+
+
+def _read_stage(project_id: str) -> tuple[dict[str, bytes], dict[str, Any]]:
+    root = _stage_dir(project_id)
+    manifest_path = root / ".manifest.json"
+    if not manifest_path.is_file():
+        raise RuntimeError("Import staging data is missing")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    files: dict[str, bytes] = {}
+    for path in root.rglob("*"):
+        if not path.is_file() or path == manifest_path:
+            continue
+        rel = path.relative_to(root).as_posix()
+        files[rel] = path.read_bytes()
+    return files, manifest
+
+
+def _stage_text_files(files: dict[str, bytes]) -> tuple[dict[str, str], dict[str, str | bytes]]:
+    text_files: dict[str, str] = {}
+    deliverable: dict[str, str | bytes] = {}
+    for path, data in files.items():
+        ext = PurePosixPath(path).suffix.lower()
+        if ext in TEXT_EXTENSIONS:
+            text = data.decode("utf-8")
+            text_files[path] = text
+            deliverable[path] = text
+        else:
+            deliverable[path] = data
+    return text_files, deliverable
+
+
+async def _process_staged_import(project_id: str) -> None:
+    try:
+        extracted, manifest = _read_stage(project_id)
+        text_files, deliverable = _stage_text_files(extracted)
+        config = manifest["config"]
+        repo_slug = manifest["repo_slug"]
+        safe_name = manifest["safe_name"]
+
+        with core.db() as con:
+            con.execute(
+                "UPDATE projects SET status='repository_ready',updated_at=? WHERE id=?",
+                (core.now_iso(), project_id),
+            )
+
+        # Put source under Git first. Visual QA can then take as long as needed
+        # without holding the original browser upload request open.
+        await core.github_put_bundle(repo_slug, deliverable, f"Import existing website: {safe_name}")
+
+        static_report = core.static_audit(text_files)
+        with core.db() as con:
+            con.execute(
+                "UPDATE projects SET status='auditing',updated_at=? WHERE id=?",
+                (core.now_iso(), project_id),
+            )
+        visual_report = await visual_qa.audit_files(deliverable, f"{project_id}-import", config, [])
+        issues = list(static_report.get("issues") or []) + list(visual_report.get("issues") or [])
+        severe = any(item.get("severity") in {"critical", "high"} for item in issues if isinstance(item, dict))
+        audit = {
+            "issues": issues,
+            "repository_ready": True,
+            "public_url": None,
+            "public_live": False,
+            "preview_ready": True,
+            "imported_source": True,
+            "imported_files": len(deliverable),
+            "visual_qa": _visual_summary(visual_report),
+        }
+        with core.db() as con:
+            con.execute(
+                "UPDATE projects SET status=?,last_audit_json=?,updated_at=? WHERE id=?",
+                ("needs_review" if severe else "ready", json.dumps(audit, ensure_ascii=False), core.now_iso(), project_id),
+            )
+    except Exception as exc:
+        with core.db() as con:
+            row = con.execute("SELECT last_audit_json FROM projects WHERE id=?", (project_id,)).fetchone()
+            previous = {}
+            try:
+                previous = json.loads(row["last_audit_json"] or "{}") if row else {}
+            except Exception:
+                previous = {}
+            previous.update({
+                "issues": [{
+                    "severity": "critical",
+                    "code": "ZIP_IMPORT_FAILED",
+                    "file": "",
+                    "message": str(exc)[:700],
+                }],
+                "imported_source": True,
+                "import_failed": True,
+            })
+            con.execute(
+                "UPDATE projects SET status='failed',last_audit_json=?,updated_at=? WHERE id=?",
+                (json.dumps(previous, ensure_ascii=False), core.now_iso(), project_id),
+            )
+    finally:
+        _import_tasks.pop(project_id, None)
+
+
+def _start_import_task(project_id: str) -> bool:
+    task = _import_tasks.get(project_id)
+    if task and not task.done():
+        return False
+    _import_tasks[project_id] = asyncio.create_task(_process_staged_import(project_id))
+    return True
+
+
+@core.app.on_event("startup")
+async def resume_interrupted_site_imports() -> None:
+    # ZIP payloads are persisted before the HTTP response, so an API restart
+    # can safely continue an interrupted import instead of regenerating a site.
+    with core.db() as con:
+        rows = con.execute(
+            "SELECT id,status,config_json FROM projects WHERE status IN ('importing','repository_ready','auditing')"
+        ).fetchall()
+    for row in rows:
+        try:
+            cfg = json.loads(row["config_json"] or "{}")
+        except Exception:
+            cfg = {}
+        if cfg.get("_imported_site") and _stage_dir(row["id"]).is_dir():
+            _start_import_task(row["id"])
 
 
 @core.app.post("/imports/site")
@@ -213,68 +358,47 @@ async def import_site_zip(
         },
     }
 
+    manifest = {
+        "project_id": project_id,
+        "repo_slug": repo_slug,
+        "safe_name": safe_name,
+        "config": config,
+        "files": len(deliverable),
+        "pages": len(html_pages),
+    }
+    _write_stage(project_id, extracted, manifest)
+
     with core.db() as con:
         con.execute(
-            "INSERT INTO projects(id,user_id,package,status,name,repo_name,config_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO projects(id,user_id,package,status,name,repo_name,config_json,last_audit_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
             (
                 project_id,
                 user_id,
                 package,
-                "auditing",
+                "importing",
                 safe_name,
                 repo_slug,
                 json.dumps(config, ensure_ascii=False),
+                json.dumps({
+                    "issues": [],
+                    "repository_ready": False,
+                    "public_live": False,
+                    "preview_ready": False,
+                    "imported_source": True,
+                    "imported_files": len(deliverable),
+                    "import_stage": "accepted",
+                }, ensure_ascii=False),
                 core.now_iso(),
                 core.now_iso(),
             ),
         )
 
-    try:
-        static_report = core.static_audit(text_files)
-        visual_report = await visual_qa.audit_files(deliverable, f"{project_id}-import", config, [])
-        issues = list(static_report.get("issues") or []) + list(visual_report.get("issues") or [])
-        await core.github_put_bundle(repo_slug, deliverable, f"Import existing website: {safe_name}")
-        severe = any(item.get("severity") in {"critical", "high"} for item in issues if isinstance(item, dict))
-        audit = {
-            "issues": issues,
-            "repository_ready": True,
-            "public_url": None,
-            "public_live": False,
-            "preview_ready": True,
-            "imported_source": True,
-            "imported_files": len(deliverable),
-            "visual_qa": _visual_summary(visual_report),
-        }
-        with core.db() as con:
-            con.execute(
-                "UPDATE projects SET status=?,last_audit_json=?,updated_at=? WHERE id=?",
-                ("needs_review" if severe else "ready", json.dumps(audit, ensure_ascii=False), core.now_iso(), project_id),
-            )
-    except Exception as exc:
-        with core.db() as con:
-            con.execute(
-                "UPDATE projects SET status='failed',last_audit_json=?,updated_at=? WHERE id=?",
-                (
-                    json.dumps({
-                        "issues": [{
-                            "severity": "critical",
-                            "code": "ZIP_IMPORT_FAILED",
-                            "file": "",
-                            "message": str(exc)[:700],
-                        }],
-                        "imported_source": True,
-                    }, ensure_ascii=False),
-                    core.now_iso(),
-                    project_id,
-                ),
-            )
-        raise
-
+    _start_import_task(project_id)
     return {
         "id": project_id,
         "repo_name": repo_slug,
-        "status": "needs_review" if severe else "ready",
+        "status": "importing",
         "files": len(deliverable),
         "pages": len(html_pages),
-        "visual_qa": _visual_summary(visual_report),
+        "accepted": True,
     }
