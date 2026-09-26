@@ -297,7 +297,18 @@ async def run_revision(project_id: str, revision_id: str, instruction: str) -> N
 
         _set_revision_status(revision_id, "publishing")
         _set_project_status(project_id, "publishing")
-        await core.github_put_bundle(repo_name, files, f"Website revision: {instruction[:90]}")
+        if config.get("_imported_site") and hasattr(core, "github_replace_bundle"):
+            # Imported websites are whole repositories, not generator fragments.
+            # Publish the complete post-revision tree in one commit so removed
+            # files disappear and a process interruption cannot expose a half-
+            # updated site. Binary media from the original repo is preserved.
+            await core.github_replace_bundle(
+                repo_name,
+                {**files, **media_files},
+                f"Website revision: {instruction[:90]}",
+            )
+        else:
+            await core.github_put_bundle(repo_name, files, f"Website revision: {instruction[:90]}")
         public_url = await publish_generated_site(repo_name)
         live = await wait_for_generated_site(public_url, seconds=75)
         if not live:
