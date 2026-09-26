@@ -25,7 +25,7 @@ jobs:
           api/learning_runtime.py api/revisions.py api/retry_routes.py api/dashboard.py
           api/preview.py api/notifications.py api/handoff_runtime.py
           api/model_router.py api/repo_map.py api/deep_static_qa.py api/design_critic.py
-          api/source_editor.py api/site_import.py api/capabilities.py
+          api/source_editor.py api/site_import.py api/image_studio.py api/capabilities.py
           api/server.py api/create_test_user.py
       - name: Import complete server
         env:
@@ -64,6 +64,11 @@ jobs:
               '/projects/{project_id}/editor/context',
               '/projects/{project_id}/versions',
               '/projects/{project_id}/rollback',
+              '/projects/{project_id}/images/{image_id}/preview',
+              '/projects/{project_id}/image-studio/history/{image_id}',
+              '/projects/{project_id}/image-studio/edit',
+              '/projects/{project_id}/image-studio/generate-background',
+              '/projects/{project_id}/image-studio/restore/{snapshot_id}',
           }
           missing = required - routes
           assert not missing, f'Missing routes: {missing}'
@@ -137,6 +142,24 @@ jobs:
           assert not _quality_gate_passed([], {'available': False, 'passed': False, 'score': None})
           print('Release gate and deterministic repair tests passed')
           PY
+      - name: Validate Image Studio core
+        run: |
+          python - <<'PY'
+          from PIL import Image
+          from api.image_studio import _pct_crop, _procedural_background, _compose
+
+          img = Image.new('RGBA', (1000, 800), (255, 255, 255, 255))
+          cropped = _pct_crop(img, 10, 10, 50, 50)
+          assert cropped.size == (500, 400)
+          bg = _procedural_background('green editorial hero', 512, 512, ('#123f35','#d9ff65','#f5f7f6'))
+          assert bg.size == (512, 512)
+          subject = Image.new('RGBA', (512,512), (0,0,0,0))
+          subject.paste((255,0,0,255), (150,100,350,450))
+          composed = _compose(subject, mode='color', color='#ffffff', background=None, shadow=True)
+          assert composed.size == subject.size
+          img.close(); cropped.close(); bg.close(); subject.close(); composed.close()
+          print('Image Studio smoke tests passed')
+          PY
       - name: Check browser JavaScript syntax
         run: |
           node --check dist/assets/builder.js
@@ -152,6 +175,7 @@ jobs:
           node --check dist/assets/import-v1.js
           node --check dist/assets/editor-v1.js
           node --check dist/assets/agent-console-v1.js
+          node --check dist/assets/image-studio-v1.js
       - name: Check public Media Studio contract
         run: |
           grep -q 'id="mediaStudioCard"' dist/builder.html
@@ -169,6 +193,9 @@ jobs:
           test -f dist/builder.html
           test -f dist/dashboard.html
           test -f dist/editor.html
+          test -f dist/image-studio.html
+          test -f dist/assets/image-studio-v1.css
+          test -f dist/assets/image-studio-v1.js
           test -f dist/assets/editor-v1.css
           test -f dist/assets/editor-v1.js
           test -f dist/assets/import-v1.js
@@ -195,6 +222,7 @@ jobs:
           test -f api/design_critic.py
           test -f api/source_editor.py
           test -f api/site_import.py
+          test -f api/image_studio.py
           test -f api/capabilities.py
           test -f api/create_test_user.py
           test -f configure-email.ps1
