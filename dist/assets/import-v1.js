@@ -49,7 +49,7 @@
         const audit=project.last_audit||{};
         if(state==='failed'){
           const issue=(audit.issues||[])[0];
-          throw new Error(issue?.message||'ZIP import ni uspel.');
+          throw new Error('IMPORT_FAILED: '+(issue?.message||'ZIP import ni uspel.'));
         }
         if(state==='ready'||state==='needs_review'){
           return project;
@@ -61,7 +61,7 @@
         };
         setState(labels[state]||`Import v teku · ${state||'obdelava'} …`,true);
       }catch(err){
-        if(/ZIP import ni uspel|Status importa/.test(String(err.message||'')))throw err;
+        if(/^IMPORT_FAILED:|Status importa/.test(String(err.message||'')))throw err;
       }
       await sleep(1800);
     }
@@ -99,7 +99,12 @@
       const score=project.last_audit?.visual_qa?.score;
       setState(`Uvoženo · Visual QA ${score??'—'}/100 · odpiram Source Editor …`,true);
       const url=new URL('editor.html',location.href);url.searchParams.set('project',data.id);if(api)url.searchParams.set('api',api);location.href=url.href;
-    }catch(err){setState('NAPAKA: '+err.message);button.disabled=false;button.textContent='Uvozi ZIP →';}
+    }catch(err){
+      const message=String(err.message||err).replace(/^IMPORT_FAILED:\s*/,'');
+      setState('NAPAKA: '+message);
+      button.disabled=false;
+      button.textContent='Uvozi ZIP →';
+    }
   }
   function install(){
     const card=document.getElementById('mediaStudioCard');const main=document.querySelector('.maincol');if(!card||!main||document.getElementById('pvZipImport'))return;styles();
