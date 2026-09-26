@@ -30,8 +30,10 @@ async def agent_capabilities(user_id: str = Depends(core.current_user)):
             "name": "Project Visibility Local Website Agent",
             "architecture": "planner -> design critic -> deterministic renderer -> bundle QA -> AI QA -> Chromium visual QA -> bounded repair -> Git delivery",
             "local_first": True,
-            "primary_model": core.OLLAMA_MODEL,
+            "primary_model": model_router._models()[0] if model_router._models() else core.OLLAMA_MODEL,
             "fallback_models": model_router._models()[1:],
+            "model_mode": os.getenv("LOCAL_LLM_MODE", "auto"),
+            "openai_compatible_local": bool(os.getenv("OPENAI_COMPAT_BASE_URL", "").strip()),
         },
         "features": {
             "persistent_quality_memory": True,
@@ -44,6 +46,8 @@ async def agent_capabilities(user_id: str = Depends(core.current_user)):
             "natural_language_revisions": True,
             "responsive_media": True,
             "focal_aware_hero_crop": True,
+            "automatic_smart_focal": True,
+            "multi_backend_local_models": True,
             "webp": True,
             "avif": True,
             "private_preview": True,
@@ -59,6 +63,7 @@ async def agent_capabilities(user_id: str = Depends(core.current_user)):
             "libvips": _binary("vips"),
             "lighthouse": _binary("lighthouse"),
             "ollama": _binary("ollama"),
+            "lmstudio_cli": _binary("lms"),
             "playwright_python": _python_module("playwright"),
             "pillow": _python_module("PIL"),
             "pyvips": _python_module("pyvips"),
@@ -66,6 +71,7 @@ async def agent_capabilities(user_id: str = Depends(core.current_user)):
         "notes": {
             "libvips": "Optional. Current media engine uses Pillow LANCZOS/WebP/AVIF and focal-aware crops; libvips can become the hosted high-throughput backend.",
             "lighthouse": "Optional adapter. Core QA remains offline and does not depend on Lighthouse being installed.",
-            "source_editor": "Core editor is offline-first. A vendored Monaco/CodeMirror layer can be added without changing the editor API.",
+            "source_editor": "Core editor is offline-first and Git-backed. Monaco/CodeMirror/GrapesJS can be layered on top without changing the editor API.",
+            "local_models": "Generation can route across Ollama plus an optional OpenAI-compatible local endpoint such as LM Studio, vLLM or SGLang.",
         },
     }
