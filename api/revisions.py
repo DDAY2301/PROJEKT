@@ -69,8 +69,14 @@ def _safe_text_path(path: str) -> bool:
 
 
 def _safe_media_path(path: str) -> bool:
+    """Allow bounded static image assets from generated or imported sites."""
     low = path.lower()
-    return path.startswith("assets/images/") and low.endswith((".jpg", ".jpeg", ".png", ".webp", ".avif")) and ".." not in path.split("/")
+    parts = path.split("/")
+    if not path or path.startswith("/") or any(part in {"", ".", ".."} for part in parts):
+        return False
+    if any(part.startswith(".") for part in parts):
+        return False
+    return low.endswith((".jpg", ".jpeg", ".png", ".webp", ".avif", ".gif", ".ico"))
 
 
 async def _repo_tree(client: httpx.AsyncClient, repo_name: str) -> list[dict[str, Any]]:
