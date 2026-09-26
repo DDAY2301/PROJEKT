@@ -21,6 +21,8 @@ import api.dashboard  # noqa: F401 - customer dashboard, domains and source deli
 import api.preview  # noqa: F401 - secure private pre-payment preview sessions
 import api.notifications  # noqa: F401 - customer deployment handoff email routes
 import api.handoff_runtime  # noqa: F401 - deployment guide + automatic notification wrapper
+import api.source_editor  # noqa: F401 - authenticated source editor + Git-backed rollback
+import api.site_import  # noqa: F401 - safe existing-site ZIP import
 
 app = core.app
 DIST_DIR = Path(__file__).resolve().parent.parent / "dist"
