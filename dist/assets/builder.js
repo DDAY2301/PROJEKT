@@ -17,6 +17,11 @@ function initialApi() {
     localStorage.setItem('pv_api_url', fromUrl);
     return fromUrl;
   }
+  const configured = cleanApi(window.PV_RUNTIME?.apiBase);
+  if (configured && /^https?:\/\//i.test(configured)) {
+    localStorage.setItem('pv_api_url', configured);
+    return configured;
+  }
   const saved = cleanApi(localStorage.getItem('pv_api_url'));
   if (saved) return saved;
   if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') return location.origin;
