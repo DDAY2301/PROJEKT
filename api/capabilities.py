@@ -59,6 +59,10 @@ async def agent_capabilities(user_id: str = Depends(core.current_user)):
             "chromium_visual_qa": True,
             "deterministic_bundle_qa": True,
             "self_fix": True,
+            "autonomous_supervisor": True,
+            "typed_decision_recovery": True,
+            "bounded_retry_circuit_breaker": True,
+            "restart_job_recovery": True,
             "github_delivery": True,
         },
         "runtime": {
@@ -81,5 +85,6 @@ async def agent_capabilities(user_id: str = Depends(core.current_user)):
             "local_models": "Generation can route across Ollama plus an optional OpenAI-compatible local endpoint such as LM Studio, vLLM or SGLang.",
             "comfyui": "Optional. When COMFYUI_BASE_URL and COMFYUI_CHECKPOINT are set, Image Studio can generate AI backgrounds locally; otherwise brand-aware procedural generation remains available.",
             "rembg": "Optional. If installed, background removal uses rembg; otherwise a deterministic edge-colour fallback handles simple studio backgrounds.",
+            "autonomous_supervisor": "Local typed-decision watchdog resumes interrupted work, separates build/publish recovery, applies backoff, and opens a circuit instead of retrying forever.",
         },
     }
