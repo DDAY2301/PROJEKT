@@ -175,10 +175,28 @@
     toggle.addEventListener('click',()=>{terminal.classList.toggle('open');toggle.textContent=terminal.classList.contains('open')?'Zapri terminal':'Terminal';if(terminal.classList.contains('open'))setTimeout(()=>input.focus(),0);}); input.addEventListener('keydown',async e=>{if(e.key!=='Enter')return;e.preventDefault();const v=input.value;input.value='';try{await run(v);}catch(err){log(`ERROR: ${err.message}`);}});
   }
 
+  function installImageStudioLink(projectId) {
+    const actions=document.getElementById('resultActions');
+    if(!actions||!projectId)return;
+    let link=document.getElementById('imageStudioLink');
+    if(!link){
+      link=document.createElement('a');
+      link.id='imageStudioLink';
+      link.className='button small';
+      link.textContent='Image Studio';
+      actions.appendChild(link);
+    }
+    const url=new URL('image-studio.html',location.href);
+    url.searchParams.set('project',projectId);
+    if(API)url.searchParams.set('api',API);
+    link.href=url.href;
+    actions.classList.add('visible');
+  }
+
   async function restoreProjectHandoff() {
     const id=new URLSearchParams(location.search).get('project'); if(!id||!token||!API)return;
     try{
-      const p=await request(`/projects/${id}`); activeProjectId=id; updatePipeline(p.status); if(p.repo_name){setResultLinks(p.repo_name);document.getElementById('resultActions')?.classList.add('visible');}
+      const p=await request(`/projects/${id}`); activeProjectId=id; updatePipeline(p.status); installImageStudioLink(id); if(p.repo_name){setResultLinks(p.repo_name);document.getElementById('resultActions')?.classList.add('visible');}
       const qa=p.last_audit?.visual_qa; status(`PROJEKT ODPRT V WORKSPACE\n${p.name}\nStatus: ${p.status}\nVisual QA: ${qa?.score??'—'}${qa?.render_count?` / ${qa.render_count} renderjev`:''}\n${p.repo_name?`Repo: ${p.repo_name}`:''}`);
     }catch(err){status(`PROJEKTA NI BILO MOGOČE ODPRETI\n${err.message}`);}
   }
