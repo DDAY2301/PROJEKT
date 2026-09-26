@@ -24,6 +24,8 @@ jobs:
           api/pages_publish.py api/visual_qa.py api/vision_review.py api/enhanced_runtime.py
           api/learning_runtime.py api/revisions.py api/retry_routes.py api/dashboard.py
           api/preview.py api/notifications.py api/handoff_runtime.py
+          api/model_router.py api/repo_map.py api/deep_static_qa.py api/design_critic.py
+          api/source_editor.py api/site_import.py api/capabilities.py
           api/server.py api/create_test_user.py
       - name: Import complete server
         env:
@@ -54,6 +56,14 @@ jobs:
               '/billing/checkout',
               '/agent/learning',
               '/agent/state',
+              '/agent/models',
+              '/agent/capabilities',
+              '/imports/site',
+              '/projects/{project_id}/editor/files',
+              '/projects/{project_id}/editor/file',
+              '/projects/{project_id}/editor/context',
+              '/projects/{project_id}/versions',
+              '/projects/{project_id}/rollback',
           }
           missing = required - routes
           assert not missing, f'Missing routes: {missing}'
@@ -71,6 +81,38 @@ jobs:
           assert _clamp_percent(-4) == 0
           assert _clamp_percent(104) == 100
           PY
+      - name: Validate ZIP import and repo map safety
+        run: |
+          python - <<'PY'
+          from fastapi import HTTPException
+          from PIL import Image
+          from api.site_import import _normalise_member
+          from api.repo_map import build_repo_map
+          from api.media import _focal_crop
+
+          assert _normalise_member('site/assets/app.js') == 'site/assets/app.js'
+          assert _normalise_member('node_modules/x.js') is None
+          try:
+              _normalise_member('../escape.html')
+              raise AssertionError('Traversal path was accepted')
+          except HTTPException:
+              pass
+
+          files = {
+              'index.html': '<!doctype html><html><head><title>Demo</title></head><body><h1>Hello</h1><main id="main">X</main></body></html>',
+              'assets/site.css': ':root{--primary:#123456}.hero{display:grid}@media(max-width:700px){.hero{display:block}}',
+              'assets/site.js': 'function boot(){ return true; }',
+          }
+          repo_map = build_repo_map(files)
+          assert 'index.html' in repo_map and 'Hello' in repo_map and 'boot' in repo_map
+
+          image = Image.new('RGB', (1600, 1200), 'white')
+          cropped = _focal_crop(image, 16/10, 75, 40)
+          assert cropped.size == (1600, 1000)
+          image.close()
+          cropped.close()
+          print('ZIP, repo map and focal crop smoke tests passed')
+          PY
       - name: Check browser JavaScript syntax
         run: |
           node --check dist/assets/builder.js
@@ -81,6 +123,10 @@ jobs:
           node --check dist/assets/preview-email-ui.js
           node --check dist/assets/dashboard.js
           node --check dist/assets/dashboard-upgrades.js
+          node --check dist/assets/runtime-config.js
+          node --check dist/assets/readiness-v3.js
+          node --check dist/assets/import-v1.js
+          node --check dist/assets/editor-v1.js
       - name: Check public Media Studio contract
         run: |
           grep -q 'id="mediaStudioCard"' dist/builder.html
@@ -89,12 +135,18 @@ jobs:
           grep -q 'Drag & drop' dist/builder.html
           grep -q 'assets/media-fix.js' dist/builder.html
           grep -q 'assets/workspace-upgrades.js' dist/builder.html
+          grep -q 'assets/import-v1.js' dist/builder.html
+          grep -q 'id="codeEditor"' dist/editor.html
           grep -q 'dist/builder.html' .github/workflows/pages.yml
       - name: Check product files
         run: |
           test -f dist/index.html
           test -f dist/builder.html
           test -f dist/dashboard.html
+          test -f dist/editor.html
+          test -f dist/assets/editor-v1.css
+          test -f dist/assets/editor-v1.js
+          test -f dist/assets/import-v1.js
           test -f dist/builder/index.html
           test -f dist/404.html
           test -f dist/assets/builder.js
@@ -112,6 +164,13 @@ jobs:
           test -f api/notifications.py
           test -f api/handoff_runtime.py
           test -f api/learning_runtime.py
+          test -f api/model_router.py
+          test -f api/repo_map.py
+          test -f api/deep_static_qa.py
+          test -f api/design_critic.py
+          test -f api/source_editor.py
+          test -f api/site_import.py
+          test -f api/capabilities.py
           test -f api/create_test_user.py
           test -f configure-email.ps1
           test -f start-product.ps1
