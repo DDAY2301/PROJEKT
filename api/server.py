@@ -11,6 +11,7 @@ import api.binary_publish  # noqa: F401 - allows image bytes in GitHub bundles
 import api.billing  # noqa: F401 - registers Stripe Checkout/payment routes
 import api.billing_gate  # noqa: F401 - waits for successful payment before generation
 import api.media  # noqa: F401 - registers authenticated image upload routes
+import api.image_studio  # noqa: F401 - non-destructive image editor, background integration + generation
 import api.media_render  # noqa: F401 - integrates uploaded images in generated pages
 import api.premium_quality  # noqa: F401 - blocks technically valid but low-quality websites
 import api.deep_static_qa  # noqa: F401 - offline deterministic bundle/link/accessibility QA
