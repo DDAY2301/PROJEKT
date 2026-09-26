@@ -201,6 +201,15 @@
     document.getElementById('payPublishButton')?.remove();
   }
 
+  function clientQualityPassed(audit) {
+    const issues = audit?.issues || [];
+    const severe = issues.some(item => ['critical','high'].includes(String(item?.severity || '').toLowerCase()));
+    const visual = audit?.visual_qa || {};
+    const score = Number(visual.score);
+    if (audit?.payment_blocked === true || audit?.quality_gate_passed === false) return false;
+    return !severe && visual.available === true && visual.passed === true && Number.isFinite(score) && score >= 80;
+  }
+
   function projectStatusText(project, id) {
     const issues = project.last_audit?.issues || [];
     const audit = project.last_audit || {};
@@ -228,6 +237,20 @@
         updatePostbuildPipeline(project.status);
 
         if (project.status === 'ready_for_payment') {
+          if (!clientQualityPassed(project.last_audit || {})) {
+            clearPayButton();
+            lines.push(
+              '',
+              'QUALITY GATE JE BLOKIRAL PLAČILO.',
+              'Projekt ima še pomembne QA napake ali Visual QA ni dosegel najmanj 80/100.',
+              'Agent mora najprej popraviti stran in ponovno izvesti pregled.'
+            );
+            if (issues.length) lines.push('', ...issues.slice(0,6).map(x => `• ${x.message}`));
+            status(lines.join('\n'));
+            setBuildButtonBusy(false);
+            if (typeof loadRecentProjects === 'function') loadRecentProjects();
+            return;
+          }
           lines.push('', 'Spletna stran je v celoti izdelana in je prestala zaključni pregled.', 'Še NI javno dostopna.', 'Klikni »Plačaj in objavi«; po potrditvi plačila bo ista izdelana stran šla live brez ponovne generacije.');
           status(lines.join('\n'));
           showPayButton(id);
