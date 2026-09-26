@@ -55,14 +55,15 @@ The product is not considered market-leading until the following can be measured
 - [x] Plain-language edits after publishing
 - [x] Revision history
 - [ ] Click/select an element in the live preview and edit only that element
-- [ ] Version snapshots and one-click rollback
+- [x] Version snapshots and one-click rollback
 - [ ] Before/after visual diff
 - [ ] Page/section reorder controls
-- [ ] Image upload, replace, crop and focal-point controls
+- [x] Image upload, responsive resizing, smart focal crop and focal-point controls
+- [ ] Direct image replacement on an already-published page
 - [ ] Reusable brand kit (logo, fonts, palette, tone)
 
 ### Gate C — Design quality
-- [ ] Multi-pass design critic before code generation
+- [x] Multi-pass design critic before code generation
 - [x] Screenshot-based visual QA at desktop/tablet/mobile widths
 - [x] Layout collision/overflow detection
 - [ ] Typography scale and spacing-system validator
@@ -71,6 +72,9 @@ The product is not considered market-leading until the following can be measured
 - [ ] Vertical-specific art direction for business, NGO, Erasmus+, CERV, Horizon, events and campaigns
 
 ### Gate D — Content system
+- [x] Safe ZIP drag-and-drop import for existing static websites
+- [x] Standalone Git-backed source editor with private preview
+
 - [ ] User-managed pages after launch
 - [ ] News/blog collections
 - [ ] Gallery/media library
@@ -81,31 +85,48 @@ The product is not considered market-leading until the following can be measured
 - [ ] EU-project visibility/compliance preset library
 
 ### Gate E — Commercial SaaS
-- [ ] Stripe checkout and package enforcement
-- [ ] Customer dashboard with sites, status and invoices
+- [x] Stripe checkout and package enforcement
+- [x] Customer dashboard with sites, status, QA, revisions and source delivery
+- [ ] Invoice history/downloads in dashboard
 - [ ] Usage/credit accounting
 - [ ] Custom domains
 - [ ] Automatic SSL/DNS onboarding
-- [ ] Email delivery and notifications
+- [x] Email delivery and deployment handoff notifications
 - [ ] Team/client roles
 - [ ] White-label/reseller mode
 - [ ] Analytics dashboard
 
 ### Gate F — Model and cost architecture
 - [x] Local model execution for development
-- [ ] Model router: cheap local → stronger local → premium cloud only when needed
-- [ ] Per-stage token/compute accounting
+- [x] Multi-model local router with provider fallback and telemetry
+- [x] Ollama + OpenAI-compatible local backends (LM Studio / vLLM / SGLang class)
+- [ ] Premium cloud escalation policy for only the hardest failed local tasks
+- [x] Per-model latency / prompt / response telemetry
+- [ ] Full per-stage token/compute accounting
 - [ ] Prompt/result caching
-- [ ] Build benchmark harness
-- [ ] Automatic model fallback on invalid JSON or low QA score
+- [x] Lighthouse frontend benchmark workflow and quality budgets
+- [ ] 50-site autonomous build benchmark harness
+- [x] Automatic provider/model fallback on inference failure
+- [ ] Automatic stronger-model escalation on invalid JSON or low QA score
 - [ ] Parallelizable QA stages
+
+### Gate G — Agent runtime and safety
+- [x] Runtime capability manifest
+- [x] Local Agent Engine status console
+- [x] Deterministic browser runtime error detection
+- [x] Full-bundle QA gate before manual source commits
+- [x] Safe ZIP extraction limits (path traversal, symlink and archive-bomb protection)
+- [ ] Sandboxed autonomous browser-use tool for external web tasks
+- [ ] MCP-compatible tool gateway for optional external tools
+- [ ] Production job queue with worker isolation and cancellation
+- [ ] Structured observability / traces / error reporting
 
 ## Current priority order
 
 1. Production hosting and stable API endpoint.
 2. Element-level editing + version snapshots/rollback.
-3. Screenshot visual QA and objective performance testing.
-4. Brand assets and image workflow.
+3. Element-level editing, visual diff and section reorder controls.
+4. Reusable brand kit + post-launch media replacement workflow.
 5. Persistent CMS/content editing.
 6. Payments, account dashboard and package enforcement.
 7. Custom domains and automated DNS.
