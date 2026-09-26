@@ -258,7 +258,8 @@
     if(!translated)return;
     const lead=source.match(/^\s*/)?.[0]||'';
     const tail=source.match(/\s*$/)?.[0]||'';
-    node.nodeValue=lead+translated+tail;
+    const next=lead+translated+tail;
+    if(node.nodeValue!==next)node.nodeValue=next;
   }
 
   function translateElement(el){
@@ -332,17 +333,23 @@
   }
 
   let pending=false;
+  let observerApplying=false;
   const observer=new MutationObserver(mutations=>{
-    if(pending)return;
+    if(pending||observerApplying)return;
     pending=true;
     queueMicrotask(()=>{
       pending=false;
-      for(const mutation of mutations){
-        if(mutation.type==='characterData')translateTextNode(mutation.target);
-        for(const node of mutation.addedNodes){
-          if(node.nodeType===Node.TEXT_NODE)translateTextNode(node);
-          else if(node instanceof Element)walk(node);
+      observerApplying=true;
+      try{
+        for(const mutation of mutations){
+          if(mutation.type==='characterData')translateTextNode(mutation.target);
+          for(const node of mutation.addedNodes){
+            if(node.nodeType===Node.TEXT_NODE)translateTextNode(node);
+            else if(node instanceof Element)walk(node);
+          }
         }
+      } finally {
+        observerApplying=false;
       }
     });
   });
