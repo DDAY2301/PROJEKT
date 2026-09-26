@@ -1,0 +1,67 @@
+(() => {
+  const inputId='pvZipImportInput';
+  const stateId='pvZipImportState';
+  let selectedZip=null;
+
+  function esc(v){return String(v||'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));}
+  function styles(){
+    if(document.getElementById('pvImportStyles'))return;
+    const s=document.createElement('style');s.id='pvImportStyles';s.textContent=`
+      .zip-import{margin-top:1rem;padding:1rem;border:1px solid #cddbd4;border-radius:1rem;background:#fff}
+      .zip-import-head{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem}.zip-import-head strong{display:block;font-size:.82rem}.zip-import-head span{display:block;margin-top:.12rem;color:var(--muted);font-size:.65rem;line-height:1.4}.zip-badge{display:inline-flex!important;margin:0!important;padding:.28rem .48rem;border-radius:999px;background:#071d17;color:var(--lime)!important;font-size:.55rem!important;font-weight:900}
+      .zip-drop{display:grid;place-items:center;min-height:7.5rem;margin-top:.75rem;border:1.5px dashed #93aa9f;border-radius:.85rem;background:#f5f9f7;text-align:center;cursor:pointer;transition:.18s}.zip-drop.drag{background:#e5f2eb;border-color:var(--good)}.zip-drop b{display:block;font-size:1rem}.zip-drop span{display:block;margin-top:.25rem;color:var(--muted);font-size:.62rem}.zip-actions{display:flex;align-items:center;justify-content:space-between;gap:.7rem;margin-top:.65rem}.zip-state{min-width:0;color:var(--muted);font-size:.62rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.zip-state.ready{color:var(--good);font-weight:800}.zip-import button{border:0;border-radius:.65rem;background:var(--ink);color:#fff;padding:.62rem .8rem;font-size:.65rem;font-weight:850;cursor:pointer}.zip-import button:disabled{opacity:.45;cursor:not-allowed}
+      @media(max-width:650px){.zip-import-head,.zip-actions{align-items:stretch;flex-direction:column}.zip-import button{width:100%}}
+    `;document.head.appendChild(s);
+  }
+  function apiBase(){try{return String(API||'').replace(/\/$/,'')}catch{return String(window.PV_RUNTIME?.apiBase||localStorage.getItem('pv_api_url')||'').replace(/\/$/,'')}}
+  function authToken(){try{return String(token||'')}catch{return localStorage.getItem('pv_token')||''}}
+  function validate(file){
+    if(!file)return 'Izberi ZIP.';
+    if(!/\.zip$/i.test(file.name))return 'Datoteka mora biti .zip.';
+    if(file.size>32*1024*1024)return 'ZIP je večji od 32 MB.';
+    return '';
+  }
+  function setState(text,ready=false){const el=document.getElementById(stateId);if(el){el.textContent=text;el.classList.toggle('ready',ready);}}
+  function pick(file){
+    const error=validate(file);if(error){selectedZip=null;setState(error);document.getElementById('pvImportZip')?.setAttribute('disabled','');return;}
+    selectedZip=file;setState(`${file.name} · ${(file.size/1024/1024).toFixed(1)} MB`,true);document.getElementById('pvImportZip')?.removeAttribute('disabled');
+  }
+  async function runImport(){
+    if(!selectedZip)return;
+    const api=apiBase(),jwt=authToken();if(!api){setState('Najprej poveži API.');return}if(!jwt){setState('Najprej se prijavi.');return}
+    const button=document.getElementById('pvImportZip');button.disabled=true;button.textContent='Uvažam in preverjam …';setState('Varno razširjam ZIP, izvajam audit in Visual QA …');
+    try{
+      const form=new FormData();form.append('file',selectedZip);form.append('name',document.getElementById('name')?.value.trim()||selectedZip.name.replace(/\.zip$/i,''));
+      form.append('organization',document.getElementById('organization')?.value.trim()||'');form.append('package',document.getElementById('package')?.value||'Standard');
+      form.append('goal',document.getElementById('goal')?.value.trim()||'Improve and maintain this imported website.');form.append('audience',document.getElementById('audience')?.value.trim()||'');form.append('programme',document.getElementById('programme')?.value.trim()||'Existing website import');
+      const res=await fetch(`${api}/imports/site`,{method:'POST',headers:{Authorization:`Bearer ${jwt}`},body:form});const text=await res.text();let data;try{data=JSON.parse(text)}catch{data={detail:text}}
+      if(!res.ok)throw new Error(typeof data.detail==='string'?data.detail:`HTTP ${res.status}`);
+      setState(`Uvoženo: ${data.files} datotek · Visual QA ${data.visual_qa?.score??'—'}/100`,true);
+      const url=new URL('editor.html',location.href);url.searchParams.set('project',data.id);if(api)url.searchParams.set('api',api);location.href=url.href;
+    }catch(err){setState('NAPAKA: '+err.message);button.disabled=false;button.textContent='Uvozi ZIP →';}
+  }
+  function install(){
+    const card=document.getElementById('mediaStudioCard');if(!card||document.getElementById('pvZipImport'))return;styles();
+    const box=document.createElement('div');box.id='pvZipImport';box.className='zip-import';box.innerHTML=`
+      <div class="zip-import-head"><div><strong>Uvozi obstoječo spletno stran</strong><span>Spusti ZIP s statičnim HTML/CSS/JS projektom. Agent ga ne regenerira od nič, ampak ga da pod Git verzije, Visual QA, Source Editor in AI revizije.</span></div><span class="zip-badge">ZIP → WORKSPACE</span></div>
+      <input id="${inputId}" type="file" accept=".zip,application/zip" hidden>
+      <div class="zip-drop" id="pvZipDrop" role="button" tabindex="0"><div><b>Spusti website.zip sem</b><span>do 32 MB · varen static-site import · executables in server-side koda se zavrnejo</span></div></div>
+      <div class="zip-actions"><div class="zip-state" id="${stateId}">Ni izbranega ZIP-a.</div><button id="pvImportZip" type="button" disabled>Uvozi ZIP →</button></div>`;
+    card.appendChild(box);
+    const input=document.getElementById(inputId),drop=document.getElementById('pvZipDrop');
+    drop.addEventListener('click',()=>input.click());drop.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();input.click()}});
+    input.addEventListener('change',()=>pick(input.files?.[0]));
+    ['dragenter','dragover'].forEach(n=>drop.addEventListener(n,e=>{e.preventDefault();drop.classList.add('drag')}));
+    ['dragleave','drop'].forEach(n=>drop.addEventListener(n,e=>{e.preventDefault();drop.classList.remove('drag')}));
+    drop.addEventListener('drop',e=>pick(Array.from(e.dataTransfer?.files||[]).find(f=>/\.zip$/i.test(f.name))||e.dataTransfer?.files?.[0]));
+    document.getElementById('pvImportZip').addEventListener('click',runImport);
+
+    // Clipboard image paste enhancement for the existing media studio.
+    document.addEventListener('paste',event=>{
+      const files=Array.from(event.clipboardData?.files||[]).filter(f=>/^image\//.test(f.type));if(!files.length)return;
+      const imageInput=document.getElementById('projectImages');if(!imageInput)return;
+      try{const dt=new DataTransfer();files.forEach(f=>dt.items.add(f));imageInput.files=dt.files;imageInput.dispatchEvent(new Event('change',{bubbles:true}));if(typeof status==='function')status(`SLIKA IZ ODLOŽIŠČA\nDodano: ${files.length}`)}catch{}
+    });
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install);else install();
+})();
