@@ -63,10 +63,10 @@ The product is not considered market-leading until the following can be measured
 
 ### Gate C — Design quality
 - [ ] Multi-pass design critic before code generation
-- [ ] Screenshot-based visual QA at desktop/tablet/mobile widths
-- [ ] Layout collision/overflow detection
+- [x] Screenshot-based visual QA at desktop/tablet/mobile widths
+- [x] Layout collision/overflow detection
 - [ ] Typography scale and spacing-system validator
-- [ ] Contrast validation against WCAG targets
+- [x] Contrast validation against WCAG targets
 - [ ] Strong curated component/design-pattern library
 - [ ] Vertical-specific art direction for business, NGO, Erasmus+, CERV, Horizon, events and campaigns
 
