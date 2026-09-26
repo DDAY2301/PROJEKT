@@ -1,0 +1,30 @@
+name: Frontend benchmark
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "dist/**"
+      - "lighthouserc.json"
+      - ".github/workflows/frontend-benchmark.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-benchmark
+  cancel-in-progress: true
+
+jobs:
+  lighthouse:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Lighthouse CI
+        run: npm install --global @lhci/cli@0.15.x
+      - name: Run repeatable frontend benchmark
+        run: lhci autorun --config=./lighthouserc.json
