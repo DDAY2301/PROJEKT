@@ -22,26 +22,19 @@ from typing import Any
 import httpx
 
 import api.main as core
+import api.model_router as model_router
 
 
 async def _generate(prompt: str, system: str, *, json_mode: bool = False, timeout: int = 360, num_predict: int = 4096) -> str:
-    payload: dict[str, Any] = {
-        "model": core.OLLAMA_MODEL,
-        "prompt": prompt,
-        "system": system,
-        "stream": False,
-        "options": {
-            "temperature": 0.15,
-            "num_ctx": 8192,
-            "num_predict": num_predict,
-        },
-    }
-    if json_mode:
-        payload["format"] = "json"
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        response = await client.post(f"{core.OLLAMA_BASE_URL}/api/generate", json=payload)
-        response.raise_for_status()
-        return str(response.json().get("response") or "").strip()
+    return await model_router.generate(
+        prompt,
+        system,
+        json_mode=json_mode,
+        timeout=timeout,
+        num_predict=num_predict,
+        temperature=0.15,
+        num_ctx=8192,
+    )
 
 
 def _json_from_text(raw: str) -> dict[str, Any]:
