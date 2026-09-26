@@ -321,6 +321,9 @@ def decide(state: dict[str, Any], runtime: dict[str, Any] | None = None) -> Type
     if state.get("imported_site") and status == "failed":
         return TypedDecision("human_review", 0.99, 8, False, "zip_import_failed", 1800)
 
+    if state.get("imported_site") and status == "needs_review":
+        return TypedDecision("wait", 1.0, 3, False, "imported_site_preserve_source", 1800)
+
     if state.get("publish_action_required") == "github_pages_permission":
         return TypedDecision("human_review", 1.0, 8, False, "github_pages_permission", 1800)
 
