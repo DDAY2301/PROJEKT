@@ -30,8 +30,8 @@ ALLOWED_TYPES = {
     "image/png": ".png",
     "image/webp": ".webp",
 }
-PHOTO_WIDTHS = (480, 960, 1440, 1920)
-LOGO_WIDTHS = (160, 320, 640, 960)
+PHOTO_WIDTHS = (320, 640, 960, 1280, 1600, 1920, 2560)
+LOGO_WIDTHS = (160, 320, 640, 960, 1280)
 
 
 def ensure_media_schema() -> None:
@@ -156,8 +156,40 @@ def _save_variant(image: Image.Image, path: Path, fmt: str, *, logo: bool) -> bo
         return False
 
 
-def _generate_variants(image: Image.Image, project_dir: Path, base: str, *, logo: bool) -> list[dict[str, Any]]:
-    original_w, original_h = image.size
+def _focal_crop(image: Image.Image, aspect: float, focal_x: float, focal_y: float) -> Image.Image:
+    """Crop to an aspect ratio while keeping the user-selected focal point visible."""
+    width, height = image.size
+    if width <= 0 or height <= 0 or aspect <= 0:
+        return image.copy()
+    current = width / height
+    if abs(current - aspect) < 0.015:
+        return image.copy()
+    if current > aspect:
+        crop_h = height
+        crop_w = max(1, round(height * aspect))
+    else:
+        crop_w = width
+        crop_h = max(1, round(width / aspect))
+    fx = width * (_clamp_percent(focal_x) / 100.0)
+    fy = height * (_clamp_percent(focal_y) / 100.0)
+    left = max(0, min(width - crop_w, round(fx - crop_w / 2)))
+    top = max(0, min(height - crop_h, round(fy - crop_h / 2)))
+    return image.crop((left, top, left + crop_w, top + crop_h))
+
+
+def _generate_variants(
+    image: Image.Image,
+    project_dir: Path,
+    base: str,
+    *,
+    logo: bool,
+    placement: str = "auto",
+    focal_x: float = 50,
+    focal_y: float = 50,
+) -> list[dict[str, Any]]:
+    hero = placement == "hero" or placement.endswith(":hero")
+    working = _focal_crop(image, 16 / 10, focal_x, focal_y) if (hero and not logo) else image.copy()
+    original_w, original_h = working.size
     widths = LOGO_WIDTHS if logo else PHOTO_WIDTHS
     target_widths = [w for w in widths if w <= original_w]
     if not target_widths or target_widths[-1] != original_w:
@@ -167,10 +199,14 @@ def _generate_variants(image: Image.Image, project_dir: Path, base: str, *, logo
     variants: list[dict[str, Any]] = []
     for width in target_widths:
         if width == original_w:
-            resized = image.copy()
+            resized = working.copy()
         else:
             height = max(1, round(original_h * width / original_w))
-            resized = image.resize((width, height), Image.Resampling.LANCZOS)
+            resized = working.resize(
+                (width, height),
+                Image.Resampling.LANCZOS,
+                reducing_gap=3.0,
+            )
         height = resized.height
 
         webp_name = f"{base}-w{width}.webp"
@@ -196,6 +232,7 @@ def _generate_variants(image: Image.Image, project_dir: Path, base: str, *, logo
             })
         resized.close()
 
+    working.close()
     if not variants:
         raise HTTPException(500, "Image optimisation could not create a browser-compatible variant")
     return variants
@@ -256,7 +293,15 @@ async def upload_project_image(
     base = f"{count + 1:02d}-{_safe_stem(file.filename or 'image')}-{image_id[:8]}"
     project_dir = UPLOAD_ROOT / project_id
     project_dir.mkdir(parents=True, exist_ok=True)
-    variants = _generate_variants(image, project_dir, base, logo=kind == "logo")
+    variants = _generate_variants(
+        image,
+        project_dir,
+        base,
+        logo=kind == "logo",
+        placement=placement,
+        focal_x=focal_x,
+        focal_y=focal_y,
+    )
     image.close()
 
     webp_variants = [v for v in variants if v["format"] == "webp"]
