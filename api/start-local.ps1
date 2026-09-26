@@ -47,6 +47,21 @@ if ($models -notcontains $Model) {
   & $ollama.Source pull $Model
   if ($LASTEXITCODE -ne 0) { throw "Failed to pull Ollama model $Model." }
 }
+$tags = Invoke-RestMethod -Uri "http://127.0.0.1:11434/api/tags" -TimeoutSec 5
+$models = @($tags.models | ForEach-Object { $_.name })
+if (-not $env:OLLAMA_FALLBACK_MODELS) {
+  $fallbacks = @(
+    $models |
+      Where-Object { $_ -ne $Model -and $_ -match '(?i)(coder|code|deepseek)' -and $_ -notmatch '(?i)vl' } |
+      Select-Object -First 3
+  )
+  $env:OLLAMA_FALLBACK_MODELS = ($fallbacks -join ',')
+}
+if ($env:OLLAMA_FALLBACK_MODELS) {
+  Write-Host "Local model fallbacks: $env:OLLAMA_FALLBACK_MODELS" -ForegroundColor DarkCyan
+} else {
+  Write-Host "Local model fallbacks: none installed (primary model remains fully supported)" -ForegroundColor DarkGray
+}
 
 Write-Host "[3/9] Preparing local vision reviewer..."
 $tags = Invoke-RestMethod -Uri "http://127.0.0.1:11434/api/tags" -TimeoutSec 5
@@ -153,6 +168,9 @@ Write-Host "[9/9] Starting API and builder..."
 Write-Host "Health:  http://127.0.0.1:$Port/health"
 Write-Host "Builder: http://127.0.0.1:$Port/builder/"
 Write-Host "Dashboard: http://127.0.0.1:$Port/dashboard.html"
+Write-Host "Editor:    http://127.0.0.1:$Port/editor.html?project=PROJECT_ID"
+Write-Host "Agent API: http://127.0.0.1:$Port/docs"
+Write-Host "Capabilities endpoint: /agent/capabilities (authenticated)"
 Write-Host "Press Ctrl+C to stop."
 & ".\.venv\Scripts\python.exe" -m uvicorn api.server:app --host 127.0.0.1 --port $Port
 if ($LASTEXITCODE -ne 0) { throw "API process exited with code $LASTEXITCODE." }
