@@ -13,7 +13,7 @@ import json
 import re
 import subprocess
 import tempfile
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 import httpx
@@ -105,17 +105,18 @@ def _validate_content(path: str, content: str) -> list[str]:
         if "<title" not in lower:
             warnings.append("Page has no title element.")
     elif low.endswith((".js", ".mjs", ".cjs")):
+        temp_path: Path | None = None
         try:
-            with tempfile.NamedTemporaryFile("w", suffix=".js", encoding="utf-8", delete=True) as handle:
+            with tempfile.NamedTemporaryFile("w", suffix=".js", encoding="utf-8", delete=False) as handle:
                 handle.write(content)
-                handle.flush()
-                check = subprocess.run(
-                    ["node", "--check", handle.name],
-                    capture_output=True,
-                    text=True,
-                    timeout=8,
-                    check=False,
-                )
+                temp_path = Path(handle.name)
+            check = subprocess.run(
+                ["node", "--check", str(temp_path)],
+                capture_output=True,
+                text=True,
+                timeout=8,
+                check=False,
+            )
             if check.returncode != 0:
                 detail = (check.stderr or check.stdout or "JavaScript syntax error").strip()
                 raise HTTPException(422, detail[:700])
@@ -123,6 +124,12 @@ def _validate_content(path: str, content: str) -> list[str]:
             warnings.append("Node.js is not installed; JavaScript syntax check was skipped.")
         except subprocess.TimeoutExpired:
             warnings.append("JavaScript syntax check timed out and was skipped.")
+        finally:
+            if temp_path:
+                try:
+                    temp_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
     elif low.endswith(".json"):
         try:
             json.loads(content)
