@@ -367,7 +367,7 @@ async def runtime_health() -> dict[str, Any]:
                     headers["Authorization"] = f"Bearer {key}"
                 try:
                     response = await client.get(f"{openai_base}/models", headers=headers)
-                    if response.status_code < 500:
+                    if 200 <= response.status_code < 400:
                         model_online = True
                         model_endpoint_kind = "openai-compatible"
                 except Exception:
@@ -546,9 +546,8 @@ async def supervisor_tick() -> dict[str, Any]:
             rows = con.execute(
                 """
                 SELECT * FROM projects
-                WHERE status NOT IN ('ready')
                 ORDER BY updated_at ASC
-                LIMIT 250
+                LIMIT 1000
                 """
             ).fetchall()
 
@@ -576,7 +575,7 @@ async def supervisor_tick() -> dict[str, Any]:
                         decision.reason_code,
                         decision.confidence,
                     )
-            elif decision.choice == "human_review" and decision.reason_code.endswith("circuit_open"):
+            elif decision.choice == "human_review":
                 _mark_human_review(project_id, decision.reason_code)
 
             _save_decision(state, supervisor, decision, action_taken=action_taken)
