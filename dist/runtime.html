@@ -60,7 +60,8 @@
       fail('Ta javna povezava ni več dosegljiva ali je potekla.\n\nQuick Tunnel naslovi so začasni. Zaženi start-product.ps1, da sistem ustvari in preveri nov naslov.');
       return;
     }
-    const target = api + '/builder.html?api=' + encodeURIComponent(api) + '&v=20260909-6';
+    const savedLang = localStorage.getItem('pv_language') || 'sl';
+    const target = api + '/builder.html?api=' + encodeURIComponent(api) + '&lang=' + encodeURIComponent(savedLang) + '&pv=' + Date.now();
     state.textContent = 'Povezava je aktivna.\nOdpiram Website Builder …';
     location.replace(target);
   }
