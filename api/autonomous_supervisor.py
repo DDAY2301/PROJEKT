@@ -347,29 +347,38 @@ async def runtime_health() -> dict[str, Any]:
 
     mode = os.getenv("LOCAL_LLM_MODE", "auto").strip().lower()
     model_online = False
-    model_endpoint = ""
+    model_endpoint_kind = "none"
+    openai_base = os.getenv("OPENAI_COMPAT_BASE_URL", "").strip().rstrip("/")
     try:
         async with httpx.AsyncClient(timeout=3) as client:
-            openai_base = os.getenv("OPENAI_COMPAT_BASE_URL", "").strip().rstrip("/")
-            if mode == "openai" and openai_base:
-                model_endpoint = f"{openai_base}/models"
+            if mode in {"auto", "ollama"}:
+                try:
+                    response = await client.get(f"{core.OLLAMA_BASE_URL}/api/tags")
+                    if response.status_code == 200:
+                        model_online = True
+                        model_endpoint_kind = "ollama"
+                except Exception:
+                    pass
+
+            if not model_online and mode in {"auto", "openai"} and openai_base:
                 headers = {}
                 key = os.getenv("OPENAI_COMPAT_API_KEY", "").strip()
                 if key:
                     headers["Authorization"] = f"Bearer {key}"
-                response = await client.get(model_endpoint, headers=headers)
-                model_online = response.status_code < 500
-            else:
-                model_endpoint = f"{core.OLLAMA_BASE_URL}/api/tags"
-                response = await client.get(model_endpoint)
-                model_online = response.status_code == 200
+                try:
+                    response = await client.get(f"{openai_base}/models", headers=headers)
+                    if response.status_code < 500:
+                        model_online = True
+                        model_endpoint_kind = "openai-compatible"
+                except Exception:
+                    pass
     except Exception:
         model_online = False
 
     return {
         "model_online": model_online,
         "model_mode": mode,
-        "model_endpoint_kind": "openai-compatible" if mode == "openai" else "ollama",
+        "model_endpoint_kind": model_endpoint_kind,
         "github_configured": bool(core.GITHUB_TOKEN),
         "disk_free_gb": disk_free_gb,
         "disk_guard_gb": SUPERVISOR_MIN_DISK_GB,
