@@ -63,3 +63,25 @@ OpenAI-compatible local flow:
 The current product includes safe ZIP drag-and-drop import, Git-backed standalone source editing, private preview, natural-language revision, version history and rollback, responsive WebP/AVIF media, smart focal crops, deterministic bundle QA, Chromium runtime/visual QA, local multimodal design review, persistent quality learning, model telemetry and Lighthouse regression budgets.
 
 Optional future adapters such as GrapesJS/Monaco/tree-sitter/browser automation should preserve the existing Git source and QA gates rather than bypass them.
+
+
+## Image Studio
+
+Project Visibility includes a non-destructive Image Studio at `dist/image-studio.html`.
+
+Current local capabilities:
+- crop, rotate, horizontal/vertical flip
+- brightness, contrast, saturation and blur
+- subject/background separation with optional `rembg` and a deterministic fallback
+- transparent, solid-colour, blurred, uploaded or project-image backgrounds
+- soft-shadow composition
+- image edit history and restore snapshots
+- responsive WebP/AVIF regeneration after every saved edit
+- brand-aware offline background generation
+- optional local ComfyUI AI background generation
+
+Install the optional local background-removal engine after the first normal start:
+
+`./install-image-tools.ps1`
+
+For local ComfyUI generation set `COMFYUI_BASE_URL` and `COMFYUI_CHECKPOINT` before starting the API. Without ComfyUI the generation endpoint automatically falls back to the local brand-aware procedural engine.
