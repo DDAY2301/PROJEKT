@@ -85,3 +85,30 @@ Install the optional local background-removal engine after the first normal star
 `./install-image-tools.ps1`
 
 For local ComfyUI generation set `COMFYUI_BASE_URL` and `COMFYUI_CHECKPOINT` before starting the API. Without ComfyUI the generation endpoint automatically falls back to the local brand-aware procedural engine.
+
+
+## Autonomous Supervisor
+
+Project Visibility now includes a local typed-decision recovery supervisor inspired by the public state-to-decision architecture used by System One / Jev integrations.
+
+It does not require Jev, TypeSafe, or a cloud decision API. Recovery remains local and deterministic.
+
+The supervisor:
+- resumes queued work after an API/process restart
+- detects orphaned and stale build, QA, revision, and publishing states
+- separates build recovery from publish-only recovery
+- uses typed choices instead of free-form agent prose
+- records confidence, risk, reason codes, and decision history
+- applies exponential recovery cooldown
+- stops after a configurable recovery limit instead of retrying forever
+- never auto-crosses the payment boundary
+- routes permissions and repeated failures to human review
+- checks local model availability and disk guardrails before autonomous retries
+- uses a database leader lease so multiple server workers do not run the same recovery coordinator simultaneously
+
+Authenticated diagnostics:
+- `GET /agent/supervisor`
+- `GET /projects/{project_id}/supervisor`
+- `POST /agent/supervisor/run`
+
+Configuration is documented in `api/.env.example`.
