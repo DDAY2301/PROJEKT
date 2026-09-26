@@ -180,12 +180,14 @@ jobs:
       - name: Check SL EN translator
         run: |
           for file in dist/index.html dist/builder.html dist/dashboard.html dist/editor.html dist/image-studio.html; do
-            grep -q 'assets/i18n-v1.js?v=20260926-2' "$file"
+            grep -q 'assets/i18n-v1.js?v=20260926-3' "$file"
             grep -q 'id="pvLanguageSwitch"' "$file"
             grep -q 'data-lang="sl"' "$file"
             grep -q 'data-lang="en"' "$file"
           done
           grep -q "pv_language" dist/assets/i18n-v1.js
+          grep -q "observerApplying" dist/assets/i18n-v1.js
+          grep -q "if(node.nodeValue!==next)node.nodeValue=next" dist/assets/i18n-v1.js
           grep -q "data-lang='sl'\|data-lang=\"sl\"" dist/assets/i18n-v1.js
           grep -q "data-lang='en'\|data-lang=\"en\"" dist/assets/i18n-v1.js
           grep -q "Date.now()" dist/runtime.html
