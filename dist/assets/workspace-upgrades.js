@@ -79,6 +79,7 @@
       alt:logo?'Logo':file.name.replace(/\.[^.]+$/,'').replace(/[-_]+/g,' ').trim(),
       focalX:50,
       focalY:50,
+      focalAuto:!logo,
       previewUrl:URL.createObjectURL(file)
     };
   }
@@ -124,7 +125,7 @@
     logoInput.addEventListener('change',e=>addFiles(e.target.files,true));
     input.addEventListener('change',()=>setTimeout(()=>{
       selectedImages.forEach((item,index)=>{
-        item.kind=item.kind||'image'; item.focalX=Number.isFinite(item.focalX)?item.focalX:50; item.focalY=Number.isFinite(item.focalY)?item.focalY:50;
+        item.kind=item.kind||'image'; item.focalX=Number.isFinite(item.focalX)?item.focalX:50; item.focalY=Number.isFinite(item.focalY)?item.focalY:50; if(item.focalAuto===undefined)item.focalAuto=item.kind!=='logo';
         if(!item.previewUrl&&item.file)item.previewUrl=URL.createObjectURL(item.file);
         if(!item.placement)item.placement=index===0?'hero':'auto';
       }); renderImageQueue();
@@ -142,8 +143,8 @@
       });
       host.querySelectorAll('[data-alt]').forEach(el=>el.addEventListener('input',e=>{selectedImages[Number(e.target.dataset.alt)].alt=e.target.value;}));
       host.querySelectorAll('[data-placement]').forEach(el=>el.addEventListener('change',e=>{const item=selectedImages[Number(e.target.dataset.placement)]; item.placement=e.target.value; if(e.target.value==='logo')item.kind='logo'; renderImageQueue();}));
-      host.querySelectorAll('[data-fx]').forEach(el=>el.addEventListener('input',e=>{const i=Number(e.target.dataset.fx);selectedImages[i].focalX=Number(e.target.value);const l=host.querySelector(`[data-fx-label="${i}"]`);if(l)l.textContent=`${e.target.value}%`;}));
-      host.querySelectorAll('[data-fy]').forEach(el=>el.addEventListener('input',e=>{const i=Number(e.target.dataset.fy);selectedImages[i].focalY=Number(e.target.value);const l=host.querySelector(`[data-fy-label="${i}"]`);if(l)l.textContent=`${e.target.value}%`;}));
+      host.querySelectorAll('[data-fx]').forEach(el=>el.addEventListener('input',e=>{const i=Number(e.target.dataset.fx);selectedImages[i].focalX=Number(e.target.value);selectedImages[i].focalAuto=false;const l=host.querySelector(`[data-fx-label="${i}"]`);if(l)l.textContent=`${e.target.value}%`;}));
+      host.querySelectorAll('[data-fy]').forEach(el=>el.addEventListener('input',e=>{const i=Number(e.target.dataset.fy);selectedImages[i].focalY=Number(e.target.value);selectedImages[i].focalAuto=false;const l=host.querySelector(`[data-fy-label="${i}"]`);if(l)l.textContent=`${e.target.value}%`;}));
       host.querySelectorAll('[data-remove]').forEach(el=>el.addEventListener('click',e=>{const i=Number(e.currentTarget.dataset.remove);const removed=selectedImages.splice(i,1)[0];if(removed?.previewUrl)URL.revokeObjectURL(removed.previewUrl);renderImageQueue();}));
     };
     document.getElementById('pages')?.addEventListener('input',()=>renderImageQueue());
@@ -152,7 +153,7 @@
       if(!selectedImages.length)return[]; const uploaded=[];
       for(let i=0;i<selectedImages.length;i++){
         const item=selectedImages[i]; status(`OPTIMIZIRAM IN NALAGAM SLIKE\n${i+1}/${selectedImages.length}: ${item.file.name}`);
-        const form=new FormData(); form.append('file',item.file); form.append('alt_text',item.alt||item.file.name); form.append('placement',item.placement||'auto'); form.append('kind',item.kind||'image'); form.append('focal_x',String(item.focalX??50)); form.append('focal_y',String(item.focalY??50));
+        const form=new FormData(); form.append('file',item.file); form.append('alt_text',item.alt||item.file.name); form.append('placement',item.placement||'auto'); form.append('kind',item.kind||'image'); form.append('focal_x',String(item.focalAuto?-1:(item.focalX??50))); form.append('focal_y',String(item.focalAuto?-1:(item.focalY??50)));
         uploaded.push(await requestForm(`/projects/${projectId}/images`,form));
       }
       return uploaded;
