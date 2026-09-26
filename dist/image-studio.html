@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="sl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="assets/mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/image-studio-v1.css?v=20260926-1">
+  <title>Image Studio | Project Visibility</title>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="./"><img src="assets/mark.svg" alt=""><span>Project Visibility</span></a>
+  <div class="top-mid"><strong>Image Studio</strong><span id="projectLabel">Nalaganje projekta …</span></div>
+  <div class="top-actions">
+    <a id="builderLink" href="builder.html">Workspace</a>
+    <a href="dashboard.html">Dashboard</a>
+    <button id="refreshImages" type="button">Osveži</button>
+  </div>
+</header>
+
+<main class="shell">
+  <aside class="panel library">
+    <div class="panel-head"><div><strong>Project media</strong><span>Izberi sliko za urejanje ali background.</span></div><span class="provider" id="imageCount">0</span></div>
+    <div class="library-list" id="imageList"><div class="empty-canvas">Nalaganje …</div></div>
+  </aside>
+
+  <section class="panel workspace">
+    <div class="panel-head"><div><strong id="activeName">Predogled</strong><span id="activeMeta">Izberi sliko na levi.</span></div><span class="provider" id="engineBadge">LOCAL</span></div>
+    <div class="canvas-wrap"><div class="canvas-stage" id="canvasStage"><div class="empty-canvas">Izberi sliko za urejanje.</div></div></div>
+    <div class="status" id="studioStatus">Image Studio pripravljen.</div>
+  </section>
+
+  <aside class="panel controls-panel">
+    <div class="panel-head"><div><strong>Image controls</strong><span>Spremembe so non-destructive; pred shranjevanjem se ustvari snapshot.</span></div></div>
+    <div class="controls">
+      <section class="group">
+        <h3>Transformacija</h3>
+        <div class="grid2">
+          <div class="field"><label for="rotate">Rotacija</label><select id="rotate"><option value="0">0°</option><option value="90">90°</option><option value="180">180°</option><option value="270">270°</option></select></div>
+          <div class="field"><label>Flip</label><div class="checks"><label class="check"><input id="flipH" type="checkbox"> horizontalno</label><label class="check"><input id="flipV" type="checkbox"> vertikalno</label></div></div>
+          <div class="field"><label for="cropX">Crop X %</label><input id="cropX" type="number" min="0" max="100" value="0"></div>
+          <div class="field"><label for="cropY">Crop Y %</label><input id="cropY" type="number" min="0" max="100" value="0"></div>
+          <div class="field"><label for="cropW">Crop širina %</label><input id="cropW" type="number" min="1" max="100" value="100"></div>
+          <div class="field"><label for="cropH">Crop višina %</label><input id="cropH" type="number" min="1" max="100" value="100"></div>
+        </div>
+      </section>
+
+      <section class="group">
+        <h3>Videz</h3>
+        <div class="grid2">
+          <div class="field"><label for="brightness">Brightness <span id="brightnessValue">1.00</span></label><input id="brightness" type="range" min=".3" max="2" value="1" step=".05"></div>
+          <div class="field"><label for="contrast">Contrast <span id="contrastValue">1.00</span></label><input id="contrast" type="range" min=".3" max="2" value="1" step=".05"></div>
+          <div class="field"><label for="saturation">Saturation <span id="saturationValue">1.00</span></label><input id="saturation" type="range" min="0" max="2" value="1" step=".05"></div>
+          <div class="field"><label for="blur">Blur <span id="blurValue">0</span></label><input id="blur" type="range" min="0" max="20" value="0" step="1"></div>
+        </div>
+      </section>
+
+      <section class="group">
+        <h3>Background integration</h3>
+        <div class="grid2">
+          <label class="check field full"><input id="removeBackground" type="checkbox"> odstrani originalno ozadje</label>
+          <div class="field full"><label for="backgroundMode">Novo ozadje</label><select id="backgroundMode"><option value="preserve">Ohrani original</option><option value="transparent">Transparent</option><option value="color">Barva</option><option value="blur">Blur originala</option><option value="image">Druga projektna slika</option><option value="upload">Naloži background</option></select></div>
+          <div class="field"><label for="backgroundColor">Barva</label><input id="backgroundColor" type="color" value="#f5f7f6"></div>
+          <label class="check"><input id="shadow" type="checkbox" checked> soft shadow</label>
+          <div class="field full" id="backgroundImageField"><label for="backgroundImage">Projektna background slika</label><select id="backgroundImage"><option value="">— izberi —</option></select></div>
+          <div class="field full" id="backgroundUploadField"><label for="backgroundFile">Naloži background</label><input id="backgroundFile" type="file" accept="image/jpeg,image/png,image/webp"></div>
+        </div>
+        <div class="actions" style="margin-top:.6rem"><button class="button primary" id="applyEdit" type="button">Uporabi spremembe</button><button class="button" id="resetControls" type="button">Reset controls</button></div>
+      </section>
+
+      <section class="group">
+        <h3>Generate background</h3>
+        <div class="field"><label for="generationPrompt">Opis scene</label><textarea id="generationPrompt" placeholder="Npr. elegant forest-green editorial background, soft natural light, subtle depth, clean center composition"></textarea></div>
+        <div class="grid2" style="margin-top:.5rem">
+          <div class="field"><label for="generationSize">Format</label><select id="generationSize"><option value="1536x1024">Hero 3:2</option><option value="1344x768">Wide</option><option value="1024x1024">Square</option><option value="1024x1344">Portrait</option></select></div>
+          <div class="field"><label for="generationProvider">Engine</label><select id="generationProvider"><option value="auto">Auto</option><option value="procedural">Brand procedural</option><option value="comfyui">ComfyUI AI</option></select></div>
+        </div>
+        <div class="actions" style="margin-top:.6rem"><button class="button accent" id="generateBackground" type="button">Generiraj background</button></div>
+        <div class="warning" style="margin-top:.55rem">Če je ComfyUI konfiguriran, lahko Auto uporabi lokalno AI generacijo. Brez ComfyUI se ustvari brand-aware lokalni background, zato funkcija vedno ostane uporabna.</div>
+      </section>
+
+      <section class="group">
+        <h3>Zgodovina slike</h3>
+        <div class="history" id="historyList"><span class="empty-canvas">Izberi sliko.</span></div>
+      </section>
+    </div>
+  </aside>
+</main>
+
+<script src="assets/runtime-config.js?v=20260926-1"></script>
+<script src="assets/image-studio-v1.js?v=20260926-1" defer></script>
+</body>
+</html>
