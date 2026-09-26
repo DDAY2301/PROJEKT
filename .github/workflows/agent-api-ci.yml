@@ -176,6 +176,15 @@ jobs:
           node --check dist/assets/editor-v1.js
           node --check dist/assets/agent-console-v1.js
           node --check dist/assets/image-studio-v1.js
+          node --check dist/assets/i18n-v1.js
+      - name: Check SL EN translator
+        run: |
+          for file in dist/index.html dist/builder.html dist/dashboard.html dist/editor.html dist/image-studio.html; do
+            grep -q 'assets/i18n-v1.js' "$file"
+          done
+          grep -q "pv_language" dist/assets/i18n-v1.js
+          grep -q "data-lang=\"sl\"" dist/assets/i18n-v1.js
+          grep -q "data-lang=\"en\"" dist/assets/i18n-v1.js
       - name: Check public Media Studio contract
         run: |
           grep -q 'id="mediaStudioCard"' dist/builder.html
@@ -196,6 +205,7 @@ jobs:
           test -f dist/image-studio.html
           test -f dist/assets/image-studio-v1.css
           test -f dist/assets/image-studio-v1.js
+          test -f dist/assets/i18n-v1.js
           test -f dist/assets/editor-v1.css
           test -f dist/assets/editor-v1.js
           test -f dist/assets/import-v1.js
