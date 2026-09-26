@@ -75,6 +75,21 @@
       existingPreview?.remove();
     }
 
+    const existingEditor = mainActions?.querySelector('[data-source-editor]');
+    if (ready && mainActions && !existingEditor) {
+      const editor = document.createElement('a');
+      editor.className = 'button light';
+      editor.textContent = 'Source Editor';
+      editor.dataset.sourceEditor = projectId;
+      const url = new URL('editor.html', location.href);
+      url.searchParams.set('project', projectId);
+      if (API) url.searchParams.set('api', API);
+      editor.href = url.href;
+      mainActions.appendChild(editor);
+    } else if (!ready) {
+      existingEditor?.remove();
+    }
+
     const handoffPanel = Array.from(card.querySelectorAll('.panel')).find(panel => /Predaja in koda/.test(panel.textContent || ''));
     const handoffActions = handoffPanel?.querySelector('.project-actions');
     const existingEmail = handoffActions?.querySelector('[data-handoff-email]');
