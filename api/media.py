@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import Depends, File, Form, HTTPException, UploadFile
-from PIL import Image, ImageOps, UnidentifiedImageError
+from PIL import Image, ImageFilter, ImageOps, ImageStat, UnidentifiedImageError
 
 import api.main as core
 
@@ -156,6 +156,45 @@ def _save_variant(image: Image.Image, path: Path, fmt: str, *, logo: bool) -> bo
         return False
 
 
+def _suggest_focal(image: Image.Image) -> tuple[float, float]:
+    """Estimate a useful crop focal point from local edge/detail energy.
+
+    This is deliberately deterministic and offline. It is not face recognition;
+    it simply favors visually detailed regions while keeping a mild center bias.
+    Users can still override the result with the existing focal sliders.
+    """
+    probe = image.convert("L")
+    probe.thumbnail((320, 320), Image.Resampling.LANCZOS)
+    edges = probe.filter(ImageFilter.FIND_EDGES)
+    width, height = edges.size
+    if width < 8 or height < 8:
+        return 50.0, 50.0
+
+    cols = rows = 6
+    best_score = -1.0
+    best = (50.0, 50.0)
+    for row in range(rows):
+        for col in range(cols):
+            left = round(col * width / cols)
+            top = round(row * height / rows)
+            right = max(left + 1, round((col + 1) * width / cols))
+            bottom = max(top + 1, round((row + 1) * height / rows))
+            tile = edges.crop((left, top, right, bottom))
+            stat = ImageStat.Stat(tile)
+            energy = float(stat.mean[0] if stat.mean else 0.0)
+            cx = ((left + right) / 2) / width
+            cy = ((top + bottom) / 2) / height
+            distance = ((cx - 0.5) ** 2 + (cy - 0.5) ** 2) ** 0.5
+            center_bias = max(0.72, 1.0 - distance * 0.38)
+            score = energy * center_bias
+            if score > best_score:
+                best_score = score
+                best = (cx * 100.0, cy * 100.0)
+    probe.close()
+    edges.close()
+    return (round(best[0], 1), round(best[1], 1))
+
+
 def _focal_crop(image: Image.Image, aspect: float, focal_x: float, focal_y: float) -> Image.Image:
     """Crop to an aspect ratio while keeping the user-selected focal point visible."""
     width, height = image.size
@@ -277,10 +316,14 @@ async def upload_project_image(
     kind = _normalise_kind(kind, placement)
     if kind == "logo":
         placement = "logo"
-    focal_x = _clamp_percent(focal_x)
-    focal_y = _clamp_percent(focal_y)
+    auto_focal = float(focal_x) < 0 or float(focal_y) < 0
 
     image = _prepare_source(data)
+    if auto_focal and kind != "logo":
+        focal_x, focal_y = _suggest_focal(image)
+    else:
+        focal_x = _clamp_percent(focal_x)
+        focal_y = _clamp_percent(focal_y)
     original_w, original_h = image.size
     if original_w < 32 or original_h < 32:
         image.close()
