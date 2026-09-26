@@ -254,11 +254,16 @@ def _issue_summary(audit: dict[str, Any]) -> dict[str, Any]:
 
 def _state_from_project(row: dict[str, Any], supervisor: dict[str, Any]) -> dict[str, Any]:
     audit = _read_json(row.get("last_audit_json"))
+    try:
+        config = json.loads(row.get("config_json") or "{}")
+    except Exception:
+        config = {}
     issues = _issue_summary(audit)
     visual = audit.get("visual_qa") if isinstance(audit.get("visual_qa"), dict) else {}
     return {
         "project_id": row["id"],
         "status": str(row.get("status") or ""),
+        "imported_site": bool(config.get("_imported_site")),
         "status_age_seconds": round(_age_seconds(row.get("updated_at")), 1),
         "updated_at": row.get("updated_at"),
         "predates_process": bool(
@@ -307,6 +312,14 @@ def decide(state: dict[str, Any], runtime: dict[str, Any] | None = None) -> Type
 
     if status in PAYMENT_HOLD_STATES:
         return TypedDecision("hold_payment", 1.0, 1, False, "payment_boundary", 1800)
+
+    if state.get("imported_site") and status in {"importing", "repository_ready", "auditing"}:
+        if age < SUPERVISOR_STALE_SECONDS * 2:
+            return TypedDecision("wait", 1.0, 2, False, "zip_import_owned_by_import_worker", 90)
+        return TypedDecision("human_review", 0.99, 7, False, "zip_import_stalled", 1800)
+
+    if state.get("imported_site") and status == "failed":
+        return TypedDecision("human_review", 0.99, 8, False, "zip_import_failed", 1800)
 
     if state.get("publish_action_required") == "github_pages_permission":
         return TypedDecision("human_review", 1.0, 8, False, "github_pages_permission", 1800)
