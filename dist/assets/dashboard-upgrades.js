@@ -1,6 +1,7 @@
 (() => {
   const qs = new URLSearchParams(location.search);
-  const API = (qs.get('api') || localStorage.getItem('pv_api_url') || '').trim().replace(/\/$/, '');
+  const configuredApi = String(window.PV_RUNTIME?.apiBase || '').trim().replace(/\/$/, '');
+  const API = (qs.get('api') || configuredApi || localStorage.getItem('pv_api_url') || '').trim().replace(/\/$/, '');
   const token = () => localStorage.getItem('pv_token') || '';
 
   function state(text, good=false) {
