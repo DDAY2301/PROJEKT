@@ -10,6 +10,8 @@
     const params = new URLSearchParams(location.search);
     const fromUrl = cleanApi(params.get('api'));
     if (fromUrl && /^https?:\/\//i.test(fromUrl)) { localStorage.setItem(API_STORAGE_KEY, fromUrl); return fromUrl; }
+    const configured = cleanApi(window.PV_RUNTIME?.apiBase);
+    if (configured && /^https?:\/\//i.test(configured)) { localStorage.setItem(API_STORAGE_KEY, configured); return configured; }
     const saved = cleanApi(localStorage.getItem(API_STORAGE_KEY));
     return /^https?:\/\//i.test(saved) ? saved : '';
   }
