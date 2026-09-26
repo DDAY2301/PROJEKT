@@ -246,6 +246,64 @@ Rules:
     return _fallback_page(config, spec, page)
 
 
+def _repair_deterministic_bundle(files: dict[str, str]) -> dict[str, str]:
+    """Repair obvious cross-file defects before spending another model call."""
+    repaired = dict(files)
+    html_paths = {path.lower(): path for path in repaired if path.lower().endswith((".html", ".htm"))}
+    aliases = {
+        "contact.html": ("kontakt.html", "stik.html"),
+        "kontakt.html": ("contact.html",),
+        "gallery.html": ("galerija.html",),
+        "galerija.html": ("gallery.html",),
+        "about.html": ("o-nas.html", "onas.html"),
+        "home.html": ("index.html",),
+    }
+
+    def replace_href(match: re.Match[str]) -> str:
+        quote = match.group(1)
+        target = match.group(2).strip()
+        clean = target.split("#", 1)[0].split("?", 1)[0].lstrip("./").lower()
+        if not clean.endswith((".html", ".htm")) or clean in html_paths:
+            return match.group(0)
+        for candidate in aliases.get(clean, ()):
+            if candidate in html_paths:
+                suffix = ""
+                if "#" in target:
+                    suffix = "#" + target.split("#", 1)[1]
+                return f'href={quote}{html_paths[candidate]}{suffix}{quote}'
+        return match.group(0)
+
+    def label_button(match: re.Match[str]) -> str:
+        opening, inner, closing = match.group(1), match.group(2), match.group(3)
+        if re.search(r'\baria-(?:label|labelledby)\s*=', opening, re.I):
+            return match.group(0)
+        visible = re.sub(r"<[^>]+>", " ", inner)
+        visible = re.sub(r"\s+", " ", visible).strip()
+        if visible:
+            return match.group(0)
+        title = re.search(r'\btitle\s*=\s*["\']([^"\']+)["\']', opening, re.I)
+        classes = " ".join(re.findall(r'\bclass\s*=\s*["\']([^"\']+)["\']', opening, re.I)).lower()
+        controls = re.search(r'\baria-controls\s*=\s*["\']([^"\']+)["\']', opening, re.I)
+        if title:
+            label = title.group(1).strip()
+        elif "menu" in classes or "nav" in classes or controls:
+            label = "Open navigation menu"
+        elif "close" in classes:
+            label = "Close"
+        else:
+            label = "Action"
+        opening = opening[:-1] + f' aria-label="{html.escape(label, quote=True)}">'
+        return opening + inner + closing
+
+    for path, source in list(repaired.items()):
+        if not path.lower().endswith((".html", ".htm")) or not isinstance(source, str):
+            continue
+        source = re.sub(r'href\s*=\s*(["\'])([^"\']+)\1', replace_href, source, flags=re.I)
+        source = re.sub(r'(<button\b[^>]*>)(.*?)(</button>)', label_button, source, flags=re.I | re.S)
+        repaired[path] = source
+    return repaired
+
+
 async def build_files(config: dict[str, Any], spec: dict[str, Any]) -> dict[str, str]:
     pages = spec.get("pages") or _fallback_spec(config)["pages"]
     css = await _model_css(config, spec)
@@ -266,7 +324,7 @@ async def build_files(config: dict[str, Any], spec: dict[str, Any]) -> dict[str,
     base = f"https://{core.GITHUB_OWNER.lower()}.github.io/{re.sub(r'[^a-z0-9-]+', '-', (core.GITHUB_OUTPUT_PREFIX + config['name']).lower()).strip('-')[:90]}/"
     urls = [base + ("" if path == "index.html" else path) for path in files if path.endswith(".html")]
     files["sitemap.xml"] = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + ''.join(f'<url><loc>{html.escape(url)}</loc></url>' for url in urls) + '</urlset>'
-    return files
+    return _repair_deterministic_bundle(files)
 
 
 async def ai_audit(files: dict[str, str], config: dict[str, Any]) -> dict[str, Any]:
@@ -290,7 +348,7 @@ Report only specific defects that can be acted on. Do not invent issues.
 
 async def fix_files(files: dict[str, str], issues: list[dict[str, Any]], config: dict[str, Any]) -> dict[str, str]:
     """Best-effort focused repair. Never replace a valid bundle with malformed model output."""
-    repaired = dict(files)
+    repaired = _repair_deterministic_bundle(files)
     paths = []
     for issue in issues:
         path = str(issue.get("file") or "")
