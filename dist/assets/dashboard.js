@@ -2,8 +2,9 @@
   const qs = new URLSearchParams(location.search);
   const $ = id => document.getElementById(id);
   let token = localStorage.getItem('pv_token') || '';
-  let API = (qs.get('api') || localStorage.getItem('pv_api_url') || '').trim().replace(/\/$/, '');
-  if (qs.get('api')) localStorage.setItem('pv_api_url', API);
+  const configuredApi = String(window.PV_RUNTIME?.apiBase || '').trim().replace(/\/$/, '');
+  let API = (qs.get('api') || configuredApi || localStorage.getItem('pv_api_url') || '').trim().replace(/\/$/, '');
+  if (qs.get('api') || configuredApi) localStorage.setItem('pv_api_url', API);
 
   const esc = value => String(value ?? '').replace(/[&<>\"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[ch]));
   const money = (amount,currency) => {
