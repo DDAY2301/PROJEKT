@@ -94,11 +94,25 @@ jobs:
           python - <<'PY'
           from fastapi import HTTPException
           from PIL import Image
-          from api.site_import import _normalise_member
+          from api.site_import import _normalise_member, _write_stage, _read_stage, _stage_text_files, _stage_dir
           from api.repo_map import build_repo_map
           from api.media import _focal_crop
 
           assert _normalise_member('site/assets/app.js') == 'site/assets/app.js'
+
+          staging_id = 'ci-zip-stage'
+          staged_files = {
+              'index.html': b'<!doctype html><html><head><title>Stage</title></head><body><main>OK</main></body></html>',
+              'assets/site.css': b'body{margin:0}',
+          }
+          _write_stage(staging_id, staged_files, {'repo_slug':'ci-repo','safe_name':'CI','config':{}})
+          restored, manifest = _read_stage(staging_id)
+          assert restored == staged_files
+          assert manifest['repo_slug'] == 'ci-repo'
+          staged_text, deliverable = _stage_text_files(restored)
+          assert 'index.html' in staged_text and isinstance(deliverable['index.html'], str)
+          import shutil
+          shutil.rmtree(_stage_dir(staging_id), ignore_errors=True)
           assert _normalise_member('node_modules/x.js') is None
           try:
               _normalise_member('../escape.html')
@@ -234,6 +248,13 @@ jobs:
           ! grep -q "v=20260909-6" dist/runtime.html
           ! grep -q "v=20260909-6" start-product.ps1
           echo "Translator, static SL EN switches and cache-busting checks passed"
+      - name: Check ZIP import UI contract
+        run: |
+          grep -q 'import-v1.js?v=20260926-2' dist/builder.html
+          grep -q 'workspace-v2.css?v=20260926-2' dist/builder.html
+          grep -q 'waitForImport' dist/assets/import-v1.js
+          grep -q 'Gateway je vrnil HTML namesto API odgovora' dist/assets/import-v1.js
+          grep -q 'main.insertBefore(box,card)' dist/assets/import-v1.js
       - name: Check public Media Studio contract
         run: |
           grep -q 'id="mediaStudioCard"' dist/builder.html
