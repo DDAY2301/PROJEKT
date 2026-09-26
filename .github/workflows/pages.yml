@@ -35,6 +35,7 @@ jobs:
           test -f dist/image-studio.html
           test -f dist/assets/image-studio-v1.css
           test -f dist/assets/image-studio-v1.js
+          test -f dist/assets/i18n-v1.js
           test -f dist/assets/builder.js
           test -f dist/assets/media-fix.js
           test -f dist/assets/readiness-v3.js
@@ -73,6 +74,7 @@ jobs:
           node --check dist/assets/agent-console-v1.js
           node --check dist/assets/editor-v1.js
           node --check dist/assets/image-studio-v1.js
+          node --check dist/assets/i18n-v1.js
           node --check dist/assets/dashboard-upgrades.js
           node --check dist/assets/import-v1.js
           node --check dist/assets/editor-v1.js
