@@ -265,6 +265,12 @@ def _run_visual_sync(files: dict[str, Any], project_id: str, uploaded_images: li
                         for viewport, (width, height) in VIEWPORTS.items():
                             page = browser.new_page(viewport={"width": width, "height": height}, device_scale_factor=1)
                             page.set_default_timeout(15000)
+                            console_errors: list[str] = []
+                            page_errors: list[str] = []
+                            failed_requests: list[str] = []
+                            page.on("console", lambda msg: console_errors.append(msg.text[:300]) if msg.type == "error" else None)
+                            page.on("pageerror", lambda exc: page_errors.append(str(exc)[:300]))
+                            page.on("requestfailed", lambda req: failed_requests.append(str(req.url)[:300]))
                             try:
                                 response = page.goto(f"{base}/{path}", wait_until="networkidle")
                                 if response is None or response.status >= 400:
@@ -272,8 +278,21 @@ def _run_visual_sync(files: dict[str, Any], project_id: str, uploaded_images: li
                                     continue
                                 page.evaluate("document.fonts && document.fonts.ready")
                                 metrics = page.evaluate(_metric_script())
-                                metrics_by_viewport[viewport].append({"file": path, **metrics})
+                                metrics_by_viewport[viewport].append({
+                                    "file": path,
+                                    **metrics,
+                                    "console_errors": console_errors[:8],
+                                    "page_errors": page_errors[:8],
+                                    "failed_requests": failed_requests[:8],
+                                })
                                 issues.extend(_issues_from_metrics(path, viewport, metrics))
+                                if page_errors:
+                                    issues.append(_issue("high", "BROWSER_PAGE_ERROR", path, f"JavaScript runtime error at {viewport}: {page_errors[0]}", viewport))
+                                if console_errors:
+                                    issues.append(_issue("medium", "BROWSER_CONSOLE_ERROR", path, f"Console error at {viewport}: {console_errors[0]}", viewport))
+                                local_failures = [url for url in failed_requests if url.startswith(base)]
+                                if local_failures:
+                                    issues.append(_issue("high", "BROWSER_REQUEST_FAILED", path, f"Local asset/request failed at {viewport}: {local_failures[0]}", viewport))
                                 safe = path.replace("/", "-").replace(".html", "") or "index"
                                 shot = screenshot_dir / f"{safe}-{viewport}.png"
                                 page.screenshot(path=str(shot), full_page=True)
@@ -320,7 +339,7 @@ def _run_visual_sync(files: dict[str, Any], project_id: str, uploaded_images: li
         "viewports": metrics_by_viewport,
         "pages_checked": len(html_paths),
         "render_count": len(shots),
-        "version": "visual-qa-v1",
+        "version": "visual-qa-v2",
     }
 
 
