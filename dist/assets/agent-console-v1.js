@@ -49,7 +49,7 @@
     const body=$('pvAgentBody');if(!body)return;
     body.innerHTML='<div class="agent-error">Preverjam lokalni agent …</div>';
     try{
-      const [caps,models]=await Promise.all([get('/agent/capabilities'),get('/agent/models')]);
+      const [caps,models,supervisor]=await Promise.all([get('/agent/capabilities'),get('/agent/models'),get('/agent/supervisor')]);
       const runtime=caps.runtime||{};const features=caps.features||{};
       const available=Object.entries(runtime).filter(([,v])=>typeof v==='boolean'?v:Boolean(v?.available));
       const enabled=Object.entries(features).filter(([,v])=>Boolean(v));
@@ -60,9 +60,12 @@
           <div class="agent-metric"><span>Model backend</span><strong>${providers.join(' + ')||models.mode||'—'}</strong></div>
           <div class="agent-metric"><span>Capabilities</span><strong>${enabled.length} aktivnih</strong></div>
           <div class="agent-metric"><span>Runtime tools</span><strong>${available.length}/${Object.keys(runtime).length}</strong></div>
+          <div class="agent-metric"><span>Supervisor</span><strong>${supervisor.enabled?'ON':'OFF'} · ${supervisor.active_recoveries?.length||0} recovery</strong></div>
+          <div class="agent-metric"><span>Recovery policy</span><strong>${supervisor.max_recoveries||'—'} max · ${supervisor.interval_seconds||'—'}s</strong></div>
         </div>
         <div class="agent-runtime">${Object.entries(runtime).map(([name,val])=>{const ok=typeof val==='boolean'?val:Boolean(val?.available);return `<span class="agent-pill ${ok?'ok':''}">${name} · ${ok?'ON':'OFF'}</span>`}).join('')}</div>
-        <div class="agent-features">${enabled.map(([name])=>name.replaceAll('_',' ')).join(' · ')}</div>`;
+        <div class="agent-features">${enabled.map(([name])=>name.replaceAll('_',' ')).join(' · ')}</div>
+        <div class="agent-features">supervisor: ${Object.entries(supervisor.decision_counts||{}).map(([k,v])=>`${k} ${v}`).join(' · ')||'no decisions yet'} · model ${supervisor.runtime?.model_online?'online':'offline'} · disk ${supervisor.runtime?.disk_free_gb??'—'} GB</div>`;
     }catch(err){body.innerHTML=`<div class="agent-error">${String(err.message||err)}</div>`;}
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install);else install();
