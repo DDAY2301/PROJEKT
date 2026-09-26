@@ -90,6 +90,21 @@
       existingEditor?.remove();
     }
 
+    const existingImageStudio = mainActions?.querySelector('[data-image-studio]');
+    if (ready && mainActions && !existingImageStudio) {
+      const imageStudio = document.createElement('a');
+      imageStudio.className = 'button light';
+      imageStudio.textContent = 'Image Studio';
+      imageStudio.dataset.imageStudio = projectId;
+      const imageUrl = new URL('image-studio.html', location.href);
+      imageUrl.searchParams.set('project', projectId);
+      if (API) imageUrl.searchParams.set('api', API);
+      imageStudio.href = imageUrl.href;
+      mainActions.appendChild(imageStudio);
+    } else if (!ready) {
+      existingImageStudio?.remove();
+    }
+
     const handoffPanel = Array.from(card.querySelectorAll('.panel')).find(panel => /Predaja in koda/.test(panel.textContent || ''));
     const handoffActions = handoffPanel?.querySelector('.project-actions');
     const existingEmail = handoffActions?.querySelector('[data-handoff-email]');
