@@ -25,7 +25,7 @@ jobs:
           api/learning_runtime.py api/revisions.py api/retry_routes.py api/dashboard.py
           api/preview.py api/notifications.py api/handoff_runtime.py
           api/model_router.py api/repo_map.py api/deep_static_qa.py api/design_critic.py
-          api/source_editor.py api/site_import.py api/image_studio.py api/capabilities.py
+          api/source_editor.py api/site_import.py api/image_studio.py api/autonomous_supervisor.py api/capabilities.py
           api/server.py api/create_test_user.py
       - name: Import complete server
         env:
@@ -58,6 +58,9 @@ jobs:
               '/agent/state',
               '/agent/models',
               '/agent/capabilities',
+              '/agent/supervisor',
+              '/agent/supervisor/run',
+              '/projects/{project_id}/supervisor',
               '/imports/site',
               '/projects/{project_id}/editor/files',
               '/projects/{project_id}/editor/file',
@@ -141,6 +144,43 @@ jobs:
           assert not _quality_gate_passed([], {'available': True, 'passed': True, 'score': 79})
           assert not _quality_gate_passed([], {'available': False, 'passed': False, 'score': None})
           print('Release gate and deterministic repair tests passed')
+          PY
+      - name: Validate autonomous supervisor decisions
+        run: |
+          python - <<'PY'
+          from api.autonomous_supervisor import decide
+
+          runtime={'model_online': True, 'disk_free_gb': 20}
+          base={
+              'status':'queued','status_age_seconds':120,'recovery_count':0,
+              'seconds_since_recovery':None,'issues':{'severe':0,'codes':[],'messages':[]},
+              'repository_ready':False,'public_live':False,'payment_blocked':False,
+              'publish_action_required':None,'failure_stage':None,
+          }
+          d=decide(dict(base), runtime)
+          assert d.choice=='retry_build' and d.autonomous
+
+          payment=dict(base,status='ready_for_payment',status_age_seconds=999)
+          d=decide(payment,runtime)
+          assert d.choice=='hold_payment' and not d.autonomous
+
+          stuck=dict(base,status='building',status_age_seconds=2000)
+          d=decide(stuck,runtime)
+          assert d.choice=='retry_build' and d.reason_code=='stale_build_recovery'
+
+          publish=dict(base,status='publishing',status_age_seconds=2000,repository_ready=True)
+          d=decide(publish,runtime)
+          assert d.choice=='retry_publish'
+
+          circuit=dict(base,status='failed',status_age_seconds=2000,recovery_count=3)
+          d=decide(circuit,runtime)
+          assert d.choice=='human_review' and not d.autonomous
+
+          offline=dict(base,status='failed',status_age_seconds=2000)
+          d=decide(offline,{'model_online':False,'disk_free_gb':20})
+          assert d.choice=='wait' and d.reason_code=='model_backend_offline'
+
+          print('Autonomous supervisor typed-decision tests passed')
           PY
       - name: Validate Image Studio core
         run: |
@@ -242,6 +282,7 @@ jobs:
           test -f api/source_editor.py
           test -f api/site_import.py
           test -f api/image_studio.py
+          test -f api/autonomous_supervisor.py
           test -f api/capabilities.py
           test -f api/create_test_user.py
           test -f configure-email.ps1
