@@ -198,23 +198,12 @@
 
     const build = document.getElementById('generate');
     const blocked = result.criticalMissing.length > 0;
-    if (build && !build.getAttribute('aria-busy')) {
+    if (build && build.getAttribute('aria-busy') !== 'true') {
       build.disabled = blocked;
       build.classList.toggle('build-blocked', blocked);
       build.title = blocked ? 'Dopolni obvezne podatke, prijavo in povezavo storitve.' : '';
     }
 
-    const stages = Array.from(document.querySelectorAll('.stage'));
-    if (stages.length >= 5) {
-      const states = [
-        authReady(),
-        REQUIRED.slice(0,3).every(([id]) => Boolean(currentValue(id))),
-        true,
-        pagesValid(),
-        !blocked
-      ];
-      stages.forEach((stage,index) => stage.classList.toggle('active', Boolean(states[index])));
-    }
   }
 
   function bindPersistence() {
