@@ -4,6 +4,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 import api.main as core
+import api.model_router  # noqa: F401 - local model fallbacks + telemetry
 import api.robust_generation  # noqa: F401 - patches planning/build/QA for local models
 import api.premium_generation  # noqa: F401 - enforces premium deterministic design quality floor
 import api.binary_publish  # noqa: F401 - allows image bytes in GitHub bundles
@@ -12,9 +13,11 @@ import api.billing_gate  # noqa: F401 - waits for successful payment before gene
 import api.media  # noqa: F401 - registers authenticated image upload routes
 import api.media_render  # noqa: F401 - integrates uploaded images in generated pages
 import api.premium_quality  # noqa: F401 - blocks technically valid but low-quality websites
+import api.deep_static_qa  # noqa: F401 - offline deterministic bundle/link/accessibility QA
 import api.vision_review  # noqa: F401 - adds local multimodal art-direction review to Chromium QA
 import api.enhanced_runtime  # noqa: F401 - adds media, rendered visual QA and publishing states
 import api.learning_runtime  # noqa: F401 - persistent versioned operational learning memory
+import api.design_critic  # noqa: F401 - independent second-pass design review
 import api.revisions  # noqa: F401 - registers post-build revision routes
 import api.retry_routes  # noqa: F401 - registers failed-build retry route
 import api.dashboard  # noqa: F401 - customer dashboard, domains and source delivery
@@ -23,6 +26,7 @@ import api.notifications  # noqa: F401 - customer deployment handoff email route
 import api.handoff_runtime  # noqa: F401 - deployment guide + automatic notification wrapper
 import api.source_editor  # noqa: F401 - authenticated source editor + Git-backed rollback
 import api.site_import  # noqa: F401 - safe existing-site ZIP import
+import api.capabilities  # noqa: F401 - observable local runtime capability manifest
 
 app = core.app
 DIST_DIR = Path(__file__).resolve().parent.parent / "dist"
