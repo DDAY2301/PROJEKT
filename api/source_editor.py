@@ -196,6 +196,29 @@ async def save_editor_file(
         raise HTTPException(413, "File is too large for the browser editor")
     warnings = _validate_content(path, content)
 
+    # Validate the edited file in the context of the complete current source
+    # before creating a public Git commit. This catches broken internal links,
+    # duplicate IDs and other bundle-level regressions that per-file syntax
+    # validation cannot see.
+    candidate = await revisions.github_get_text_bundle(project["repo_name"])
+    candidate[path] = content
+    audit = core.static_audit(candidate)
+    blocking = [
+        item for item in (audit.get("issues") or [])
+        if item.get("severity") in {"critical", "high"}
+    ]
+    if blocking:
+        sample = " | ".join(
+            f"{item.get('code')}: {item.get('message')}"
+            for item in blocking[:4]
+        )
+        raise HTTPException(422, f"Save blocked by bundle QA: {sample}"[:1400])
+    warnings.extend(
+        str(item.get("message") or "")[:240]
+        for item in (audit.get("issues") or [])
+        if item.get("severity") == "medium"
+    )
+
     headers = core.github_headers()
     api = _api(project["repo_name"])
     async with httpx.AsyncClient(timeout=60, headers=headers) as client:
