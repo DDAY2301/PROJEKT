@@ -37,6 +37,10 @@ jobs:
           test -f dist/assets/readiness-v3.js
           test -f dist/assets/runtime-config.js
           test -f dist/assets/import-v1.js
+          test -f dist/assets/agent-console-v1.js
+          test -f dist/editor.html
+          test -f dist/assets/editor-v1.js
+          test -f dist/assets/import-v1.js
           test -f dist/assets/editor-v1.js
           test -f dist/assets/editor-v1.css
           test -f dist/robots.txt
@@ -62,6 +66,9 @@ jobs:
           node --check dist/assets/dashboard.js
           node --check dist/assets/readiness-v3.js
           node --check dist/assets/runtime-config.js
+          node --check dist/assets/import-v1.js
+          node --check dist/assets/agent-console-v1.js
+          node --check dist/assets/editor-v1.js
           node --check dist/assets/dashboard-upgrades.js
           node --check dist/assets/import-v1.js
           node --check dist/assets/editor-v1.js
