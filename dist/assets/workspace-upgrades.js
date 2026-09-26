@@ -193,6 +193,8 @@
     actions.classList.add('visible');
   }
 
+  window.pvInstallImageStudioLink=installImageStudioLink;
+
   async function restoreProjectHandoff() {
     const id=new URLSearchParams(location.search).get('project'); if(!id||!token||!API)return;
     try{
