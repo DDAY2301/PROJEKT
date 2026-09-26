@@ -285,25 +285,23 @@ def _procedural_background(prompt: str, width: int, height: int, colors: tuple[s
             return tuple(int(value[i:i+2],16) for i in (0,2,4))
         except Exception:
             return fallback
-    c1=rgb(colors[0],(18,63,53)); c2=rgb(colors[1],(217,255,101)); c3=rgb(colors[2],(245,247,246))
-    image=Image.new("RGB",(width,height),c3)
-    px=image.load()
-    for y in range(height):
-        t=y/max(1,height-1)
-        for x in range(width):
-            s=x/max(1,width-1)
-            blend=min(1.0,max(0.0,0.62*s+0.38*t))
-            px[x,y]=tuple(round(c1[i]*(1-blend)+c3[i]*blend) for i in range(3))
+
+    c1=rgb(colors[0],(18,63,53))
+    c2=rgb(colors[1],(217,255,101))
+    c3=rgb(colors[2],(245,247,246))
+    gradient=Image.linear_gradient("L").resize((width,height),Image.Resampling.BICUBIC)
+    image=ImageOps.colorize(gradient,black=c1,white=c3).convert("RGBA")
     draw=ImageDraw.Draw(image,"RGBA")
     seed=int(hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:16],16)
     rng=random.Random(seed)
     for _ in range(7):
         radius=rng.randint(max(40,width//14),max(70,width//4))
-        x=rng.randint(-radius,width+radius); y=rng.randint(-radius,height+radius)
+        x=rng.randint(-radius,width+radius)
+        y=rng.randint(-radius,height+radius)
         col=(*c2,rng.randint(18,55)) if rng.random()>.35 else (*c1,rng.randint(20,65))
         draw.ellipse((x-radius,y-radius,x+radius,y+radius),fill=col)
     image=image.filter(ImageFilter.GaussianBlur(radius=max(12,min(width,height)//55)))
-    return image
+    return image.convert("RGB")
 
 
 async def _comfy_background(prompt: str, width: int, height: int) -> Image.Image:
