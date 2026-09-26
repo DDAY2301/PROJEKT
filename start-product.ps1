@@ -91,13 +91,13 @@ try {
 Write-Host "[4/6] Starting/checking website service..."
 $health = $null
 try { $health = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/health" -Method Get -TimeoutSec 3 } catch {}
-if ($health -and $health.ok -and $repoUpdated) {
+if ($health -and $health.ok) {
   $listener = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
   if ($listener) {
     try {
       $old = Get-Process -Id $listener.OwningProcess -ErrorAction Stop
       if ($old.ProcessName -match 'python|uvicorn') {
-        Write-Host "New repository version detected - restarting local agent PID $($old.Id)..." -ForegroundColor Yellow
+        Write-Host "Restarting existing local agent PID $($old.Id) to load the current runtime..." -ForegroundColor Yellow
         Stop-Process -Id $old.Id -Force
         Start-Sleep -Seconds 1
         $health = $null
