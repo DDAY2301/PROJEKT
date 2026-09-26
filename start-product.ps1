@@ -170,7 +170,8 @@ $encodedApi = [Uri]::EscapeDataString($tunnelUrl)
 $githubLanding = "https://dday2301.github.io/PROJEKT/"
 $githubRuntime = "https://dday2301.github.io/PROJEKT/runtime.html?api=$encodedApi"
 $tunnelLanding = "$tunnelUrl/"
-$tunnelBuilder = "$tunnelUrl/builder.html?api=$encodedApi&v=20260909-6"
+$builderCacheBust = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+$tunnelBuilder = "$tunnelUrl/builder.html?api=$encodedApi&pv=$builderCacheBust"
 $publicLanding = $githubLanding
 $publicBuilder = $githubRuntime
 $frontendSource = "GitHub Pages handoff -> verified HTTPS runtime"
