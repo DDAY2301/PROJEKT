@@ -65,6 +65,8 @@ CHOICES = (
     "human_review",
 )
 
+PROCESS_INSTANCE_ID = uuid.uuid4().hex
+PROCESS_STARTED_AT = datetime.now(timezone.utc)
 _active_recovery_tasks: dict[str, asyncio.Task] = {}
 _tick_lock = asyncio.Lock()
 
@@ -129,12 +131,52 @@ def ensure_supervisor_schema() -> None:
 
             CREATE INDEX IF NOT EXISTS idx_supervisor_events_project_created
               ON agent_supervisor_events(project_id, created_at DESC);
+
+            CREATE TABLE IF NOT EXISTS agent_supervisor_lease (
+              name TEXT PRIMARY KEY,
+              owner_id TEXT NOT NULL,
+              expires_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
             """
         )
 
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _acquire_supervisor_lease() -> bool:
+    """Acquire a short DB lease so only one process performs recovery actions."""
+    ensure_supervisor_schema()
+    now = _now()
+    ttl = max(120, SUPERVISOR_INTERVAL_SECONDS * 3)
+    expires = datetime.fromtimestamp(now.timestamp() + ttl, tz=timezone.utc).isoformat()
+    try:
+        with core.db() as con:
+            con.execute("BEGIN IMMEDIATE")
+            row = con.execute(
+                "SELECT owner_id,expires_at FROM agent_supervisor_lease WHERE name='global'"
+            ).fetchone()
+            if row:
+                expiry = _parse_time(row["expires_at"])
+                if row["owner_id"] != PROCESS_INSTANCE_ID and expiry and expiry > now:
+                    return False
+            con.execute(
+                """
+                INSERT INTO agent_supervisor_lease(name,owner_id,expires_at,updated_at)
+                VALUES('global',?,?,?)
+                ON CONFLICT(name) DO UPDATE SET
+                  owner_id=excluded.owner_id,
+                  expires_at=excluded.expires_at,
+                  updated_at=excluded.updated_at
+                """,
+                (PROCESS_INSTANCE_ID, expires, core.now_iso()),
+            )
+        return True
+    except Exception:
+        logger.exception("Could not acquire supervisor lease")
+        return False
 
 
 def _parse_time(value: str | None) -> datetime | None:
@@ -219,6 +261,9 @@ def _state_from_project(row: dict[str, Any], supervisor: dict[str, Any]) -> dict
         "status": str(row.get("status") or ""),
         "status_age_seconds": round(_age_seconds(row.get("updated_at")), 1),
         "updated_at": row.get("updated_at"),
+        "predates_process": bool(
+            (_parse_time(row.get("updated_at")) or _now()) < PROCESS_STARTED_AT
+        ),
         "repo_name": row.get("repo_name") or "",
         "repository_ready": bool(audit.get("repository_ready") or row.get("repo_name")),
         "public_live": bool(audit.get("public_live")),
@@ -283,6 +328,8 @@ def decide(state: dict[str, Any], runtime: dict[str, Any] | None = None) -> Type
             return TypedDecision("wait", 1.0, 2, False, "recovery_backoff", max(30, cooldown - int(last_action_age)))
 
     if status == "publishing":
+        if state.get("predates_process") and recovery_count < SUPERVISOR_MAX_RECOVERIES:
+            return TypedDecision("retry_publish", 0.99, 4, True, "orphaned_publish_after_restart", 60)
         if age < SUPERVISOR_STALE_SECONDS:
             return TypedDecision("wait", 1.0, 2, False, "publish_in_progress", 60)
         if recovery_count >= SUPERVISOR_MAX_RECOVERIES:
@@ -290,6 +337,10 @@ def decide(state: dict[str, Any], runtime: dict[str, Any] | None = None) -> Type
         return TypedDecision("retry_publish", 0.99, 4, True, "stale_publish_resume", 60)
 
     if status == "queued":
+        if state.get("predates_process") and recovery_count < SUPERVISOR_MAX_RECOVERIES:
+            if runtime and not runtime.get("model_online", True):
+                return TypedDecision("wait", 0.99, 5, False, "model_backend_offline", 120)
+            return TypedDecision("retry_build", 0.99, 3, True, "orphaned_queue_after_restart", 60)
         if age < SUPERVISOR_QUEUE_STALE_SECONDS:
             return TypedDecision("wait", 1.0, 1, False, "queue_grace_period", 30)
         if recovery_count >= SUPERVISOR_MAX_RECOVERIES:
@@ -299,6 +350,10 @@ def decide(state: dict[str, Any], runtime: dict[str, Any] | None = None) -> Type
         return TypedDecision("retry_build", 0.99, 3, True, "queued_after_restart", 60)
 
     if status in ACTIVE_BUILD_STATES:
+        if state.get("predates_process") and recovery_count < SUPERVISOR_MAX_RECOVERIES:
+            if runtime and not runtime.get("model_online", True):
+                return TypedDecision("wait", 0.99, 5, False, "model_backend_offline", 120)
+            return TypedDecision("retry_build", 0.99, 5, True, "orphaned_build_after_restart", 60)
         if age < SUPERVISOR_STALE_SECONDS:
             return TypedDecision("wait", 1.0, 2, False, "work_in_progress", 60)
         if recovery_count >= SUPERVISOR_MAX_RECOVERIES:
@@ -541,6 +596,14 @@ async def supervisor_tick() -> dict[str, Any]:
 
     async with _tick_lock:
         ensure_supervisor_schema()
+        if not _acquire_supervisor_lease():
+            return {
+                "enabled": True,
+                "skipped": "lease_owned_by_another_process",
+                "instance_id": PROCESS_INSTANCE_ID[:8],
+                "examined": 0,
+                "actions": 0,
+            }
         runtime = await runtime_health()
         with core.db() as con:
             rows = con.execute(
