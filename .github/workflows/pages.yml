@@ -33,11 +33,24 @@ jobs:
           test -f dist/dashboard.html
           test -f dist/assets/builder.js
           test -f dist/assets/media-fix.js
+          test -f dist/assets/readiness-v3.js
           grep -q 'id="mediaStudioCard"' dist/builder.html
           grep -q 'id="projectImages"' dist/builder.html
           grep -q 'Fotografije in logotip' dist/builder.html
           grep -q 'Drag & drop' dist/builder.html
           grep -q 'assets/media-fix.js' dist/builder.html
+          grep -q 'assets/readiness-v3.js' dist/builder.html
+
+      - name: Validate frontend JavaScript
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check dist/assets/builder.js
+          node --check dist/assets/workspace-upgrades.js
+          node --check dist/assets/media-fix.js
+          node --check dist/assets/payment-flow-v2.js
+          node --check dist/assets/dashboard.js
+          node --check dist/assets/readiness-v3.js
 
       - uses: actions/upload-pages-artifact@v3
         with:
