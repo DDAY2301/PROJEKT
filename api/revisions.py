@@ -20,6 +20,7 @@ from fastapi import Depends, HTTPException
 from pydantic import BaseModel, Field
 
 import api.main as core
+import api.repo_map as repo_map
 import api.visual_qa as visual_qa
 from api.pages_publish import publish_generated_site, wait_for_generated_site
 
@@ -163,12 +164,14 @@ async def revise_files(files: dict[str, str], instruction: str, config: dict) ->
 Apply this customer revision to the EXISTING website:
 REVISION={json.dumps(instruction, ensure_ascii=False)}
 PROJECT={json.dumps(config, ensure_ascii=False)}
+REPO_MAP={json.dumps(repo_map.build_repo_map(files), ensure_ascii=False)}
 CURRENT_FILES={json.dumps(files, ensure_ascii=False)}
 
 Return strict JSON in this shape:
 {{"changed_files":{{"path":"COMPLETE replacement file content"}},"summary":"short description"}}
 
 Rules:
+- inspect REPO_MAP first so changes fit the existing architecture
 - return ONLY files that actually need changing
 - each returned value must be the COMPLETE replacement content for that file
 - preserve existing navigation, responsive behavior, accessibility and visual identity unless the instruction changes them
