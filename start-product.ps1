@@ -31,9 +31,24 @@ Write-Host "PROJECT VISIBILITY - PRODUCT START" -ForegroundColor Green
 Write-Host "==================================" -ForegroundColor Green
 Write-Host ""
 
+$repoUpdated = $false
+$headBefore = $null
+$headAfter = $null
 if (Get-Command git -ErrorAction SilentlyContinue) {
   Write-Host "[1/6] Updating GitHub repository..."
-  try { git pull --ff-only | Out-Host } catch { Write-Warning "git pull was skipped: $($_.Exception.Message)" }
+  try {
+    $headBefore = (git rev-parse HEAD 2>$null).Trim()
+    git pull --ff-only | Out-Host
+    $headAfter = (git rev-parse HEAD 2>$null).Trim()
+    $repoUpdated = $headBefore -and $headAfter -and ($headBefore -ne $headAfter)
+    if ($repoUpdated) {
+      Write-Host "Repository updated: $($headBefore.Substring(0,8)) -> $($headAfter.Substring(0,8))" -ForegroundColor Green
+    } else {
+      Write-Host "Repository already current." -ForegroundColor DarkGray
+    }
+  } catch {
+    Write-Warning "git pull was skipped: $($_.Exception.Message)"
+  }
 } else {
   Write-Host "[1/6] Git is not on PATH - continuing with local files."
 }
@@ -76,6 +91,21 @@ try {
 Write-Host "[4/6] Starting/checking website service..."
 $health = $null
 try { $health = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/health" -Method Get -TimeoutSec 3 } catch {}
+if ($health -and $health.ok -and $repoUpdated) {
+  $listener = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+  if ($listener) {
+    try {
+      $old = Get-Process -Id $listener.OwningProcess -ErrorAction Stop
+      if ($old.ProcessName -match 'python|uvicorn') {
+        Write-Host "New repository version detected - restarting local agent PID $($old.Id)..." -ForegroundColor Yellow
+        Stop-Process -Id $old.Id -Force
+        Start-Sleep -Seconds 1
+        $health = $null
+      }
+    } catch {}
+  }
+}
+
 if ($health -and $health.ok) {
   if (-not $health.github_configured) {
     $listener = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
