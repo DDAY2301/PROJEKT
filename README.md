@@ -40,3 +40,26 @@ Every push to `main` validates the public builder and performs JavaScript syntax
 Use `start-product.ps1` for the complete local product flow. Quick Tunnel URLs are development fallbacks and are disposable; production should use a persistent hosted API with TLS.
 
 See `PRODUCT_NO1_ROADMAP.md` for product targets and remaining production gates.
+
+
+## Local AI backends
+
+The generation runtime is local-first and can use:
+
+- Ollama with multiple local fallback models.
+- Any local OpenAI-compatible server such as LM Studio, vLLM or SGLang.
+- Ollama vision QA can remain active even when code generation uses a different local backend.
+
+Ollama flow:
+
+`./start-product.ps1`
+
+OpenAI-compatible local flow:
+
+`./start-openai-compatible-local.ps1 -BaseUrl "http://127.0.0.1:1234/v1" -Models "your-model-id"`
+
+## Current advanced workflow
+
+The current product includes safe ZIP drag-and-drop import, Git-backed standalone source editing, private preview, natural-language revision, version history and rollback, responsive WebP/AVIF media, smart focal crops, deterministic bundle QA, Chromium runtime/visual QA, local multimodal design review, persistent quality learning, model telemetry and Lighthouse regression budgets.
+
+Optional future adapters such as GrapesJS/Monaco/tree-sitter/browser automation should preserve the existing Git source and QA gates rather than bypass them.
