@@ -295,16 +295,26 @@
   }
 
   function ensureSwitcher(){
-    if(document.getElementById('pvLanguageSwitch'))return;
-    const style=document.createElement('style');
-    style.id='pvLanguageStyles';
-    style.textContent=`.pv-language-switch{display:inline-flex;align-items:center;gap:2px;padding:3px;border:1px solid rgba(99,122,112,.28);border-radius:999px;background:rgba(255,255,255,.9);box-shadow:0 6px 20px rgba(5,29,22,.06)}.pv-language-switch button{appearance:none;border:0!important;background:transparent!important;color:#61756d!important;border-radius:999px!important;padding:.34rem .48rem!important;min-width:auto!important;font:800 .62rem/1 system-ui,sans-serif!important;cursor:pointer!important}.pv-language-switch button.active{background:#071d17!important;color:#fff!important}.pv-language-switch button:focus-visible{outline:2px solid #75a894;outline-offset:2px}`;
-    document.head.appendChild(style);
-    const wrap=document.createElement('div');wrap.id='pvLanguageSwitch';wrap.className='pv-language-switch';wrap.setAttribute('aria-label','Language / Jezik');
-    wrap.innerHTML='<button type="button" data-lang="sl">SL</button><button type="button" data-lang="en">EN</button>';
-    const target=document.querySelector('.top-actions,.nav-links,.topbar .top-actions,.editor-top .top-actions,.top .top-actions');
-    if(target)target.prepend(wrap);else document.body.prepend(wrap);
-    wrap.addEventListener('click',e=>{const b=e.target.closest('[data-lang]');if(b)setLanguage(b.dataset.lang);});
+    if(!document.getElementById('pvLanguageStyles')){
+      const style=document.createElement('style');
+      style.id='pvLanguageStyles';
+      style.textContent=`.pv-language-switch{display:inline-flex;align-items:center;gap:2px;padding:3px;border:1px solid rgba(99,122,112,.28);border-radius:999px;background:rgba(255,255,255,.9);box-shadow:0 6px 20px rgba(5,29,22,.06);flex:0 0 auto}.pv-language-switch button{appearance:none;border:0!important;background:transparent!important;color:#61756d!important;border-radius:999px!important;padding:.34rem .48rem!important;min-width:auto!important;font:800 .62rem/1 system-ui,sans-serif!important;cursor:pointer!important}.pv-language-switch button.active{background:#071d17!important;color:#fff!important}.pv-language-switch button:focus-visible{outline:2px solid #75a894;outline-offset:2px}`;
+      document.head.appendChild(style);
+    }
+    let wrap=document.getElementById('pvLanguageSwitch');
+    if(!wrap){
+      wrap=document.createElement('div');
+      wrap.id='pvLanguageSwitch';
+      wrap.className='pv-language-switch';
+      wrap.setAttribute('aria-label','Language / Jezik');
+      wrap.innerHTML='<button type="button" data-lang="sl">SL</button><button type="button" data-lang="en">EN</button>';
+      const target=document.querySelector('.top-actions,.nav-links,.topbar .top-actions,.editor-top .top-actions,.top .top-actions');
+      if(target)target.prepend(wrap);else document.body.prepend(wrap);
+    }
+    if(!wrap.dataset.bound){
+      wrap.dataset.bound='1';
+      wrap.addEventListener('click',e=>{const b=e.target.closest('[data-lang]');if(b)setLanguage(b.dataset.lang);});
+    }
     updateSwitcher();
   }
 
