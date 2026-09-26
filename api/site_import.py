@@ -154,9 +154,14 @@ async def _process_staged_import(project_id: str) -> None:
                 (core.now_iso(), project_id),
             )
 
-        # Put source under Git first. Visual QA can then take as long as needed
-        # without holding the original browser upload request open.
-        await core.github_put_bundle(repo_slug, deliverable, f"Import existing website: {safe_name}")
+        # Replace the repository as one atomic tree. Files absent from the ZIP
+        # (including the auto-init README) disappear from the current version,
+        # while the previous commit remains available for rollback.
+        replacement = await core.github_replace_bundle(
+            repo_slug,
+            deliverable,
+            f"Import existing website: {safe_name}",
+        )
 
         static_report = core.static_audit(text_files)
         with core.db() as con:
@@ -176,6 +181,9 @@ async def _process_staged_import(project_id: str) -> None:
             "imported_source": True,
             "imported_files": len(deliverable),
             "visual_qa": _visual_summary(visual_report),
+            "source_commit": replacement.get("after"),
+            "source_previous_commit": replacement.get("before"),
+            "repository_replace_mode": "atomic_full_tree",
         }
         with core.db() as con:
             con.execute(
