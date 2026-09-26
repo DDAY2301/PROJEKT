@@ -202,7 +202,10 @@ def _compose(
     if mode == "transparent":
         return subject
     if mode == "blur":
-        base = subject.convert("RGB").filter(ImageFilter.GaussianBlur(radius=max(8, min(size)//28))).convert("RGBA")
+        source = background if background is not None else subject
+        base = _cover(source, size).convert("RGB").filter(
+            ImageFilter.GaussianBlur(radius=max(8, min(size)//28))
+        ).convert("RGBA")
     elif mode in {"upload","image"} and background is not None:
         base = _cover(background, size)
     else:
@@ -423,6 +426,7 @@ async def edit_image(
     row=_image(project_id,image_id,user_id)
     snapshot_id=_snapshot(row)
     image=_open(str(row["stored_path"]))
+    original_background: Image.Image | None=None
     try:
         image=_pct_crop(image,crop_x,crop_y,crop_w,crop_h)
         rotate=int(rotate)%360
@@ -439,10 +443,12 @@ async def edit_image(
             image=image.filter(ImageFilter.GaussianBlur(radius=min(30,float(blur))))
 
         bg_engine="none"
+        if background_mode=="blur":
+            original_background=image.copy()
         if remove_background or background_mode in {"transparent","color","blur","upload","image"}:
             image,bg_engine=_remove_background(image)
 
-        bg: Image.Image | None=None
+        bg: Image.Image | None=original_background
         if background_file and background_mode=="upload":
             raw=await background_file.read(MAX_BG_BYTES+1)
             if len(raw)>MAX_BG_BYTES:
@@ -462,6 +468,9 @@ async def edit_image(
         except Exception:pass
         if 'bg' in locals() and bg is not None:
             try:bg.close()
+            except Exception:pass
+        if original_background is not None and original_background is not bg:
+            try:original_background.close()
             except Exception:pass
 
 
