@@ -33,6 +33,7 @@ import httpx
 from fastapi import Depends, HTTPException
 
 import api.main as core
+import api.billing_gate as billing_gate
 import api.retry_routes as retry_routes
 
 logger = logging.getLogger("project_visibility.supervisor")
@@ -566,9 +567,9 @@ def _mark_human_review(project_id: str, reason_code: str) -> None:
 
 async def _build_runner(project_id: str) -> None:
     try:
-        await core.generate_project(project_id)
+        billing_gate.launch_project(project_id)
     except Exception:
-        logger.exception("Supervisor build recovery failed project=%s", project_id)
+        logger.exception("Supervisor build recovery enqueue failed project=%s", project_id)
     finally:
         _active_recovery_tasks.pop(project_id, None)
 
