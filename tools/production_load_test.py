@@ -78,6 +78,8 @@ class Result:
     nearest_similarity: float | None = None
     motif: str = ""
     composition: str = ""
+    repository_ready: bool | None = None
+    payment_required: bool | None = None
     public_live: bool | None = None
     public_url: str = ""
     error: str = ""
@@ -256,6 +258,8 @@ def hydrate(r: Result, project: dict[str,Any], db: Path, submitted: datetime, at
     r.nearest_similarity=originality.get("nearest_similarity")
     r.motif=str(originality.get("motif") or "")
     r.composition=str(originality.get("composition") or "")
+    r.repository_ready=audit.get("repository_ready") if "repository_ready" in audit else None
+    r.payment_required=audit.get("payment_required") if "payment_required" in audit else None
     r.public_live=audit.get("public_live") if "public_live" in audit else None
     r.public_url=str(audit.get("public_url") or "")
     qm=queue_metrics(db,r.project_id)
@@ -275,6 +279,8 @@ def summary(results: list[Result], started: datetime, finished: datetime, model:
         "ready":sum(r.status=="ready" for r in results),"needs_review":sum(r.status=="needs_review" for r in results),
         "failed":sum(r.status=="failed" for r in results),"ready_for_payment":sum(r.status=="ready_for_payment" for r in results),
         "quality_pass_90":len(quality),"quality_pass_rate":round(len(quality)/max(1,len(results)),4),
+        "repository_ready":sum(r.repository_ready is True for r in results),
+        "delivery_ready_rate":round(sum(r.repository_ready is True for r in results)/max(1,len(results)),4),
         "public_live":sum(r.public_live is True for r in results),
         "deployment_success_rate":round(sum(r.public_live is True for r in results)/max(1,len(results)),4),
         "throughput_sites_per_hour":round(len(results)/elapsed*3600,3),
@@ -305,7 +311,8 @@ def write_reports(folder: Path, results: list[Result], stats: dict[str,Any]):
         f"- Ready: **{stats['ready']}**",
         f"- Failed: **{stats['failed']}**",
         f"- Quality pass >=90: **{stats['quality_pass_rate']*100:.1f}%**",
-        f"- Deployment success: **{stats['deployment_success_rate']*100:.1f}%**",
+        f"- Delivery/repository ready: **{stats['delivery_ready_rate']*100:.1f}%**",
+        f"- Public live (may be payment-gated): **{stats['deployment_success_rate']*100:.1f}%**",
         f"- Throughput: **{stats['throughput_sites_per_hour']:.2f} sites/hour**",
         f"- QA failure rate: **{stats['qa_failure_rate']*100:.1f}%**",
         f"- Repair rate: **{stats['repair_rate']*100:.1f}%**","",
@@ -320,11 +327,11 @@ def write_reports(folder: Path, results: list[Result], stats: dict[str,Any]):
         f"- Motifs: {json.dumps(stats['motifs'],ensure_ascii=False)}",
         f"- Compositions: {json.dumps(stats['compositions'],ensure_ascii=False)}","",
         "## Per project","",
-        "| # | Project | Status | Total s | Queue s | Exec s | Visual | Repairs | Motif | Composition | Similarity | Live |",
-        "|---:|---|---|---:|---:|---:|---:|---:|---|---|---:|---|",
+        "| # | Project | Status | Total s | Queue s | Exec s | Visual | Repairs | Motif | Composition | Similarity | Repo ready | Live |",
+        "|---:|---|---|---:|---:|---:|---:|---:|---|---|---:|---|---|",
     ]
     for r in results:
-        lines.append(f"| {r.index} | {r.name} | {r.status} | {r.total_s or ''} | {r.queue_wait_s if r.queue_wait_s is not None else ''} | {r.execution_s if r.execution_s is not None else ''} | {r.visual_score if r.visual_score is not None else ''} | {r.repairs} | {r.motif} | {r.composition} | {r.nearest_similarity if r.nearest_similarity is not None else ''} | {'yes' if r.public_live else 'no'} |")
+        lines.append(f"| {r.index} | {r.name} | {r.status} | {r.total_s or ''} | {r.queue_wait_s if r.queue_wait_s is not None else ''} | {r.execution_s if r.execution_s is not None else ''} | {r.visual_score if r.visual_score is not None else ''} | {r.repairs} | {r.motif} | {r.composition} | {r.nearest_similarity if r.nearest_similarity is not None else ''} | {'yes' if r.repository_ready else 'no'} | {'yes' if r.public_live else 'no'} |")
     (folder/"REPORT.md").write_text("\n".join(lines)+"\n",encoding="utf-8")
 
 def main() -> int:
@@ -415,7 +422,7 @@ def main() -> int:
         print("\n=== PRODUCTION LOAD TEST ===")
         print(f"results={folder}")
         print(f"throughput={stats['throughput_sites_per_hour']} sites/hour")
-        print(f"quality_pass_90={stats['quality_pass_rate']*100:.1f}% deployment={stats['deployment_success_rate']*100:.1f}%")
+        print(f"quality_pass_90={stats['quality_pass_rate']*100:.1f}% delivery_ready={stats['delivery_ready_rate']*100:.1f}% public_live={stats['deployment_success_rate']*100:.1f}%")
         print(f"qa_failure={stats['qa_failure_rate']*100:.1f}% repairs={stats['repair_rate']*100:.1f}%")
         print(f"visual_avg_min={stats['visual']['avg']}/{stats['visual']['min']} max_similarity={stats['originality']['max_nearest_similarity']}")
         hard_fail=stats["failed"]>0 or stats["quality_pass_rate"]<.95 or stats["qa_failure_rate"]>.05 or stats["originality"]["near_duplicates"]>0
