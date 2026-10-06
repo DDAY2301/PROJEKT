@@ -123,8 +123,6 @@ def _brief_text(config: dict[str, Any]) -> str:
 
 def _candidate_score(name: str, profile: dict[str, Any], text: str) -> int:
     score = sum(4 for kw in profile.get("keywords", ()) if kw in text)
-    mood = str((config_brand := {}).get("mood") or "")
-    del config_brand, mood
     if name.replace("_", " ") in text:
         score += 12
     return score
@@ -141,7 +139,7 @@ def _select_motif(config: dict[str, Any]) -> tuple[str, str]:
         if existing and existing["motif"] in MOTIFS:
             return str(existing["motif"]), str(existing["composition"])
         rows = con.execute(
-            "SELECT motif FROM design_motif_history ORDER BY updated_at DESC LIMIT 120"
+            "SELECT motif,composition FROM design_motif_history ORDER BY updated_at DESC LIMIT 120"
         ).fetchall()
 
     usage = Counter(str(row["motif"]) for row in rows)
@@ -154,7 +152,14 @@ def _select_motif(config: dict[str, Any]) -> tuple[str, str]:
 
     digest = hashlib.sha256((key + text[:4000]).encode("utf-8")).hexdigest()
     motif = sorted(least_used)[int(digest[:8], 16) % len(least_used)]
-    composition = COMPOSITIONS[int(digest[8:16], 16) % len(COMPOSITIONS)]
+    combo_usage = Counter(
+        str(row["composition"])
+        for row in rows
+        if str(row["motif"]) == motif and str(row["composition"]) in COMPOSITIONS
+    )
+    minimum_combo_use = min((combo_usage[name] for name in COMPOSITIONS), default=0)
+    least_used_compositions = [name for name in COMPOSITIONS if combo_usage[name] == minimum_combo_use]
+    composition = sorted(least_used_compositions)[int(digest[8:16], 16) % len(least_used_compositions)]
 
     with core.db() as con:
         now = core.now_iso()
