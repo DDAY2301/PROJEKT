@@ -206,6 +206,49 @@ jobs:
           assert any(x['code'] == 'AI_SLOP_DENSITY' for x in findings)
           print('Design V2, durable queue and originality gate tests passed')
           PY
+      - name: Validate smoke-test regressions
+        run: |
+          python - <<'PY'
+          from api import premium_generation as premium
+          from api import robust_generation as robust
+
+          config = {
+              'name':'CI Service','organization':'CI Service','package':'Standard',
+              'programme':'Local service','language':'en',
+              'goal':'Explain the service clearly and generate enquiries.',
+              'audience':'Local customers','tone':'clear and human',
+              'hero_title':'A clear service, done well.','hero_subtitle':'Useful information without friction.',
+              'cta_text':'Contact us','contact_email':None,
+              'brand':{'primary_color':'#17324d','secondary_color':'#7eb6a1','background_color':'#f2f4f1','text_color':'#17212b'},
+          }
+          spec = {
+              'site_name':'CI Service',
+              'pages':[
+                  {'slug':'index','title':'Home','purpose':'Overview','sections':[]},
+                  {'slug':'services','title':'Services','purpose':'Services','sections':[]},
+                  {'slug':'kontakt','title':'Kontakt','purpose':'Contact','sections':[]},
+              ],
+          }
+          page = premium._render_page(config, spec, spec['pages'][0], 0)
+          low = page.lower()
+          assert page.count('<section') >= 5
+          assert 'aria-label="Open navigation menu"' in page
+          assert 'aria-label="Footer navigation"' in page
+          assert 'href="kontakt.html"' in page
+          assert '<!doctype html>' in low and 'name="viewport"' in low and 'name="description"' in low
+          assert robust._model_issue_is_supported({'code':'missing-doctype','file':'index.html'}, {'index.html':page}) is False
+          assert robust._model_issue_is_supported({'code':'missing-semantic-structure','file':'index.html'}, {'index.html':page}) is False
+          assert robust._model_issue_is_supported({'code':'missing-aria-label','file':'index.html'}, {'index.html':page}) is False
+          assert robust._model_issue_is_supported({'code':'404','file':'index.html'}, {'index.html':page}) is False
+          notes = robust._normalize_model_issues([
+              {'severity':'high','code':'404','file':'index.html','message':'invented blocker'},
+              {'severity':'high','code':'missing-title','file':'index.html','message':'title absent'},
+          ], {'index.html':page})
+          assert all(x['severity'] == 'medium' for x in notes)
+          css = premium._css(config)
+          assert '@media(max-width:980px){.menu{display:block}' in css
+          print('Smoke-test regression guards passed')
+          PY
       - name: Validate release quality gate
         env:
           APP_SECRET: ci-only-secret
