@@ -314,6 +314,42 @@ jobs:
           asyncio.run(check())
           print('Fast-quality profile checks passed')
           PY
+      - name: Validate deterministic art-direction diversity
+        run: |
+          python - <<'PY'
+          from api import premium_generation as premium
+
+          motifs = [
+              'swiss_editorial','luxury_minimal','outdoor_field','corporate_grid',
+              'creative_brutal','tech_precision','organic_story','automotive_dark',
+              'hospitality_warm','ngo_story','local_service','magazine',
+          ]
+          variants=set()
+          samples=[]
+          for motif in motifs:
+              spec={'design_system':{'motif':motif,'composition':'offset'}}
+              v=premium._visual_variant(spec,0)
+              variants.add(v)
+              html=premium._render_visual('Sample',0,spec)
+              assert f'visual-v{v}' in html
+              assert 'visual-frame' in html and 'visual-bars' in html and 'visual-chip' in html
+              samples.append(html)
+          assert len(variants) >= 5, variants
+          assert len(set(samples)) >= 5
+
+          config={
+              'name':'CI','organization':'CI','programme':'Test','goal':'A clear test goal.',
+              'audience':'Test audience','tone':'clear','hero_title':'Test hero',
+              'hero_subtitle':'Test sub','cta_text':'Contact','language':'en',
+              'brand':{'primary_color':'#123456','secondary_color':'#d9ff65','background_color':'#f5f5f2','text_color':'#111111'}
+          }
+          page={'slug':'index','title':'Home','purpose':'Overview','sections':[]}
+          spec={'site_name':'CI','design_system':{'motif':'tech_precision','composition':'rail'},'pages':[page,{'slug':'kontakt','title':'Kontakt','purpose':'Contact','sections':[]}]}
+          rendered=premium._render_page(config,spec,page,0)
+          assert 'visual-v' in rendered
+          assert rendered.count('<section') >= 5
+          print('Deterministic art-direction diversity checks passed')
+          PY
       - name: Validate release quality gate
         env:
           APP_SECRET: ci-only-secret
