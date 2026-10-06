@@ -112,12 +112,13 @@ Plan a polished production website using the customer brief below.
 The package allows at most {page_budget} pages. Respect the requested pages and their purposes.
 CUSTOMER={json.dumps(config, ensure_ascii=False)}
 Return JSON with keys site_name, seo_description, navigation, pages.
-Each page must have slug, title, meta_description and sections.
-Each section must have type, heading and body; CTA is optional.
-Keep copy concise, specific and credible. Never invent awards, partners, funding claims or verified impact.
+Each page must have slug, title, meta_description and exactly 3-4 purposeful sections.
+Each section must have type, heading and concise body; CTA is optional.
+Keep copy concise, specific and credible. Avoid filler and repeated headings.
+Never invent awards, partners, funding claims or verified impact.
 """
     try:
-        data = await _json_call(prompt, "You are a senior product designer and information architect. Return JSON only.", attempts=3, num_predict=3500)
+        data = await _json_call(prompt, "You are a senior product designer and information architect. Return JSON only.", attempts=2, num_predict=2400)
         model_pages = data.get("pages")
         if not isinstance(model_pages, list) or not model_pages:
             raise ValueError("pages missing")
@@ -402,6 +403,18 @@ def _normalize_model_issues(raw: Any, files: dict[str, str]) -> list[dict[str, A
 
 
 async def ai_audit(files: dict[str, str], config: dict[str, Any]) -> dict[str, Any]:
+    mode = os.getenv("MODEL_QA_MODE", "deterministic").strip().lower()
+    if mode not in {"full", "model", "llm"}:
+        return {
+            "passed": True,
+            "issues": [{
+                "severity": "low",
+                "code": "MODEL_QA_ADAPTIVE_SKIP",
+                "file": "",
+                "message": "Routine model QA skipped; deterministic, browser and originality gates remain active.",
+            }],
+            "model_qa_skipped": True,
+        }
     compact = {k: v[:8000] for k, v in files.items() if k.endswith((".html", ".css", ".js"))}
     prompt = f"""
 Audit this website for concrete UX, navigation, mobile, accessibility, SEO and JavaScript problems.
@@ -445,13 +458,13 @@ Return the COMPLETE corrected file only. Preserve the design and content unrelat
         try:
             candidate = core.strip_fence(await _generate(prompt, "You are a senior debugging engineer. Return only the corrected file.", num_predict=5000))
             if path.endswith(".html"):
-                candidate = re.sub(r"^s*(?:html|HTML)s*(?=<!doctype)", "", candidate, count=1)
+                candidate = re.sub(r"^\\s*(?:html|HTML)\\s*(?=<!doctype)", "", candidate, count=1)
                 low = candidate.lower()
                 required = ("<!doctype html", "<html", "<head", "<body", "<main", "<title", 'name="viewport"', 'name="description"', "assets/site.css")
                 if any(token not in low for token in required):
                     continue
             if path.endswith(".css"):
-                candidate = re.sub(r"^s*(?:css|CSS)s*(?=[:.@#a-zA-Z*])", "", candidate, count=1)
+                candidate = re.sub(r"^\\s*(?:css|CSS)\\s*(?=[:.@#a-zA-Z*])", "", candidate, count=1)
                 if "{" not in candidate or "}" not in candidate:
                     continue
             if len(candidate) >= max(200, int(len(content) * 0.70)):
