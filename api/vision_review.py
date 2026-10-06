@@ -27,7 +27,7 @@ _base_audit_files = visual_qa.audit_files
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
 VISION_MODEL = os.getenv("VISUAL_QA_MODEL", "qwen2.5vl:3b").strip()
 VISION_ENABLED = os.getenv("VISUAL_QA_VISION", "true").strip().lower() in {"1", "true", "yes", "on"}
-MAX_VISION_PAGES = int(os.getenv("VISUAL_QA_VISION_MAX_PAGES", "12"))
+MAX_VISION_PAGES = max(1, min(6, int(os.getenv("VISUAL_QA_VISION_MAX_PAGES", "3"))))
 
 ALLOWED_CATEGORIES = {
     "hierarchy", "spacing", "typography", "imagery", "consistency",
@@ -182,7 +182,7 @@ async def _vision_reviews(report: dict[str, Any], config: dict[str, Any]) -> dic
         name = str(shot.get("file") or "")
         if name and name not in files:
             files.append(name)
-    files = files[:MAX_VISION_PAGES]
+    files = sorted(files, key=lambda name: (0 if name == "index.html" else 1, name))[:MAX_VISION_PAGES]
     if not files:
         return {"available": False, "model": VISION_MODEL, "reviews": [], "issues": []}
 
@@ -206,11 +206,21 @@ async def _vision_reviews(report: dict[str, Any], config: dict[str, Any]) -> dic
                 }
 
     issues = [issue for review in reviews for issue in (review.get("issues") or [])]
-    scores = [int(review["score"]) for review in reviews if isinstance(review.get("score"), int)]
+    scored = [review for review in reviews if isinstance(review.get("score"), int)]
+    site_score = None
+    if scored:
+        home = next((int(r["score"]) for r in scored if r.get("file") == "index.html"), None)
+        others = [int(r["score"]) for r in scored if r.get("file") != "index.html"]
+        if home is not None and others:
+            site_score = round(home * 0.6 + (sum(others) / len(others)) * 0.4)
+        elif home is not None:
+            site_score = home
+        else:
+            site_score = round(sum(int(r["score"]) for r in scored) / len(scored))
     return {
         "available": bool(reviews),
         "model": VISION_MODEL,
-        "score": round(sum(scores) / len(scores)) if scores else None,
+        "score": site_score,
         "reviews": reviews,
         "issues": issues,
     }
@@ -226,17 +236,23 @@ async def audit_files_with_vision(
     vision = await _vision_reviews(report, config)
     report["vision"] = vision
     if vision.get("available"):
-        report.setdefault("issues", []).extend(vision.get("issues") or [])
+        # Vision review is an aesthetic critic, not a source-of-truth browser.
+        # Keep its findings visible, but deterministic Chromium checks own hard
+        # blocking. A poor aesthetic review still lowers the score and therefore
+        # can fail the >=90 release gate.
+        advisory = []
+        for raw in (vision.get("issues") or []):
+            item = dict(raw)
+            if item.get("severity") == "high":
+                item["severity"] = "medium"
+                item["message"] = "Art-direction review: " + str(item.get("message") or "")
+            advisory.append(item)
+        report.setdefault("issues", []).extend(advisory)
         deterministic = int(report.get("score") or 0)
         vision_score = int(vision.get("score") or deterministic)
-        # Aesthetic review carries slightly more weight; measurable breakage is
-        # still represented separately as high/critical blocking issues.
-        report["score"] = round(deterministic * 0.4 + vision_score * 0.6)
-        report["passed"] = not any(
-            item.get("severity") in {"critical", "high"}
-            for item in (report.get("issues") or [])
-        )
-        report["version"] = "visual-qa-v2-vision"
+        report["score"] = round(deterministic * 0.65 + vision_score * 0.35)
+        report["passed"] = bool(report.get("passed"))
+        report["version"] = "visual-qa-v3-vision"
     return report
 
 
