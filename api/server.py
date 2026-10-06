@@ -28,6 +28,7 @@ import api.notifications  # noqa: F401 - customer deployment handoff email route
 import api.handoff_runtime  # noqa: F401 - deployment guide + automatic notification wrapper
 import api.source_editor  # noqa: F401 - authenticated source editor + Git-backed rollback
 import api.site_import  # noqa: F401 - safe existing-site ZIP import
+import api.brief_import  # noqa: F401 - TXT/MD/JSON brief auto-fill
 import api.capabilities  # noqa: F401 - observable local runtime capability manifest
 
 app = core.app
