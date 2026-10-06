@@ -11,6 +11,8 @@ from fastapi import Depends
 
 import api.main as core
 import api.model_router as model_router
+import api.design_engine_v2 as design_engine_v2
+import api.production_queue as production_queue
 
 
 def _binary(name: str) -> dict[str, Any]:
@@ -64,6 +66,9 @@ async def agent_capabilities(user_id: str = Depends(core.current_user)):
             "bounded_retry_circuit_breaker": True,
             "restart_job_recovery": True,
             "github_delivery": True,
+            "design_engine_v2": True,
+            "quality_originality_gate_v2": True,
+            "persistent_production_queue": True,
         },
         "runtime": {
             "git": _binary("git"),
@@ -77,6 +82,9 @@ async def agent_capabilities(user_id: str = Depends(core.current_user)):
             "pillow": _python_module("PIL"),
             "pyvips": _python_module("pyvips"),
             "rembg_python": _python_module("rembg"),
+            "production_workers": production_queue.WORKER_COUNT,
+            "model_concurrency": model_router.MODEL_CONCURRENCY,
+            "design_motifs": len(design_engine_v2.MOTIFS),
         },
         "notes": {
             "libvips": "Optional. Current media engine uses Pillow LANCZOS/WebP/AVIF and focal-aware crops; libvips can become the hosted high-throughput backend.",
