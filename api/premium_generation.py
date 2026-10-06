@@ -187,11 +187,28 @@ def _render_contact(config: dict[str, Any]) -> str:
     </div></section>'''
 
 
-def _render_cta(config: dict[str, Any]) -> str:
+def _contact_href(spec: dict[str, Any]) -> str:
+    pages = [p for p in (spec.get("pages") or []) if isinstance(p, dict)]
+    preferred = ("contact", "kontakt", "stik", "contact-us", "kontakti")
+    for wanted in preferred:
+        for page in pages:
+            slug = str(page.get("slug") or "").strip().lower()
+            title = str(page.get("title") or "").strip().lower()
+            if slug == wanted or title == wanted:
+                return _href(str(page.get("slug") or "index"))
+    for page in pages:
+        slug = str(page.get("slug") or "").strip().lower()
+        title = str(page.get("title") or "").strip().lower()
+        if any(token in slug or token in title for token in ("contact", "kontakt", "stik")):
+            return _href(str(page.get("slug") or "index"))
+    return "index.html"
+
+
+def _render_cta(config: dict[str, Any], spec: dict[str, Any]) -> str:
     label = _e(_text(config.get("cta_text"), "Contact us"))
     return f'''<section class="section final-cta"><div class="shell reveal">
       <span class="label">Next step</span><h2>Turn intention into something people can join.</h2>
-      <a class="button button-accent" href="contact.html">{label}<span>↗</span></a>
+      <a class="button button-accent" href="{_e(_contact_href(spec), quote=True)}">{label}<span>↗</span></a>
     </div></section>'''
 
 
@@ -209,7 +226,7 @@ def _render_page(config: dict[str, Any], spec: dict[str, Any], page: dict[str, A
 
     body = [f'''<section class="hero {'hero-home' if is_home else 'hero-inner'}"><div class="shell hero-grid">
       <div class="hero-copy reveal"><span class="label label-light">{_e(programme)}</span><h1>{_e(hero_title)}</h1><p>{_e(hero_body)}</p>
-      <div class="hero-actions"><a class="button button-accent" href="{'programme.html' if is_home and any(str(p.get('slug')) == 'programme' for p in spec.get('pages') or []) else 'contact.html'}">{_e(config.get('cta_text') or 'Explore')}<span>↗</span></a><a class="text-link" href="#content">Discover more ↓</a></div>
+      <div class="hero-actions"><a class="button button-accent" href="{'programme.html' if is_home and any(str(p.get('slug')) == 'programme' for p in spec.get('pages') or []) else _e(_contact_href(spec), quote=True)}">{_e(config.get('cta_text') or 'Explore')}<span>↗</span></a><a class="text-link" href="#content">Discover more ↓</a></div>
       </div><div class="hero-art reveal">{_render_visual(page_title, index)}<div class="hero-note"><span>Project</span><strong>{_e(site_name)}</strong></div></div>
     </div></section>''']
 
@@ -227,7 +244,7 @@ def _render_page(config: dict[str, Any], spec: dict[str, Any], page: dict[str, A
     body.append(_render_crosslinks(spec, slug))
     if "contact" in slug.lower() or page_title.lower() == "contact":
         body.append(_render_contact(config))
-    body.append(_render_cta(config))
+    body.append(_render_cta(config, spec))
 
     contact_link = f'<a href="mailto:{_e(email, quote=True)}">{_e(email)}</a>' if email else ""
     return f'''<!doctype html>
@@ -288,7 +305,7 @@ async def build_files(config: dict[str, Any], spec: dict[str, Any]) -> dict[str,
             slug = "index"
         files[_href(slug)] = _strip_language_marker(_render_page(config, spec, page, idx), "html")
     files["robots.txt"] = "User-agent: *\nAllow: /\n"
-    return files
+    return base._repair_deterministic_bundle(files)
 
 
 # Premium renderer loads after robust_generation and replaces only planning/build.
