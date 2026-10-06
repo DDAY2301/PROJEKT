@@ -45,13 +45,23 @@
     const api=$('apiState'); if(api)new MutationObserver(()=>setTimeout(load,80)).observe(api,{childList:true,attributes:true,subtree:true});
     setTimeout(load,500);
   }
+  function runtimeState(value){
+    if(typeof value==='boolean') return {active:value,label:value?'ON':'OFF'};
+    if(typeof value==='number') return {active:Number.isFinite(value)&&value>0,label:String(value)};
+    if(value && typeof value==='object'){
+      if('available' in value) return {active:Boolean(value.available),label:value.available?'ON':'OFF'};
+      return {active:true,label:'ON'};
+    }
+    if(typeof value==='string') return {active:value.trim().length>0,label:value.trim()||'OFF'};
+    return {active:false,label:'OFF'};
+  }
   async function load(){
     const body=$('pvAgentBody');if(!body)return;
     body.innerHTML='<div class="agent-error">Preverjam lokalni agent …</div>';
     try{
       const [caps,models,supervisor]=await Promise.all([get('/agent/capabilities'),get('/agent/models'),get('/agent/supervisor')]);
       const runtime=caps.runtime||{};const features=caps.features||{};
-      const available=Object.entries(runtime).filter(([,v])=>typeof v==='boolean'?v:Boolean(v?.available));
+      const available=Object.entries(runtime).filter(([,v])=>runtimeState(v).active);
       const enabled=Object.entries(features).filter(([,v])=>Boolean(v));
       const providers=[...new Set((models.backends||[]).map(x=>x.provider))];
       body.innerHTML=`
@@ -63,7 +73,7 @@
           <div class="agent-metric"><span>Supervisor</span><strong>${supervisor.enabled?'ON':'OFF'} · ${supervisor.active_recoveries?.length||0} recovery</strong></div>
           <div class="agent-metric"><span>Recovery policy</span><strong>${supervisor.max_recoveries||'—'} max · ${supervisor.interval_seconds||'—'}s</strong></div>
         </div>
-        <div class="agent-runtime">${Object.entries(runtime).map(([name,val])=>{const ok=typeof val==='boolean'?val:Boolean(val?.available);return `<span class="agent-pill ${ok?'ok':''}">${name} · ${ok?'ON':'OFF'}</span>`}).join('')}</div>
+        <div class="agent-runtime">${Object.entries(runtime).map(([name,val])=>{const state=runtimeState(val);return `<span class="agent-pill ${state.active?'ok':''}">${name} · ${state.label}</span>`}).join('')}</div>
         <div class="agent-features">${enabled.map(([name])=>name.replaceAll('_',' ')).join(' · ')}</div>
         <div class="agent-features">supervisor: ${Object.entries(supervisor.decision_counts||{}).map(([k,v])=>`${k} ${v}`).join(' · ')||'no decisions yet'} · model ${supervisor.runtime?.model_online?'online':'offline'} · disk ${supervisor.runtime?.disk_free_gb??'—'} GB</div>`;
     }catch(err){body.innerHTML=`<div class="agent-error">${String(err.message||err)}</div>`;}
