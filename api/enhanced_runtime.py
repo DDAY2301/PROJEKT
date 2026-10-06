@@ -24,6 +24,20 @@ from api.pages_publish import PagesPermissionError, publish_generated_site, wait
 
 logger = logging.getLogger("project_visibility.build")
 MIN_VISUAL_QA_SCORE = max(80, min(100, int(os.getenv("MIN_VISUAL_QA_SCORE", "90"))))
+TEXT_REPAIR_ATTEMPTS = max(0, min(2, int(os.getenv("TEXT_REPAIR_ATTEMPTS", "1"))))
+VISUAL_REPAIR_ATTEMPTS = max(0, min(2, int(os.getenv("VISUAL_REPAIR_ATTEMPTS", "1"))))
+NON_MODEL_REPAIR_CODES = {
+    "DESIGN_NEAR_DUPLICATE",
+    "DESIGN_ENGINE_V2_MISSING",
+    "DESIGN_SYSTEM_TOO_THIN",
+    "DESIGN_SYSTEM_MISSING",
+    "RAW_LANGUAGE_MARKER",
+    "HTML_SHELL_INVALID",
+    "STYLESHEET_MISSING",
+    "VIEWPORT_MISSING",
+    "NO_HTML",
+    "SECRET",
+}
 
 TEST_BYPASS_EMAILS = {"maj@klemec.org"}
 
@@ -113,6 +127,37 @@ def _severe(issues: list[dict[str, Any]]) -> bool:
     return any(item.get("severity") in {"critical", "high"} for item in issues)
 
 
+def _model_repairable(issues: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for item in issues:
+        if item.get("severity") not in {"critical", "high"}:
+            continue
+        code = str(item.get("code") or "").upper()
+        path = str(item.get("file") or "")
+        if code in NON_MODEL_REPAIR_CODES:
+            continue
+        if not path.endswith((".html", ".css", ".js")):
+            continue
+        out.append(item)
+    return out
+
+
+def _record_interim_quality(project_id: str, issues: list[dict[str, Any]], stage: str, attempt: int) -> None:
+    payload = {
+        "build_stage": stage,
+        "repair_attempt": attempt,
+        "issues": issues[:40],
+        "repository_ready": False,
+        "public_live": False,
+        "quality_gate_passed": False,
+    }
+    with core.db() as con:
+        con.execute(
+            "UPDATE projects SET last_audit_json=?,updated_at=? WHERE id=?",
+            (json.dumps(payload, ensure_ascii=False), core.now_iso(), project_id),
+        )
+
+
 def _quality_gate_passed(issues: list[dict[str, Any]], visual_report: dict[str, Any]) -> bool:
     if _severe(issues):
         return False
@@ -178,25 +223,35 @@ async def _quality_cycle(
     audit1 = core.static_audit(files)
     audit2 = await core.ai_audit(files, config)
     text_issues = audit1["issues"] + audit2.get("issues", [])
+    _record_interim_quality(project_id, text_issues, "text_qa", 0)
 
-    while _severe(text_issues) and text_attempts < core.MAX_AUTO_FIX_ATTEMPTS:
+    while _severe(text_issues) and text_attempts < TEXT_REPAIR_ATTEMPTS:
+        repairable = _model_repairable(text_issues)
+        if not repairable:
+            break
         text_attempts += 1
         set_status(project_id, "fixing")
-        files = await core.fix_files(files, text_issues, config)
+        _record_interim_quality(project_id, text_issues, "text_fixing", text_attempts)
+        files = await core.fix_files(files, repairable, config)
         set_status(project_id, "auditing")
         audit1 = core.static_audit(files)
         audit2 = await core.ai_audit(files, config)
         text_issues = audit1["issues"] + audit2.get("issues", [])
+        _record_interim_quality(project_id, text_issues, "text_qa", text_attempts)
 
     set_status(project_id, "visual_qa")
     visual_report = await visual_qa.audit_files(files, project_id, config, uploaded_images)
     visual_issues = list(visual_report.get("issues") or [])
     combined = text_issues + visual_issues
 
-    while _severe(visual_issues) and visual_attempts < core.MAX_AUTO_FIX_ATTEMPTS:
+    while _severe(visual_issues) and visual_attempts < VISUAL_REPAIR_ATTEMPTS:
+        repairable = _model_repairable(combined)
+        if not repairable:
+            break
         visual_attempts += 1
         set_status(project_id, "fixing")
-        files = await core.fix_files(files, combined, config)
+        _record_interim_quality(project_id, combined, "visual_fixing", visual_attempts)
+        files = await core.fix_files(files, repairable, config)
         set_status(project_id, "auditing")
         audit1 = core.static_audit(files)
         audit2 = await core.ai_audit(files, config)
