@@ -1,5 +1,5 @@
 param(
-  [string]$Model = "qwen2.5-coder:3b",
+  [string]$Model = "qwen2.5-coder:7b",
   [string]$VisualModel = "qwen2.5vl:3b",
   [int]$Port = 8000,
   [switch]$SkipGitHub
