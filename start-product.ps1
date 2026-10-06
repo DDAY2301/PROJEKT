@@ -1,5 +1,5 @@
 param(
-  [string]$Model = "qwen2.5-coder:3b",
+  [string]$Model = "qwen2.5-coder:7b",
   [int]$Port = 8000
 )
 
@@ -120,6 +120,7 @@ if ($health -and $health.ok) {
   if (-not $health -or -not $health.ok) { throw "Website service did not become healthy on port $Port." }
   if (-not $health.github_configured) { throw "Service started, but GitHub publishing is not configured." }
   Write-Host "Service: ONLINE / GitHub enabled" -ForegroundColor Green
+  if ($health.model) { Write-Host "Production model: $($health.model)" -ForegroundColor Green }
 }
 
 Write-Host "[5/6] Starting verified Cloudflare Quick Tunnel..."
