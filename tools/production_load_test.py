@@ -143,14 +143,25 @@ class Api:
         self.token=""
     def close(self): self.client.close()
     def headers(self): return {"Authorization":f"Bearer {self.token}"} if self.token else {}
+    @staticmethod
+    def _checked(r: httpx.Response) -> httpx.Response:
+        if r.status_code >= 400:
+            detail=""
+            try:
+                payload=r.json()
+                detail=json.dumps(payload,ensure_ascii=False)
+            except Exception:
+                detail=(r.text or "").strip()
+            raise RuntimeError(f"API {r.request.method} {r.request.url.path} failed with HTTP {r.status_code}: {detail[:1200]}")
+        return r
     def get(self,path):
-        r=self.client.get(self.base+path,headers=self.headers()); r.raise_for_status(); return r.json()
+        r=self.client.get(self.base+path,headers=self.headers()); self._checked(r); return r.json()
     def post(self,path,data):
-        r=self.client.post(self.base+path,headers={**self.headers(),"Content-Type":"application/json"},json=data); r.raise_for_status(); return r.json()
+        r=self.client.post(self.base+path,headers={**self.headers(),"Content-Type":"application/json"},json=data); self._checked(r); return r.json()
     def register(self,email,password):
-        r=self.client.post(self.base+"/auth/register",json={"email":email,"password":password}); r.raise_for_status(); self.token=r.json()["token"]
+        r=self.client.post(self.base+"/auth/register",json={"email":email,"password":password}); self._checked(r); self.token=r.json()["token"]
     def login(self,email,password):
-        r=self.client.post(self.base+"/auth/login",json={"email":email,"password":password}); r.raise_for_status(); self.token=r.json()["token"]
+        r=self.client.post(self.base+"/auth/login",json={"email":email,"password":password}); self._checked(r); self.token=r.json()["token"]
 
 def ro_db(path: Path):
     con=sqlite3.connect(f"file:{path.as_posix()}?mode=ro",uri=True,timeout=15)
@@ -304,7 +315,10 @@ def main() -> int:
         if a.email and a.password:
             api.login(a.email,a.password); account=a.email
         else:
-            account=f"loadtest-{stamp.lower()}@local.test"
+            # Pydantic EmailStr/email-validator intentionally rejects special-use
+            # domains such as .test/.local. Registration is local-only, but the
+            # address still has to pass normal email syntax validation.
+            account=f"pv.loadtest.{stamp.lower()}@gmail.com"
             api.register(account,"PV!"+secrets.token_urlsafe(18))
         print(f"API={a.api} account={account} projects={a.count} db_metrics={db.exists()}")
 
