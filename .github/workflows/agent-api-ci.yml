@@ -480,3 +480,6 @@ jobs:
           test -f start-stable-local.ps1
           test -f run-production-load-test.ps1
           test -f tools/production_load_test.py
+          grep -q 'qwen2.5-coder:7b' start-product.ps1
+          grep -q 'qwen2.5-coder:7b' api/start-local.ps1
+          grep -q 'Load test refused: local HEAD' run-production-load-test.ps1
