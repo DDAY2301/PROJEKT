@@ -23,7 +23,7 @@ ALLOWED_SUFFIXES = {".txt", ".md", ".json"}
 FONT_STYLES = {"modern", "classic", "editorial", "tech", "minimal"}
 PACKAGES = {"Start": 3, "Standard": 6, "Premium": 12}
 HEX_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
-EMAIL_RE = re.compile(r"^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")
+EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
 DEFAULT_BRAND = {
     "primary_color": "#123f35",
@@ -61,7 +61,7 @@ ALIASES = {
 def _fold(value: str) -> str:
     value = unicodedata.normalize("NFD", value or "")
     value = "".join(ch for ch in value if unicodedata.category(ch) != "Mn")
-    return re.sub(r"\\s+", " ", value.strip().lower())
+    return re.sub(r"\s+", " ", value.strip().lower())
 
 
 _ALIAS_LOOKUP = {_fold(alias): key for key, aliases in ALIASES.items() for alias in aliases}
@@ -70,7 +70,7 @@ _ALIAS_LOOKUP = {_fold(alias): key for key, aliases in ALIASES.items() for alias
 def _text(value: Any, limit: int = 8000) -> str:
     if value is None:
         return ""
-    return re.sub(r"\\s+", " ", str(value).strip())[:limit]
+    return re.sub(r"\s+", " ", str(value).strip())[:limit]
 
 
 def _multiline(value: Any, limit: int = 12000) -> str:
@@ -99,7 +99,7 @@ def _page_item(value: Any) -> dict[str, str] | None:
         title = _text(value.get("title") or value.get("name"), 120)
         purpose = _text(value.get("purpose") or value.get("description"), 300)
     else:
-        raw = str(value or "").strip().lstrip("-*•0123456789. )\\t")
+        raw = str(value or "").strip().lstrip("-*•0123456789. )\t")
         if not raw:
             return None
         if "|" in raw:
@@ -117,7 +117,7 @@ def _page_item(value: Any) -> dict[str, str] | None:
 
 def _normalise_pages(value: Any) -> list[dict[str, str]]:
     if isinstance(value, str):
-        items = [part for part in re.split(r"[\\n;]+", value) if part.strip()]
+        items = [part for part in re.split(r"[\n;]+", value) if part.strip()]
     elif isinstance(value, list):
         items = value
     else:
@@ -179,7 +179,7 @@ def _labelled_fields(text: str) -> dict[str, Any]:
             if in_pages and page_lines:
                 in_pages = False
             continue
-        match = re.match(r"^([^:=]{2,80})\\s*[:=]\\s*(.*)$", line)
+        match = re.match(r"^([^:=]{2,80})\s*[:=]\s*(.*)$", line)
         if match:
             key = _ALIAS_LOOKUP.get(_fold(match.group(1)))
             value = match.group(2).strip()
@@ -212,7 +212,7 @@ def _normalise(raw: dict[str, Any], source_text: str) -> dict[str, Any]:
     pages = _normalise_pages(raw.get("pages")) or _fallback_pages(source_text)
     goal = _multiline(raw.get("goal"), 1800)
     if not goal:
-        goal = next((p.strip() for p in re.split(r"\\n\\s*\\n", source_text) if len(p.strip()) > 25), "")[:1200]
+        goal = next((p.strip() for p in re.split(r"\n\s*\n", source_text) if len(p.strip()) > 25), "")[:1200]
 
     requirements = _multiline(raw.get("custom_requirements"), 7000) or source_text[:7000].strip()
 
