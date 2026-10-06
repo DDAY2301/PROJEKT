@@ -13,6 +13,7 @@ import api.main as core
 import api.model_router as model_router
 import api.design_engine_v2 as design_engine_v2
 import api.production_queue as production_queue
+import api.visual_qa as visual_qa
 
 
 def _binary(name: str) -> dict[str, Any]:
@@ -85,6 +86,7 @@ async def agent_capabilities(user_id: str = Depends(core.current_user)):
             "production_workers": production_queue.WORKER_COUNT,
             "model_concurrency": model_router.MODEL_CONCURRENCY,
             "design_motifs": len(design_engine_v2.MOTIFS),
+            "visual_qa_concurrency": visual_qa.VISUAL_QA_CONCURRENCY,
         },
         "notes": {
             "libvips": "Optional. Current media engine uses Pillow LANCZOS/WebP/AVIF and focal-aware crops; libvips can become the hosted high-throughput backend.",
