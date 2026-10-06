@@ -14,3 +14,5 @@ api/data/.app-secret
 api/data/.stripe-secret
 api/data/.resend-secret
 api/data/.resend-from
+
+load-test-results/
