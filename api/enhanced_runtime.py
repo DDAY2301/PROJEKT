@@ -19,6 +19,7 @@ import api.billing as billing
 import api.main as core
 import api.media as media
 import api.visual_qa as visual_qa
+import api.quality_originality_v2 as originality_v2
 from api.pages_publish import PagesPermissionError, publish_generated_site, wait_for_generated_site
 
 logger = logging.getLogger("project_visibility.build")
@@ -240,7 +241,7 @@ async def _publish_existing_project(project_id: str, row: Any, audit: dict[str, 
                         public_url=public_url,
                         public_live=False,
                         uploaded_images=uploaded_images,
-                        extra={"publish_action_required": "github_pages_permission", "payment_required": False},
+                        extra={"publish_action_required": "github_pages_permission", "payment_required": False, "originality": audit.get("originality") or {}},
                     ),
                     core.now_iso(),
                     project_id,
@@ -270,7 +271,7 @@ async def _publish_existing_project(project_id: str, row: Any, audit: dict[str, 
                     public_url=public_url,
                     public_live=live,
                     uploaded_images=uploaded_images,
-                    extra={"payment_required": False, "payment_stage": "completed"},
+                    extra={"payment_required": False, "payment_stage": "completed", "originality": audit.get("originality") or {}},
                 ),
                 core.now_iso(),
                 project_id,
@@ -321,6 +322,13 @@ async def generate_project_observable(project_id: str):
         phase = "quality and visual review"
         set_status(project_id, "auditing")
         files, issues, attempts, visual_report = await _quality_cycle(files, config, project_id, uploaded_images)
+        final_originality_issues, originality_report = originality_v2._originality_issues(files, config)
+        known = {(str(i.get("code") or ""), str(i.get("file") or ""), str(i.get("message") or "")) for i in issues}
+        for item in final_originality_issues:
+            key = (str(item.get("code") or ""), str(item.get("file") or ""), str(item.get("message") or ""))
+            if key not in known:
+                issues.append(item)
+                known.add(key)
 
         _attach_uploaded_image_bytes(files, uploaded_images)
         repo_name = repo_name_for(config)
@@ -349,6 +357,7 @@ async def generate_project_observable(project_id: str):
                 "payment_blocked": not _quality_gate_passed(issues, visual_report),
                 "quality_gate_passed": _quality_gate_passed(issues, visual_report),
                 "preview_ready": True,
+                "originality": originality_report,
             },
         )
         with core.db() as con:
