@@ -328,6 +328,79 @@ async def build_files(config: dict[str, Any], spec: dict[str, Any]) -> dict[str,
     return _repair_deterministic_bundle(files)
 
 
+
+def _has_accessible_interactive_gap(source: str) -> bool:
+    low = source.lower()
+    navs = re.findall(r"<nav\b[^>]*>", source, re.I)
+    if len(navs) > 1 and any(not re.search(r'aria-(?:label|labelledby)\s*=', nav, re.I) for nav in navs):
+        return True
+    for button in re.findall(r"<button\b[^>]*>.*?</button>", source, re.I | re.S):
+        opening = button.split(">", 1)[0] + ">"
+        if re.search(r'aria-(?:label|labelledby)\s*=', opening, re.I):
+            continue
+        visible = re.sub(r"<[^>]+>", " ", button)
+        visible = re.sub(r"\s+", " ", visible).strip()
+        if not visible:
+            return True
+    for anchor in re.findall(r"<a\b[^>]*>.*?</a>", source, re.I | re.S):
+        opening = anchor.split(">", 1)[0] + ">"
+        if re.search(r'aria-(?:label|labelledby)\s*=', opening, re.I):
+            continue
+        visible = re.sub(r"<[^>]+>", " ", anchor)
+        visible = re.sub(r"\s+", " ", visible).strip()
+        if not visible:
+            return True
+    return False
+
+
+def _model_issue_is_supported(issue: dict[str, Any], files: dict[str, str]) -> bool:
+    code = re.sub(r"[^a-z0-9]+", "-", str(issue.get("code") or "").lower()).strip("-")
+    path = str(issue.get("file") or "")
+    source = str(files.get(path) or "") if path else ""
+    if code.isdigit():
+        return False
+    checks = {
+        "missing-doctype": lambda s: not bool(re.search(r"^\s*<!doctype\s+html\b", s, re.I)),
+        "missing-meta-charset": lambda s: not bool(re.search(r"<meta\b[^>]*charset\s*=", s, re.I)),
+        "missing-meta-viewport": lambda s: not bool(re.search(r"<meta\b[^>]*name\s*=\s*[\"']viewport[\"']", s, re.I)),
+        "missing-title": lambda s: not bool(re.search(r"<title\b[^>]*>.*?</title>", s, re.I | re.S)),
+        "missing-meta-description": lambda s: not bool(re.search(r"<meta\b[^>]*name\s*=\s*[\"']description[\"']", s, re.I)),
+        "missing-meta-og-title": lambda s: not bool(re.search(r"<meta\b[^>]*property\s*=\s*[\"']og:title[\"']", s, re.I)),
+        "missing-meta-og-description": lambda s: not bool(re.search(r"<meta\b[^>]*property\s*=\s*[\"']og:description[\"']", s, re.I)),
+        "missing-meta-og-type": lambda s: not bool(re.search(r"<meta\b[^>]*property\s*=\s*[\"']og:type[\"']", s, re.I)),
+        "missing-semantic-structure": lambda s: any(tag not in s.lower() for tag in ("<header", "<nav", "<main", "<footer")),
+        "missing-aria-label": _has_accessible_interactive_gap,
+    }
+    if code in checks:
+        return bool(source) and checks[code](source)
+    # Deterministic/browser QA owns machine-verifiable release blocking. Keep
+    # local-model critique visible, but do not let an unverified arbitrary code
+    # become a hard blocker.
+    return False
+
+
+def _normalize_model_issues(raw: Any, files: dict[str, str]) -> list[dict[str, Any]]:
+    if not isinstance(raw, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for value in raw[:60]:
+        if not isinstance(value, dict):
+            continue
+        item = dict(value)
+        severity = str(item.get("severity") or "medium").lower()
+        if severity not in {"critical", "high", "medium", "low"}:
+            severity = "medium"
+        supported = _model_issue_is_supported(item, files)
+        if severity in {"critical", "high"} and not supported:
+            severity = "medium"
+            item["message"] = f"Advisory model review (not independently verified): {str(item.get('message') or '').strip()}"[:700]
+        item["severity"] = severity
+        item["code"] = str(item.get("code") or "MODEL_QA_NOTE")[:80]
+        item["file"] = str(item.get("file") or "")[:220]
+        out.append(item)
+    return out
+
+
 async def ai_audit(files: dict[str, str], config: dict[str, Any]) -> dict[str, Any]:
     compact = {k: v[:8000] for k, v in files.items() if k.endswith((".html", ".css", ".js"))}
     prompt = f"""
@@ -339,8 +412,8 @@ Report only specific defects that can be acted on. Do not invent issues.
 """
     try:
         data = await _json_call(prompt, "You are a strict website QA engineer. Return JSON only.", attempts=2, num_predict=2200)
-        issues = data.get("issues") if isinstance(data.get("issues"), list) else []
-        return {"passed": not any(isinstance(i, dict) and i.get("severity") in {"critical", "high"} for i in issues), "issues": issues}
+        issues = _normalize_model_issues(data.get("issues"), files)
+        return {"passed": not any(i.get("severity") in {"critical", "high"} for i in issues), "issues": issues}
     except Exception:
         # Static audit remains authoritative. A transient QA-model format failure
         # must not destroy an otherwise valid customer site.
@@ -371,11 +444,17 @@ Return the COMPLETE corrected file only. Preserve the design and content unrelat
 """
         try:
             candidate = core.strip_fence(await _generate(prompt, "You are a senior debugging engineer. Return only the corrected file.", num_predict=5000))
-            if path.endswith(".html") and "<main" not in candidate.lower():
-                continue
-            if path.endswith(".css") and ("{" not in candidate or "}" not in candidate):
-                continue
-            if len(candidate) >= max(200, int(len(content) * 0.45)):
+            if path.endswith(".html"):
+                candidate = re.sub(r"^s*(?:html|HTML)s*(?=<!doctype)", "", candidate, count=1)
+                low = candidate.lower()
+                required = ("<!doctype html", "<html", "<head", "<body", "<main", "<title", 'name="viewport"', 'name="description"', "assets/site.css")
+                if any(token not in low for token in required):
+                    continue
+            if path.endswith(".css"):
+                candidate = re.sub(r"^s*(?:css|CSS)s*(?=[:.@#a-zA-Z*])", "", candidate, count=1)
+                if "{" not in candidate or "}" not in candidate:
+                    continue
+            if len(candidate) >= max(200, int(len(content) * 0.70)):
                 repaired[path] = candidate
         except Exception:
             continue
