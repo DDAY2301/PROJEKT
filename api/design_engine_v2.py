@@ -14,6 +14,8 @@ import re
 from collections import Counter
 from typing import Any
 
+from fastapi import Depends
+
 import api.main as core
 
 _BASE_DESIGN_SITE = core.design_site
@@ -249,6 +251,12 @@ async def build_files(config: dict[str, Any], spec: dict[str, Any]) -> dict[str,
         indent=2,
     )
     return files
+
+
+@core.app.get("/agent/design-engine")
+async def design_engine_status(user_id: str = Depends(core.current_user)):
+    del user_id
+    return motif_summary()
 
 
 def motif_summary() -> dict[str, Any]:
