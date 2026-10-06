@@ -249,6 +249,34 @@ jobs:
           assert '@media(max-width:980px){.menu{display:block}' in css
           print('Smoke-test regression guards passed')
           PY
+      - name: Validate calibrated visual QA scoring
+        run: |
+          python - <<'PY'
+          from api.visual_qa import _calibrated_issue_score
+
+          repeated_medium = [
+              {'severity':'medium','code':'VISUAL_LOW_CONTRAST','file':f'page-{p}.html','viewport':v}
+              for p in range(6)
+              for v in ('desktop','tablet','mobile')
+          ]
+          score = _calibrated_issue_score(repeated_medium)
+          assert score >= 80, score
+
+          distinct_high = [
+              {'severity':'high','code':'VISUAL_HORIZONTAL_OVERFLOW','file':'index.html','viewport':'mobile'},
+              {'severity':'high','code':'VISUAL_NAV_MISSING','file':'index.html','viewport':'desktop'},
+              {'severity':'high','code':'VISUAL_BROKEN_IMAGE','file':'services.html','viewport':'desktop'},
+          ]
+          assert _calibrated_issue_score(distinct_high) < 60
+
+          one_global_high = [
+              {'severity':'high','code':'VISUAL_HORIZONTAL_OVERFLOW','file':f'page-{p}.html','viewport':v}
+              for p in range(6)
+              for v in ('desktop','tablet','mobile')
+          ]
+          assert 55 <= _calibrated_issue_score(one_global_high) <= 80
+          print('Calibrated visual QA scoring checks passed')
+          PY
       - name: Validate release quality gate
         env:
           APP_SECRET: ci-only-secret
