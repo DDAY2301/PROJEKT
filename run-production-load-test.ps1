@@ -11,6 +11,21 @@ $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $python = Join-Path $repoRoot '.venv\Scripts\python.exe'
 $script = Join-Path $repoRoot 'tools\production_load_test.py'
 
+if (Get-Command git -ErrorAction SilentlyContinue) {
+  Push-Location $repoRoot
+  try {
+    git fetch origin main | Out-Host
+    $localHead = (git rev-parse HEAD 2>$null).Trim()
+    $remoteHead = (git rev-parse origin/main 2>$null).Trim()
+    if ($localHead -and $remoteHead -and $localHead -ne $remoteHead) {
+      throw "Load test refused: local HEAD $($localHead.Substring(0,8)) is not origin/main $($remoteHead.Substring(0,8)). Run: git reset --hard origin/main ; .\start-product.ps1"
+    }
+    Write-Host "Source revision: $($localHead.Substring(0,8)) / origin-main verified" -ForegroundColor DarkGray
+  } finally {
+    Pop-Location
+  }
+}
+
 if (-not (Test-Path $python)) {
   throw "Python virtual environment not found: $python. Run start-product.ps1 first."
 }
