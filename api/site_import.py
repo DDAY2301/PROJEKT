@@ -9,6 +9,7 @@ symlinks, executable/server-side code and archive-bomb style payloads.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import io
 import json
 import re
@@ -140,6 +141,23 @@ def _stage_text_files(files: dict[str, bytes]) -> tuple[dict[str, str], dict[str
     return text_files, deliverable
 
 
+def _bundle_sha256(files: dict[str, bytes]) -> str:
+    digest = hashlib.sha256()
+    for path, data in sorted(files.items()):
+        encoded_path = path.encode("utf-8")
+        digest.update(len(encoded_path).to_bytes(4, "big"))
+        digest.update(encoded_path)
+        digest.update(len(data).to_bytes(8, "big"))
+        digest.update(data)
+    return digest.hexdigest()
+
+
+def _cleanup_stage(project_id: str) -> None:
+    import shutil
+
+    shutil.rmtree(_stage_dir(project_id), ignore_errors=True)
+
+
 async def _process_staged_import(project_id: str) -> None:
     try:
         extracted, manifest = _read_stage(project_id)
@@ -184,12 +202,21 @@ async def _process_staged_import(project_id: str) -> None:
             "source_commit": replacement.get("after"),
             "source_previous_commit": replacement.get("before"),
             "repository_replace_mode": "atomic_full_tree",
+            "exact_tree_verified": replacement.get("verified") == "true",
+            "repository_reused_existing": replacement.get("reused_existing") == "true",
+            "commit_count_delta": int(replacement.get("commit_count_delta") or 0),
+            "import_operation_id": manifest.get("import_operation_id"),
+            "desired_bundle_sha256": manifest.get("desired_bundle_sha256"),
         }
         with core.db() as con:
             con.execute(
                 "UPDATE projects SET status=?,last_audit_json=?,updated_at=? WHERE id=?",
                 ("needs_review" if severe else "ready", json.dumps(audit, ensure_ascii=False), core.now_iso(), project_id),
             )
+
+        # Git now contains the verified exact source and the DB points at the
+        # resulting commit. Staging is no longer required for restart recovery.
+        _cleanup_stage(project_id)
     except Exception as exc:
         with core.db() as con:
             row = con.execute("SELECT last_audit_json FROM projects WHERE id=?", (project_id,)).fetchone()
@@ -368,6 +395,8 @@ async def import_site_zip(
 
     manifest = {
         "project_id": project_id,
+        "import_operation_id": str(uuid.uuid4()),
+        "desired_bundle_sha256": _bundle_sha256(extracted),
         "repo_slug": repo_slug,
         "safe_name": safe_name,
         "config": config,

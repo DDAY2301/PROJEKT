@@ -94,7 +94,8 @@ jobs:
           python - <<'PY'
           from fastapi import HTTPException
           from PIL import Image
-          from api.site_import import _normalise_member, _write_stage, _read_stage, _stage_text_files, _stage_dir
+          from api.site_import import _normalise_member, _write_stage, _read_stage, _stage_text_files, _stage_dir, _bundle_sha256
+          from api.binary_publish import _expected_bundle_manifest, _tree_matches_bundle
           from api.repo_map import build_repo_map
           from api.media import _focal_crop
 
@@ -111,6 +112,21 @@ jobs:
           assert manifest['repo_slug'] == 'ci-repo'
           staged_text, deliverable = _stage_text_files(restored)
           assert 'index.html' in staged_text and isinstance(deliverable['index.html'], str)
+          assert _bundle_sha256(staged_files) == _bundle_sha256(dict(reversed(list(staged_files.items()))))
+
+          exact_bundle = {
+              'index.html': staged_files['index.html'].decode('utf-8'),
+              'assets/site.css': staged_files['assets/site.css'].decode('utf-8'),
+              'assets/photo.png': b'\\x89PNG\\r\\n\\x1a\\nCI',
+          }
+          manifest = _expected_bundle_manifest(exact_bundle)
+          tree = [{'path': path, 'type': 'blob', 'sha': sha} for path, sha in manifest.items()]
+          exact, expected, actual = _tree_matches_bundle(exact_bundle, tree)
+          assert exact and expected == actual
+          tree_with_stale = tree + [{'path':'README.md','type':'blob','sha':'deadbeef'}]
+          exact, _, actual = _tree_matches_bundle(exact_bundle, tree_with_stale)
+          assert not exact and 'README.md' in actual
+
           import shutil
           shutil.rmtree(_stage_dir(staging_id), ignore_errors=True)
           assert _normalise_member('node_modules/x.js') is None
@@ -193,6 +209,14 @@ jobs:
           offline=dict(base,status='failed',status_age_seconds=2000)
           d=decide(offline,{'model_online':False,'disk_free_gb':20})
           assert d.choice=='wait' and d.reason_code=='model_backend_offline'
+
+          imported=dict(base,status='repository_ready',status_age_seconds=120,imported_site=True)
+          d=decide(imported,runtime)
+          assert d.choice=='wait' and d.reason_code=='zip_import_owned_by_import_worker'
+
+          imported_failed=dict(base,status='failed',status_age_seconds=2000,imported_site=True)
+          d=decide(imported_failed,runtime)
+          assert d.choice=='human_review' and d.reason_code=='zip_import_failed'
 
           print('Autonomous supervisor typed-decision tests passed')
           PY
