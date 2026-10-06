@@ -331,7 +331,7 @@ def main() -> int:
 
         deadline=time.monotonic()+a.timeout_minutes*60; last=0.0
         while True:
-            done=0; states=Counter()
+            done=0; states=Counter(); active_codes=Counter(); active_stages=Counter()
             for r in results:
                 if r.status in FINAL_STATES:
                     done+=1; states[r.status]+=1; continue
@@ -339,6 +339,13 @@ def main() -> int:
                 except Exception as exc:
                     r.error=str(exc)[:300]; continue
                 state=str(project.get("status") or ""); states[state]+=1
+                audit=project.get("last_audit") or {}
+                stage=str(audit.get("build_stage") or "")
+                if stage:
+                    active_stages[stage]+=1
+                for item in (audit.get("issues") or [])[:20]:
+                    if isinstance(item,dict) and item.get("severity") in {"critical","high"}:
+                        active_codes[str(item.get("code") or "UNKNOWN")]+=1
                 if state in FINAL_STATES:
                     hydrate(r,project,db,submitted[r.project_id],now()); done+=1
                     print(f"[DONE {done:02d}/{a.count}] {r.name}: {r.status} visual={r.visual_score} motif={r.motif or '-'} total={r.total_s:.0f}s")
@@ -346,11 +353,13 @@ def main() -> int:
             if time.monotonic()>=deadline:
                 print("TIMEOUT: collecting current state",file=sys.stderr); break
             if time.monotonic()-last>=15:
+                issue_text=dict(active_codes.most_common(8))
+                stage_text=dict(active_stages)
                 try:
                     q=api.get("/agent/production-queue")
-                    print(f"[PROGRESS] final={done}/{len(results)} queue={q.get('states')} project_states={dict(states)}")
+                    print(f"[PROGRESS] final={done}/{len(results)} queue={q.get('states')} project_states={dict(states)} stages={stage_text} severe_codes={issue_text}")
                 except Exception:
-                    print(f"[PROGRESS] final={done}/{len(results)} project_states={dict(states)}")
+                    print(f"[PROGRESS] final={done}/{len(results)} project_states={dict(states)} stages={stage_text} severe_codes={issue_text}")
                 last=time.monotonic()
             time.sleep(max(.5,a.poll_seconds))
 
