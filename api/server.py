@@ -7,6 +7,7 @@ import api.main as core
 import api.model_router  # noqa: F401 - local model fallbacks + telemetry
 import api.robust_generation  # noqa: F401 - patches planning/build/QA for local models
 import api.premium_generation  # noqa: F401 - enforces premium deterministic design quality floor
+import api.design_engine_v2  # noqa: F401 - curated motif library + anti-repetition selector
 import api.binary_publish  # noqa: F401 - allows image bytes in GitHub bundles
 import api.billing  # noqa: F401 - registers Stripe Checkout/payment routes
 import api.billing_gate  # noqa: F401 - waits for successful payment before generation
@@ -14,9 +15,11 @@ import api.media  # noqa: F401 - registers authenticated image upload routes
 import api.image_studio  # noqa: F401 - non-destructive image editor, background integration + generation
 import api.media_render  # noqa: F401 - integrates uploaded images in generated pages
 import api.premium_quality  # noqa: F401 - blocks technically valid but low-quality websites
+import api.quality_originality_v2  # noqa: F401 - anti-slop + cross-site originality gate
 import api.deep_static_qa  # noqa: F401 - offline deterministic bundle/link/accessibility QA
 import api.vision_review  # noqa: F401 - adds local multimodal art-direction review to Chromium QA
 import api.enhanced_runtime  # noqa: F401 - adds media, rendered visual QA and publishing states
+import api.production_queue  # noqa: F401 - persistent multi-worker production queue
 import api.learning_runtime  # noqa: F401 - persistent versioned operational learning memory
 import api.design_critic  # noqa: F401 - independent second-pass design review
 import api.revisions  # noqa: F401 - registers post-build revision routes
