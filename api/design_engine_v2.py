@@ -148,7 +148,14 @@ def _select_motif(config: dict[str, Any]) -> tuple[str, str]:
     text = _brief_text(config)
     scored = {name: _candidate_score(name, profile, text) for name, profile in MOTIFS.items()}
     best_score = max(scored.values(), default=0)
-    pool = [name for name, score in scored.items() if score == best_score] if best_score else list(MOTIFS)
+    if best_score:
+        ranked = sorted(scored, key=lambda name: (-scored[name], name))
+        relevant = [name for name in ranked if scored[name] >= max(1, best_score - 4)]
+        pool = relevant[:4]
+        if len(pool) < 3:
+            pool = ranked[:3]
+    else:
+        pool = list(MOTIFS)
     minimum_use = min((usage[name] for name in pool), default=0)
     least_used = [name for name in pool if usage[name] == minimum_use]
 
