@@ -255,6 +255,20 @@ def _issue_summary(audit: dict[str, Any]) -> dict[str, Any]:
 
 def _state_from_project(row: dict[str, Any], supervisor: dict[str, Any]) -> dict[str, Any]:
     audit = _read_json(row.get("last_audit_json"))
+    queue_state = ""
+    queue_worker = ""
+    try:
+        with core.db() as con:
+            queue_row = con.execute(
+                "SELECT state,worker_id FROM production_jobs WHERE project_id=?",
+                (str(row.get("id") or ""),),
+            ).fetchone()
+        if queue_row:
+            queue_state = str(queue_row["state"] or "")
+            queue_worker = str(queue_row["worker_id"] or "")
+    except Exception:
+        # production_jobs may not exist during early startup/migrations.
+        pass
     try:
         config = json.loads(row.get("config_json") or "{}")
     except Exception:
@@ -264,6 +278,8 @@ def _state_from_project(row: dict[str, Any], supervisor: dict[str, Any]) -> dict
     return {
         "project_id": row["id"],
         "status": str(row.get("status") or ""),
+        "queue_state": queue_state,
+        "queue_worker": queue_worker,
         "imported_site": bool(config.get("_imported_site")),
         "status_age_seconds": round(_age_seconds(row.get("updated_at")), 1),
         "updated_at": row.get("updated_at"),
@@ -327,6 +343,17 @@ def decide(state: dict[str, Any], runtime: dict[str, Any] | None = None) -> Type
 
     if state.get("publish_action_required") == "github_pages_permission":
         return TypedDecision("human_review", 1.0, 8, False, "github_pages_permission", 1800)
+
+    queue_state = str(state.get("queue_state") or "")
+    if queue_state in {"queued", "running"} and status in ({"queued"} | ACTIVE_BUILD_STATES):
+        return TypedDecision(
+            "wait",
+            1.0,
+            1,
+            False,
+            "production_queue_owns_job",
+            60,
+        )
 
     permission_failure = (
         "permission" in messages
@@ -589,19 +616,23 @@ def _start_recovery(project_id: str, choice: str) -> bool:
         return False
 
     if choice == "retry_build":
+        # The durable production queue is the sole owner of build scheduling.
+        # If the job is already queued/running, enqueue_project returns False and
+        # the supervisor must not mutate project state or count a recovery.
+        started = bool(billing_gate.launch_project(project_id))
+        if not started:
+            return False
         with core.db() as con:
             con.execute(
                 "UPDATE projects SET status='queued',updated_at=? WHERE id=?",
                 (core.now_iso(), project_id),
             )
-        task = asyncio.create_task(_build_runner(project_id))
-    elif choice == "retry_publish":
+        return True
+    if choice == "retry_publish":
         task = asyncio.create_task(_publish_runner(project_id))
-    else:
-        return False
-
-    _active_recovery_tasks[project_id] = task
-    return True
+        _active_recovery_tasks[project_id] = task
+        return True
+    return False
 
 
 async def supervisor_tick() -> dict[str, Any]:
