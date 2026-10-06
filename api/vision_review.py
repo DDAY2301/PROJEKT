@@ -27,7 +27,7 @@ _base_audit_files = visual_qa.audit_files
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
 VISION_MODEL = os.getenv("VISUAL_QA_MODEL", "qwen2.5vl:3b").strip()
 VISION_ENABLED = os.getenv("VISUAL_QA_VISION", "true").strip().lower() in {"1", "true", "yes", "on"}
-MAX_VISION_PAGES = max(1, min(6, int(os.getenv("VISUAL_QA_VISION_MAX_PAGES", "3"))))
+MAX_VISION_PAGES = max(1, min(6, int(os.getenv("VISUAL_QA_VISION_MAX_PAGES", "1"))))
 
 ALLOWED_CATEGORIES = {
     "hierarchy", "spacing", "typography", "imagery", "consistency",
