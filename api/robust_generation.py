@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import html
 import json
+import os
 import re
 from typing import Any
 
@@ -349,12 +350,13 @@ Report only specific defects that can be acted on. Do not invent issues.
 async def fix_files(files: dict[str, str], issues: list[dict[str, Any]], config: dict[str, Any]) -> dict[str, str]:
     """Best-effort focused repair. Never replace a valid bundle with malformed model output."""
     repaired = _repair_deterministic_bundle(files)
+    file_budget = max(1, min(3, int(os.getenv("MODEL_REPAIR_FILES_PER_ATTEMPT", "2"))))
     paths = []
     for issue in issues:
         path = str(issue.get("file") or "")
         if path in repaired and path not in paths and path.endswith((".html", ".css", ".js")):
             paths.append(path)
-    for path in paths[:4]:
+    for path in paths[:file_budget]:
         relevant = [i for i in issues if str(i.get("file") or "") == path and i.get("severity") in {"critical", "high", "medium"}]
         if not relevant:
             continue
