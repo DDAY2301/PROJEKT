@@ -16,6 +16,7 @@ import api.main as core
 
 _base_design_site = core.design_site
 ENABLED = os.getenv("DESIGN_CRITIC_ENABLED", "1").strip().lower() not in {"0", "false", "no", "off"}
+MODE = os.getenv("DESIGN_CRITIC_MODE", "adaptive").strip().lower()
 
 
 def _valid_sections(value: Any) -> list[dict[str, Any]] | None:
@@ -42,9 +43,35 @@ def _valid_sections(value: Any) -> list[dict[str, Any]] | None:
     return out or None
 
 
+def _plan_needs_critic(spec: dict[str, Any]) -> bool:
+    pages = [p for p in (spec.get("pages") or []) if isinstance(p, dict)]
+    if not pages:
+        return True
+    for page in pages:
+        sections = [s for s in (page.get("sections") or []) if isinstance(s, dict)]
+        if len(sections) < 3:
+            return True
+        headings = []
+        body_chars = 0
+        for section in sections[:6]:
+            heading = str(section.get("heading") or "").strip().lower()
+            body = str(section.get("body") or "").strip()
+            if heading:
+                headings.append(heading)
+            body_chars += len(body)
+        if body_chars < 180:
+            return True
+        if len(headings) != len(set(headings)):
+            return True
+    return False
+
+
 async def design_site_with_critic(config: dict[str, Any]) -> dict[str, Any]:
     spec = await _base_design_site(config)
-    if not ENABLED:
+    if not ENABLED or MODE in {"off", "disabled", "never"}:
+        return spec
+    if MODE == "adaptive" and not _plan_needs_critic(spec):
+        spec["_critic"] = {"score": None, "issues": [], "version": "design-critic-v2-adaptive", "skipped": True}
         return spec
 
     compact_config = {
@@ -105,7 +132,7 @@ Rules:
             "_critic": {
                 "score": data.get("score"),
                 "issues": [str(x)[:240] for x in (data.get("issues") or []) if isinstance(x, (str, int, float))][:12],
-                "version": "design-critic-v1",
+                "version": "design-critic-v2-adaptive", "skipped": False,
             },
         }
     except Exception:
