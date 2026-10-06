@@ -136,8 +136,16 @@ def _render_content_sections(page: dict[str, Any]) -> str:
     out: list[str] = []
     sections = [s for s in (page.get("sections") or []) if isinstance(s, dict)]
     filtered = [s for s in sections if str(s.get("type") or "").lower() not in {"hero", "cta"}]
+    seen_headings: set[str] = set()
     for idx, section in enumerate(filtered[:4]):
-        heading = _e(_text(section.get("heading"), page.get("title") or "Overview"))
+        raw_heading = _text(section.get("heading"), page.get("title") or "Overview")
+        normalized = re.sub(r"\s+", " ", raw_heading).strip().lower()
+        if normalized in seen_headings:
+            qualifier = _text(section.get("type"), f"Part {idx + 1}").replace("_", " ").strip().title()
+            raw_heading = f"{raw_heading} — {qualifier}"
+            normalized = raw_heading.lower()
+        seen_headings.add(normalized)
+        heading = _e(raw_heading)
         body = _text(section.get("body"), page.get("purpose") or "")
         paras = _sentences(body, 4) or [body]
         body_html = "".join(f"<p>{_e(p)}</p>" for p in paras if p)
@@ -147,6 +155,16 @@ def _render_content_sections(page: dict[str, Any]) -> str:
           <div class="prose reveal">{body_html}</div>
         </div></section>''')
     return "".join(out)
+
+
+def _render_home_focus(config: dict[str, Any]) -> str:
+    audience = _text(config.get("audience"), "People looking for a clear next step.")
+    programme = _text(config.get("programme"), "Focused work")
+    goal = _text(config.get("goal"), "Turn the brief into a clear, useful experience.")
+    return f'''<section class="section home-focus"><div class="shell section-split">
+      <div class="section-head reveal"><span class="label">Built around the brief</span><h2>{_e(programme)}</h2></div>
+      <div class="prose reveal"><p>{_e(goal)}</p><p><strong>For:</strong> {_e(audience)}</p></div>
+    </div></section>'''
 
 
 def _render_metrics(config: dict[str, Any]) -> str:
@@ -235,6 +253,7 @@ def _render_page(config: dict[str, Any], spec: dict[str, Any], page: dict[str, A
           <div class="section-head reveal"><span class="label">Why it matters</span><h2>{_e(_text(config.get('goal'), 'A clearer way to turn ideas into action.'))}</h2></div>
           <div class="prose reveal"><p>{_e(_text(page.get('purpose'), hero_body))}</p><p>{_e(_text(config.get('tone'), 'Clear, human and practical.'))}</p></div>
         </div></section>''')
+        body.append(_render_home_focus(config))
         body.append(_render_journey(config))
         body.append(_render_metrics(config))
     else:
@@ -256,9 +275,9 @@ def _render_page(config: dict[str, Any], spec: dict[str, Any], page: dict[str, A
 <meta name="theme-color" content="{_configured_brand(config)['primary']}"><link rel="stylesheet" href="assets/site.css">
 </head>
 <body class="page page-{_e(slug, quote=True)}"><a class="skip" href="#content">Skip to content</a>
-<header class="site-header"><div class="shell nav"><a class="brand" href="index.html"><span class="brand-mark">N</span><span>{_e(site_name)}</span></a><button class="menu" type="button" aria-expanded="false" aria-controls="navLinks"><span></span><span></span></button><nav id="navLinks" class="nav-links" aria-label="Primary">{nav}</nav></div></header>
+<header class="site-header"><div class="shell nav"><a class="brand" href="index.html"><span class="brand-mark">N</span><span>{_e(site_name)}</span></a><button class="menu" type="button" aria-label="Open navigation menu" aria-expanded="false" aria-controls="navLinks"><span></span><span></span></button><nav id="navLinks" class="nav-links" aria-label="Primary">{nav}</nav></div></header>
 <main>{''.join(body)}</main>
-<footer class="site-footer"><div class="shell footer-grid"><div><a class="brand brand-footer" href="index.html"><span class="brand-mark">N</span><span>{_e(site_name)}</span></a><p>{_e(_text(config.get('goal'), 'A project built for meaningful participation.'))}</p></div><div><span class="footer-label">Navigate</span><nav class="footer-nav">{nav}</nav></div><div><span class="footer-label">Contact</span>{contact_link or '<span>Use the contact page</span>'}</div></div><div class="shell footer-bottom"><span>© { _e(site_name) }</span><span>Responsive · accessible · lightweight</span></div></footer>
+<footer class="site-footer"><div class="shell footer-grid"><div><a class="brand brand-footer" href="index.html"><span class="brand-mark">N</span><span>{_e(site_name)}</span></a><p>{_e(_text(config.get('goal'), 'A project built for meaningful participation.'))}</p></div><div><span class="footer-label">Navigate</span><nav class="footer-nav" aria-label="Footer navigation">{nav}</nav></div><div><span class="footer-label">Contact</span>{contact_link or '<span>Use the contact page</span>'}</div></div><div class="shell footer-bottom"><span>© { _e(site_name) }</span><span>Responsive · accessible · lightweight</span></div></footer>
 <script src="assets/site.js" defer></script></body></html>'''
 
 
@@ -278,6 +297,7 @@ def _css(config: dict[str, Any]) -> str:
 .js .reveal{{opacity:0;transform:translateY(18px);transition:opacity .65s ease,transform .65s ease}}.js .reveal.is-visible{{opacity:1;transform:none}}
 @media(max-width:980px){{.hero-grid{{grid-template-columns:1fr;min-height:auto;padding-top:142px}}.hero-art{{min-height:360px}}.intro-grid,.section-split,.section-split-reverse,.contact-grid{{grid-template-columns:1fr;gap:42px}}.section-split-reverse .section-head{{order:0}}.steps,.metrics{{grid-template-columns:repeat(2,1fr)}}.story-grid{{grid-template-columns:1fr 1fr}}.footer-grid{{grid-template-columns:1fr 1fr}}}}
 @media(max-width:760px){{.shell{{width:min(100% - 28px,var(--shell))}}.nav{{min-height:70px}}.menu{{display:block}}.nav-links{{display:none;position:absolute;left:14px;right:14px;top:76px;padding:18px;border-radius:20px;background:#08221c;box-shadow:0 25px 60px rgba(0,0,0,.3);flex-direction:column;align-items:stretch;gap:0}}.nav-links.open{{display:flex}}.nav-links a{{padding:12px}}.hero-grid{{padding:120px 0 62px;gap:42px}}.hero-copy h1{{font-size:clamp(48px,15vw,76px)}}.hero-art,.visual{{min-height:330px}}.hero-note{{right:12px;bottom:-12px}}.section{{padding:78px 0}}.section-head h2{{font-size:clamp(38px,11vw,56px)}}.steps,.metrics,.story-grid,.footer-grid{{grid-template-columns:1fr}}.step,.metric{{border-right:0;border-bottom:1px solid var(--line)}}.story-card{{min-height:0}}.footer-bottom{{flex-direction:column}}}}
+@media(max-width:980px){.menu{display:block}.nav-links{display:none;position:absolute;left:24px;right:24px;top:86px;padding:18px;border-radius:20px;background:#08221c;box-shadow:0 25px 60px rgba(0,0,0,.3);flex-direction:column;align-items:stretch;gap:0}.nav-links.open{display:flex}.nav-links a{padding:12px}.nav{position:relative}}
 @media(prefers-reduced-motion:reduce){{html{{scroll-behavior:auto}}*{{animation:none!important;transition:none!important}}.js .reveal{{opacity:1;transform:none}}}}'''
 
 
