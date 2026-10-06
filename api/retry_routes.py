@@ -7,6 +7,7 @@ import re
 from fastapi import Depends, HTTPException
 
 import api.main as core
+import api.billing_gate as billing_gate
 from api.pages_publish import PagesPermissionError, publish_generated_site, wait_for_generated_site
 
 
@@ -150,8 +151,8 @@ async def retry_project(project_id: str, user_id: str = Depends(core.current_use
             "UPDATE projects SET status='queued',last_audit_json=NULL,auto_fix_attempts=0,updated_at=? WHERE id=?",
             (core.now_iso(), project_id),
         )
-    asyncio.create_task(core.generate_project(project_id))
-    return {"id": project_id, "status": "queued"}
+    started = billing_gate.launch_project(project_id)
+    return {"id": project_id, "status": "queued", "started": started}
 
 
 @core.app.post("/projects/{project_id}/publish")
