@@ -25,7 +25,7 @@ jobs:
           api/learning_runtime.py api/revisions.py api/retry_routes.py api/dashboard.py
           api/preview.py api/notifications.py api/handoff_runtime.py
           api/model_router.py api/repo_map.py api/deep_static_qa.py api/design_critic.py
-          api/source_editor.py api/site_import.py api/image_studio.py api/autonomous_supervisor.py api/capabilities.py
+          api/source_editor.py api/site_import.py api/brief_import.py api/image_studio.py api/autonomous_supervisor.py api/capabilities.py
           api/server.py api/create_test_user.py
       - name: Import complete server
         env:
@@ -62,6 +62,7 @@ jobs:
               '/agent/supervisor/run',
               '/projects/{project_id}/supervisor',
               '/imports/site',
+              '/imports/brief',
               '/projects/{project_id}/editor/files',
               '/projects/{project_id}/editor/file',
               '/projects/{project_id}/editor/context',
@@ -95,6 +96,7 @@ jobs:
           from fastapi import HTTPException
           from PIL import Image
           from api.site_import import _normalise_member, _write_stage, _read_stage, _stage_text_files, _stage_dir, _bundle_sha256
+          from api.brief_import import _labelled_fields, _normalise
           from api.binary_publish import _expected_bundle_manifest, _tree_matches_bundle
           from api.repo_map import build_repo_map
           from api.media import _focal_crop
@@ -130,6 +132,13 @@ jobs:
           import shutil
           shutil.rmtree(_stage_dir(staging_id), ignore_errors=True)
           assert _normalise_member('node_modules/x.js') is None
+          labelled = _labelled_fields('Ime projekta: Raven Lab\nOrganizacija: Povod\nStrani:\n- Domov | predstavitev\n- Kontakt | povpraševanje\nPrimarna barva: #123456')
+          brief = _normalise(labelled, 'test brief')
+          assert brief['name'] == 'Raven Lab'
+          assert brief['organization'] == 'Povod'
+          assert brief['brand']['primary_color'] == '#123456'
+          assert [p['title'] for p in brief['pages']] == ['Domov', 'Kontakt']
+          assert brief['package'] == 'Start'
           try:
               _normalise_member('../escape.html')
               raise AssertionError('Traversal path was accepted')
@@ -251,6 +260,7 @@ jobs:
           node --check dist/assets/runtime-config.js
           node --check dist/assets/readiness-v3.js
           node --check dist/assets/import-v1.js
+          node --check dist/assets/brief-import-v1.js
           node --check dist/assets/editor-v1.js
           node --check dist/assets/agent-console-v1.js
           node --check dist/assets/image-studio-v1.js
@@ -275,6 +285,7 @@ jobs:
       - name: Check ZIP import UI contract
         run: |
           grep -q 'import-v1.js?v=20260926-2' dist/builder.html
+          grep -q 'brief-import-v1.js?v=20261006-1' dist/builder.html
           grep -q 'workspace-v2.css?v=20260926-2' dist/builder.html
           grep -q 'waitForImport' dist/assets/import-v1.js
           grep -q 'Gateway je vrnil HTML namesto API odgovora' dist/assets/import-v1.js
@@ -303,6 +314,7 @@ jobs:
           test -f dist/assets/editor-v1.css
           test -f dist/assets/editor-v1.js
           test -f dist/assets/import-v1.js
+          test -f dist/assets/brief-import-v1.js
           test -f dist/builder/index.html
           test -f dist/404.html
           test -f dist/assets/builder.js
@@ -326,6 +338,7 @@ jobs:
           test -f api/design_critic.py
           test -f api/source_editor.py
           test -f api/site_import.py
+          test -f api/brief_import.py
           test -f api/image_studio.py
           test -f api/autonomous_supervisor.py
           test -f api/capabilities.py
