@@ -245,6 +245,14 @@ jobs:
           d=decide(dict(base), runtime)
           assert d.choice=='retry_build' and d.autonomous
 
+          queue_owned=dict(base,status='queued',status_age_seconds=999,queue_state='queued')
+          d=decide(queue_owned,runtime)
+          assert d.choice=='wait' and d.reason_code=='production_queue_owns_job' and not d.autonomous
+
+          running_owned=dict(base,status='building',status_age_seconds=9999,queue_state='running')
+          d=decide(running_owned,runtime)
+          assert d.choice=='wait' and d.reason_code=='production_queue_owns_job'
+
           payment=dict(base,status='ready_for_payment',status_age_seconds=999)
           d=decide(payment,runtime)
           assert d.choice=='hold_payment' and not d.autonomous
