@@ -168,6 +168,42 @@ def ro_db(path: Path):
     con.row_factory=sqlite3.Row
     return con
 
+def cleanup_old_loadtests(path: Path) -> dict[str,int]:
+    """Delete only local load-test rows so a new benchmark starts with an empty test queue."""
+    if not path.exists():
+        return {"users":0,"projects":0,"jobs":0}
+    con=sqlite3.connect(path,timeout=20)
+    con.row_factory=sqlite3.Row
+    try:
+        users=con.execute(
+            "SELECT id FROM users WHERE lower(email) LIKE 'pv.loadtest.%@gmail.com'"
+        ).fetchall()
+        user_ids=[str(row["id"]) for row in users]
+        if not user_ids:
+            return {"users":0,"projects":0,"jobs":0}
+        placeholders=",".join("?" for _ in user_ids)
+        projects=con.execute(
+            f"SELECT id FROM projects WHERE user_id IN ({placeholders})",
+            user_ids,
+        ).fetchall()
+        project_ids=[str(row["id"]) for row in projects]
+        jobs=0
+        if project_ids:
+            pp=",".join("?" for _ in project_ids)
+            for table in ("production_jobs","agent_supervisor_events","agent_supervisor_state"):
+                try:
+                    cur=con.execute(f"DELETE FROM {table} WHERE project_id IN ({pp})",project_ids)
+                    if table=="production_jobs":
+                        jobs=int(cur.rowcount or 0)
+                except sqlite3.OperationalError:
+                    pass
+            con.execute(f"DELETE FROM projects WHERE id IN ({pp})",project_ids)
+        con.execute(f"DELETE FROM users WHERE id IN ({placeholders})",user_ids)
+        con.commit()
+        return {"users":len(user_ids),"projects":len(project_ids),"jobs":jobs}
+    finally:
+        con.close()
+
 def queue_metrics(path: Path, project_id: str) -> dict[str,Any]:
     if not path.exists(): return {}
     try:
@@ -302,12 +338,18 @@ def main() -> int:
     p.add_argument("--password",default=os.getenv("PV_LOADTEST_PASSWORD",""))
     p.add_argument("--output",default="")
     p.add_argument("--submit-delay",type=float,default=.12)
+    p.add_argument("--keep-old-loadtests",action="store_true",help="Do not clear prior local pv.loadtest.* rows before this run")
     a=p.parse_args()
     if not 1<=a.count<=100: p.error("--count must be 1..100")
 
     db=Path(a.db).resolve()
     started=now(); stamp=started.strftime("%Y%m%d-%H%M%S")
     folder=Path(a.output).resolve() if a.output else REPORT_ROOT/stamp
+    if db.exists() and not a.keep_old_loadtests:
+        cleaned=cleanup_old_loadtests(db)
+        if any(cleaned.values()):
+            print(f"[CLEAN] removed old local load-test state: {cleaned}")
+
     api=Api(a.api)
     try:
         health=api.get("/health")
