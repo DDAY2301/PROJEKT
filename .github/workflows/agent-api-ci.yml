@@ -19,13 +19,13 @@ jobs:
       - name: Compile API runtime
         run: >-
           python -m py_compile
-          api/main.py api/robust_generation.py api/premium_generation.py api/premium_quality.py
+          api/main.py api/robust_generation.py api/premium_generation.py api/design_engine_v2.py api/premium_quality.py api/quality_originality_v2.py
           api/billing.py api/billing_gate.py api/media.py api/media_render.py api/binary_publish.py
           api/pages_publish.py api/visual_qa.py api/vision_review.py api/enhanced_runtime.py
           api/learning_runtime.py api/revisions.py api/retry_routes.py api/dashboard.py
           api/preview.py api/notifications.py api/handoff_runtime.py
           api/model_router.py api/repo_map.py api/deep_static_qa.py api/design_critic.py
-          api/source_editor.py api/site_import.py api/brief_import.py api/image_studio.py api/autonomous_supervisor.py api/capabilities.py
+          api/source_editor.py api/site_import.py api/brief_import.py api/image_studio.py api/autonomous_supervisor.py api/production_queue.py api/capabilities.py
           api/server.py api/create_test_user.py
       - name: Import complete server
         env:
@@ -58,6 +58,9 @@ jobs:
               '/agent/state',
               '/agent/models',
               '/agent/capabilities',
+              '/agent/design-engine',
+              '/agent/production-queue',
+              '/agent/originality',
               '/agent/supervisor',
               '/agent/supervisor/run',
               '/projects/{project_id}/supervisor',
@@ -160,6 +163,49 @@ jobs:
           cropped.close()
           print('ZIP, repo map and focal crop smoke tests passed')
           PY
+      - name: Validate production V2 architecture
+        run: |
+          python - <<'PY'
+          import uuid
+          from api import design_engine_v2 as design
+          from api import production_queue as queue
+          from api import quality_originality_v2 as originality
+
+          assert len(design.MOTIFS) >= 12
+          html = '<!doctype html><html><body class="page page-index"><main><section class="hero"></section><section class="section intro"></section></main></body></html>'
+          stamped = design._stamp_html(html, 'swiss_editorial', 'rail')
+          assert 'data-design-system="design-v2"' in stamped
+          assert 'motif-swiss_editorial' in stamped and 'composition-rail' in stamped
+          assert design._motif_css('creative_brutal', 'offset') != design._motif_css('luxury_minimal', 'offset')
+
+          project_id = 'ci-queue-' + uuid.uuid4().hex
+          assert queue.enqueue_project(project_id)
+          assert not queue.enqueue_project(project_id)
+          claimed = queue._claim_next('ci-worker')
+          assert claimed == project_id
+          queue._finish(project_id, 'done')
+
+          files_a = {
+              'index.html': stamped,
+              'assets/site.css': design._motif_css('swiss_editorial', 'rail'),
+          }
+          files_b = {
+              'index.html': design._stamp_html(html, 'automotive_dark', 'stacked'),
+              'assets/site.css': design._motif_css('automotive_dark', 'stacked'),
+          }
+          fp_a = originality._fingerprint(files_a)
+          fp_same = originality._fingerprint(dict(files_a))
+          fp_b = originality._fingerprint(files_b)
+          assert originality._similarity(fp_a, fp_same) == 1.0
+          assert originality._similarity(fp_a, fp_b) < originality.HIGH_SIMILARITY
+
+          clean = originality._anti_slop_issues(files_a, {'name':'CI','organization':'CI'})
+          assert not any(x['code'] == 'DESIGN_ENGINE_V2_MISSING' for x in clean)
+          slop = {'index.html': stamped.replace('</main>', '<p>Unlock your potential with cutting-edge solutions and a seamless experience.</p></main>'), 'assets/site.css': files_a['assets/site.css']}
+          findings = originality._anti_slop_issues(slop, {'name':'CI','organization':'CI'})
+          assert any(x['code'] == 'AI_SLOP_DENSITY' for x in findings)
+          print('Design V2, durable queue and originality gate tests passed')
+          PY
       - name: Validate release quality gate
         env:
           APP_SECRET: ci-only-secret
@@ -177,10 +223,10 @@ jobs:
           assert 'href="kontakt.html"' in repaired['index.html']
           assert 'aria-label="Open navigation menu"' in repaired['index.html']
 
-          good_visual = {'available': True, 'passed': True, 'score': 80}
+          good_visual = {'available': True, 'passed': True, 'score': 90}
           assert _quality_gate_passed([], good_visual)
           assert not _quality_gate_passed([{'severity':'high'}], good_visual)
-          assert not _quality_gate_passed([], {'available': True, 'passed': True, 'score': 79})
+          assert not _quality_gate_passed([], {'available': True, 'passed': True, 'score': 89})
           assert not _quality_gate_passed([], {'available': False, 'passed': False, 'score': None})
           print('Release gate and deterministic repair tests passed')
           PY
@@ -342,6 +388,9 @@ jobs:
           test -f api/image_studio.py
           test -f api/autonomous_supervisor.py
           test -f api/capabilities.py
+          test -f api/design_engine_v2.py
+          test -f api/production_queue.py
+          test -f api/quality_originality_v2.py
           test -f api/create_test_user.py
           test -f configure-email.ps1
           test -f start-product.ps1
