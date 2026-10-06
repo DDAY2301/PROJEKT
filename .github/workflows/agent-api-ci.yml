@@ -277,6 +277,43 @@ jobs:
           assert 55 <= _calibrated_issue_score(one_global_high) <= 80
           print('Calibrated visual QA scoring checks passed')
           PY
+      - name: Validate fast-quality production profile
+        run: |
+          python - <<'PY'
+          import asyncio, os
+          from api import design_critic
+          from api import robust_generation
+          from api import vision_review
+
+          good = {
+              'pages': [
+                  {'sections': [
+                      {'heading':'One','body':'A'*100},
+                      {'heading':'Two','body':'B'*100},
+                      {'heading':'Three','body':'C'*100},
+                  ]}
+              ]
+          }
+          weak = {'pages':[{'sections':[{'heading':'One','body':'short'}]}]}
+          assert design_critic._plan_needs_critic(good) is False
+          assert design_critic._plan_needs_critic(weak) is True
+          assert vision_review.MAX_VISION_PAGES == 1
+
+          async def check():
+              old = os.environ.get('MODEL_QA_MODE')
+              os.environ['MODEL_QA_MODE'] = 'deterministic'
+              try:
+                  result = await robust_generation.ai_audit({'index.html':'<!doctype html><html><body></body></html>'}, {})
+                  assert result.get('model_qa_skipped') is True
+                  assert result['issues'][0]['code'] == 'MODEL_QA_ADAPTIVE_SKIP'
+              finally:
+                  if old is None:
+                      os.environ.pop('MODEL_QA_MODE', None)
+                  else:
+                      os.environ['MODEL_QA_MODE'] = old
+          asyncio.run(check())
+          print('Fast-quality profile checks passed')
+          PY
       - name: Validate release quality gate
         env:
           APP_SECRET: ci-only-secret
@@ -510,4 +547,7 @@ jobs:
           test -f tools/production_load_test.py
           grep -q 'qwen2.5-coder:7b' start-product.ps1
           grep -q 'qwen2.5-coder:7b' api/start-local.ps1
+          grep -q 'DESIGN_CRITIC_MODE = "adaptive"' start-product.ps1
+          grep -q 'MODEL_QA_MODE = "deterministic"' start-product.ps1
+          grep -q 'VISUAL_QA_VISION_MAX_PAGES = "1"' start-product.ps1
           grep -q 'Load test refused: local HEAD' run-production-load-test.ps1
