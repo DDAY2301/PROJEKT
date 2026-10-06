@@ -53,6 +53,13 @@ if (Get-Command git -ErrorAction SilentlyContinue) {
   Write-Host "[1/6] Git is not on PATH - continuing with local files."
 }
 
+$env:DESIGN_CRITIC_MODE = "adaptive"
+$env:MODEL_QA_MODE = "deterministic"
+$env:VISUAL_QA_VISION_MAX_PAGES = "1"
+$env:TEXT_REPAIR_ATTEMPTS = "1"
+$env:VISUAL_REPAIR_ATTEMPTS = "1"
+$env:MODEL_REPAIR_FILES_PER_ATTEMPT = "2"
+
 Write-Host "[2/6] Starting/checking local engine..."
 $ollamaOk = $false
 try {
