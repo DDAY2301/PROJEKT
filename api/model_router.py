@@ -17,6 +17,7 @@ the OpenAI-compatible backend is used as a fallback when configured.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import time
 import uuid
@@ -27,6 +28,9 @@ import httpx
 from fastapi import Depends
 
 import api.main as core
+
+MODEL_CONCURRENCY = max(1, min(8, int(os.getenv("MODEL_CONCURRENCY", "1"))))
+_MODEL_SEMAPHORE = asyncio.Semaphore(MODEL_CONCURRENCY)
 
 
 @dataclass(frozen=True)
@@ -226,45 +230,46 @@ async def generate(
     if not candidates:
         raise RuntimeError("No local LLM backend is configured")
 
-    last_error: Exception | None = None
-    for candidate in candidates:
-        started = time.perf_counter()
-        response_text = ""
-        try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
-                if candidate.provider == "openai":
-                    response_text = await _openai_generate(
-                        client,
-                        candidate,
-                        prompt,
-                        system,
-                        json_mode=json_mode,
-                        num_predict=num_predict,
-                        temperature=temperature,
-                    )
-                else:
-                    response_text = await _ollama_generate(
-                        client,
-                        candidate,
-                        prompt,
-                        system,
-                        json_mode=json_mode,
-                        num_predict=num_predict,
-                        temperature=temperature,
-                        num_ctx=num_ctx,
-                    )
-            latency = round((time.perf_counter() - started) * 1000)
-            if not response_text:
-                raise RuntimeError("model returned an empty response")
-            _record(candidate.provider, candidate.model, "ok", prompt, response_text, latency)
-            return response_text
-        except Exception as exc:
-            latency = round((time.perf_counter() - started) * 1000)
-            _record(candidate.provider, candidate.model, "failed", prompt, response_text, latency, str(exc))
-            last_error = exc
-            continue
+    async with _MODEL_SEMAPHORE:
+        last_error: Exception | None = None
+        for candidate in candidates:
+            started = time.perf_counter()
+            response_text = ""
+            try:
+                async with httpx.AsyncClient(timeout=timeout) as client:
+                    if candidate.provider == "openai":
+                        response_text = await _openai_generate(
+                            client,
+                            candidate,
+                            prompt,
+                            system,
+                            json_mode=json_mode,
+                            num_predict=num_predict,
+                            temperature=temperature,
+                        )
+                    else:
+                        response_text = await _ollama_generate(
+                            client,
+                            candidate,
+                            prompt,
+                            system,
+                            json_mode=json_mode,
+                            num_predict=num_predict,
+                            temperature=temperature,
+                            num_ctx=num_ctx,
+                        )
+                latency = round((time.perf_counter() - started) * 1000)
+                if not response_text:
+                    raise RuntimeError("model returned an empty response")
+                _record(candidate.provider, candidate.model, "ok", prompt, response_text, latency)
+                return response_text
+            except Exception as exc:
+                latency = round((time.perf_counter() - started) * 1000)
+                _record(candidate.provider, candidate.model, "failed", prompt, response_text, latency, str(exc))
+                last_error = exc
+                continue
 
-    raise RuntimeError(f"All configured local models failed: {last_error or 'unknown error'}")
+        raise RuntimeError(f"All configured local models failed: {last_error or 'unknown error'}")
 
 
 async def routed_ollama(prompt: str, system: str = "") -> str:
