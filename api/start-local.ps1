@@ -33,6 +33,13 @@ Write-Host "Using Python $version"
 $ollama = Get-Command ollama -ErrorAction SilentlyContinue
 if (-not $ollama) { throw "Ollama was not found in PATH." }
 
+$env:DESIGN_CRITIC_MODE = "adaptive"
+$env:MODEL_QA_MODE = "deterministic"
+$env:VISUAL_QA_VISION_MAX_PAGES = "1"
+$env:TEXT_REPAIR_ATTEMPTS = "1"
+$env:VISUAL_REPAIR_ATTEMPTS = "1"
+$env:MODEL_REPAIR_FILES_PER_ATTEMPT = "2"
+
 Write-Host "[2/9] Checking local Ollama API..."
 try {
   $tags = Invoke-RestMethod -Uri "http://127.0.0.1:11434/api/tags" -TimeoutSec 5
