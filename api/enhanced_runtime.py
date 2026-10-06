@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -21,7 +22,7 @@ import api.visual_qa as visual_qa
 from api.pages_publish import PagesPermissionError, publish_generated_site, wait_for_generated_site
 
 logger = logging.getLogger("project_visibility.build")
-MIN_VISUAL_QA_SCORE = 80
+MIN_VISUAL_QA_SCORE = max(80, min(100, int(os.getenv("MIN_VISUAL_QA_SCORE", "90"))))
 
 TEST_BYPASS_EMAILS = {"maj@klemec.org"}
 
