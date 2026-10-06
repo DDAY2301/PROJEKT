@@ -35,6 +35,8 @@ import api.main as core
 QA_ROOT = Path(os.getenv("VISUAL_QA_ROOT", "api/data/visual-qa"))
 QA_ROOT.mkdir(parents=True, exist_ok=True)
 MAX_VISUAL_PAGES = int(os.getenv("VISUAL_QA_MAX_PAGES", "12"))
+VISUAL_QA_CONCURRENCY = max(1, min(6, int(os.getenv("VISUAL_QA_CONCURRENCY", "2"))))
+_VISUAL_QA_SEMAPHORE = asyncio.Semaphore(VISUAL_QA_CONCURRENCY)
 
 VIEWPORTS: dict[str, tuple[int, int]] = {
     "desktop": (1440, 1000),
@@ -345,4 +347,5 @@ def _run_visual_sync(files: dict[str, Any], project_id: str, uploaded_images: li
 
 async def audit_files(files: dict[str, Any], project_id: str, config: dict[str, Any], uploaded_images: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     del config  # reserved for future intent-aware visual rules
-    return await asyncio.to_thread(_run_visual_sync, files, project_id, uploaded_images or [])
+    async with _VISUAL_QA_SEMAPHORE:
+        return await asyncio.to_thread(_run_visual_sync, files, project_id, uploaded_images or [])
