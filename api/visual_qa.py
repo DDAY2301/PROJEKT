@@ -240,6 +240,38 @@ def _issues_from_metrics(path: str, viewport: str, m: dict[str, Any]) -> list[di
     return issues
 
 
+def _calibrated_issue_score(issues: list[dict[str, str]]) -> int:
+    """Score issue families without multiplying one systemic defect by every viewport.
+
+    Blocking semantics stay strict: any critical/high issue still fails the
+    deterministic visual gate. The numeric score measures breadth of distinct
+    defects instead of counting the same CSS problem 18 times across a site.
+    """
+    families: dict[tuple[str, str], dict[str, set[str]]] = {}
+    for item in issues:
+        severity = str(item.get("severity") or "medium").lower()
+        code = str(item.get("code") or "VISUAL_UNKNOWN")
+        bucket = families.setdefault((severity, code), {"files": set(), "viewports": set()})
+        if item.get("file"):
+            bucket["files"].add(str(item["file"]))
+        if item.get("viewport"):
+            bucket["viewports"].add(str(item["viewport"]))
+
+    penalty = 0.0
+    for (severity, _code), spread in families.items():
+        files = max(1, len(spread["files"]))
+        viewports = max(1, len(spread["viewports"]))
+        if severity == "critical":
+            penalty += 32 + min(18, (files - 1) * 5) + min(6, (viewports - 1) * 2)
+        elif severity == "high":
+            penalty += 18 + min(14, (files - 1) * 4) + min(4, (viewports - 1) * 2)
+        elif severity == "medium":
+            penalty += 4 + min(8, (files - 1) * 1.5) + min(2, (viewports - 1))
+        else:
+            penalty += min(2, 0.5 * files)
+    return max(0, round(100 - penalty))
+
+
 def _run_visual_sync(files: dict[str, Any], project_id: str, uploaded_images: list[dict[str, Any]]) -> dict[str, Any]:
     stamp = time.strftime("%Y%m%d-%H%M%S")
     screenshot_dir = QA_ROOT / project_id / stamp
@@ -330,8 +362,7 @@ def _run_visual_sync(files: dict[str, Any], project_id: str, uploaded_images: li
         unique.append(item)
 
     severe = sum(1 for item in unique if item.get("severity") in {"critical", "high"})
-    medium = sum(1 for item in unique if item.get("severity") == "medium")
-    score = max(0, 100 - severe * 18 - medium * 4)
+    score = _calibrated_issue_score(unique)
     return {
         "available": True,
         "passed": severe == 0,
@@ -341,7 +372,7 @@ def _run_visual_sync(files: dict[str, Any], project_id: str, uploaded_images: li
         "viewports": metrics_by_viewport,
         "pages_checked": len(html_paths),
         "render_count": len(shots),
-        "version": "visual-qa-v2",
+        "version": "visual-qa-v3",
     }
 
 
