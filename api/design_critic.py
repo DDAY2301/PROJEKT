@@ -13,6 +13,7 @@ import os
 from typing import Any
 
 import api.main as core
+import api.model_router as model_router
 
 _base_design_site = core.design_site
 ENABLED = os.getenv("DESIGN_CRITIC_ENABLED", "1").strip().lower() not in {"0", "false", "no", "off"}
@@ -59,7 +60,7 @@ def _plan_needs_critic(spec: dict[str, Any]) -> bool:
             if heading:
                 headings.append(heading)
             body_chars += len(body)
-        if body_chars < 180:
+        if body_chars < 120:
             return True
         if len(headings) != len(set(headings)):
             return True
@@ -107,9 +108,15 @@ Rules:
 - if the current plan is already strong, keep its sections substantially intact
 """
     try:
-        raw = core.strip_fence(await core.ollama(
+        raw = core.strip_fence(await model_router.generate(
             prompt,
             "You are an independent website design critic. Return one valid JSON object only.",
+            json_mode=True,
+            timeout=180,
+            num_predict=1500,
+            temperature=0.10,
+            num_ctx=6144,
+            tier="fast",
         ))
         data = json.loads(raw)
         revised = data.get("revised_pages")
