@@ -61,9 +61,10 @@
   }
 
   const statusLabel = status => ({
-    queued:'V čakalni vrsti', awaiting_payment:'Čaka plačilo', payment_pending:'Plačilo v teku', designing:'Struktura', building:'Izdelava', auditing:'QA', visual_qa:'Visual QA', fixing:'Popravki', publishing:'Objava', revising:'Revizija', ready:'Pripravljeno', needs_review:'Potreben pregled', failed:'Napaka'
+    queued:'V čakalni vrsti', awaiting_payment:'Čaka plačilo', payment_pending:'Plačilo v teku', designing:'Struktura', building:'Izdelava', auditing:'QA', visual_qa:'Visual QA', fixing:'Popravki', publishing:'Objava', revising:'Revizija', cancel_requested:'Preklicujem', cancelled:'Preklicano', archived:'Arhivirano', ready:'Pripravljeno', ready_for_payment:'Pripravljeno za plačilo', needs_review:'Potreben pregled', failed:'Napaka'
   })[status] || status;
-  const badgeClass = status => status === 'ready' ? 'good' : status === 'failed' ? 'bad' : ['needs_review','awaiting_payment','payment_pending'].includes(status) ? 'warn' : '';
+  const badgeClass = status => status === 'ready' ? 'good' : ['failed','cancelled'].includes(status) ? 'bad' : ['needs_review','awaiting_payment','payment_pending','ready_for_payment','cancel_requested','archived'].includes(status) ? 'warn' : '';
+  const activeStatuses = new Set(['queued','designing','building','auditing','visual_qa','fixing','publishing','revising','cancel_requested']);
 
   function projectCard(p) {
     const payment = p.payment;
@@ -81,8 +82,10 @@
         <div class="metric"><span>Visual QA</span><strong>${esc(qaText)}</strong></div>
         <div class="project-actions">
           ${live ? `<a class="button" href="${esc(p.public_url)}" target="_blank" rel="noopener">Odpri stran ↗</a>` : ''}
-          <a class="button light" href="${esc(workspace)}">Workspace</a>
+          ${!p.archived ? `<a class="button light" href="${esc(workspace)}">Workspace</a>` : ''}
           <button class="button light" type="button" data-details="${esc(p.id)}">Podrobnosti</button>
+          ${activeStatuses.has(p.status) && p.status !== 'cancel_requested' ? `<button class="button light" type="button" data-cancel-project="${esc(p.id)}">Prekliči</button>` : ''}
+          ${p.archived ? `<button class="button light" type="button" data-restore-project="${esc(p.id)}">Obnovi</button>` : (!activeStatuses.has(p.status) ? `<button class="button light" type="button" data-archive-project="${esc(p.id)}">Arhiviraj</button>` : '')}
         </div>
       </div>
       <div class="details" id="details-${esc(p.id)}">
@@ -141,6 +144,22 @@
     } catch (err) { state(err.message); }
   }
 
+  async function lifecycleAction(projectId, action) {
+    const labels = {cancel:'Preklicujem build …', archive:'Arhiviram projekt …', restore:'Obnavljam projekt …'};
+    try {
+      state(labels[action] || 'Posodabljam projekt …');
+      const data = await request(`/projects/${projectId}/${action}`, {method:'POST'});
+      state(
+        action === 'cancel' ? 'Preklic je poslan produkcijski vrsti.' :
+        action === 'archive' ? 'Projekt je arhiviran.' :
+        'Projekt je obnovljen.',
+        true
+      );
+      await loadProjects();
+      return data;
+    } catch (err) { state(err.message); }
+  }
+
   async function downloadSource(projectId) {
     try {
       state('Pripravljam source ZIP …');
@@ -164,6 +183,9 @@
     document.querySelectorAll('[data-domain-save]').forEach(btn => btn.addEventListener('click',()=>saveDomain(btn.dataset.domainSave)));
     document.querySelectorAll('[data-revise]').forEach(btn => btn.addEventListener('click',()=>revise(btn.dataset.revise)));
     document.querySelectorAll('[data-source]').forEach(btn => btn.addEventListener('click',()=>downloadSource(btn.dataset.source)));
+    document.querySelectorAll('[data-cancel-project]').forEach(btn => btn.addEventListener('click',()=>lifecycleAction(btn.dataset.cancelProject,'cancel')));
+    document.querySelectorAll('[data-archive-project]').forEach(btn => btn.addEventListener('click',()=>lifecycleAction(btn.dataset.archiveProject,'archive')));
+    document.querySelectorAll('[data-restore-project]').forEach(btn => btn.addEventListener('click',()=>lifecycleAction(btn.dataset.restoreProject,'restore')));
   }
 
   $('login').addEventListener('click',()=>authenticate('login'));
