@@ -60,8 +60,15 @@ $env:TEXT_REPAIR_ATTEMPTS = "1"
 $env:VISUAL_REPAIR_ATTEMPTS = "1"
 $env:MODEL_REPAIR_FILES_PER_ATTEMPT = "2"
 $env:MODEL_ROUTING = "adaptive"
-$env:OLLAMA_EXPERT_KEEP_ALIVE = "45s"
-$env:OLLAMA_FAST_KEEP_ALIVE = "5m"
+if (-not $env:MODEL_CONCURRENCY) { $env:MODEL_CONCURRENCY = "2" }
+if (-not $env:PRODUCTION_WORKERS) { $env:PRODUCTION_WORKERS = "4" }
+if (-not $env:VISUAL_QA_CONCURRENCY) { $env:VISUAL_QA_CONCURRENCY = "2" }
+$env:OLLAMA_EXPERT_KEEP_ALIVE = "10s"
+$env:OLLAMA_FAST_KEEP_ALIVE = "10m"
+$env:OLLAMA_VISION_KEEP_ALIVE = "10m"
+if (-not $env:OLLAMA_NUM_PARALLEL) { $env:OLLAMA_NUM_PARALLEL = "2" }
+if (-not $env:OLLAMA_MAX_LOADED_MODELS) { $env:OLLAMA_MAX_LOADED_MODELS = "2" }
+if (-not $env:OLLAMA_FLASH_ATTENTION) { $env:OLLAMA_FLASH_ATTENTION = "1" }
 
 Write-Host "[2/6] Starting/checking local engine..."
 $ollamaOk = $false
@@ -82,6 +89,7 @@ if ($models -notcontains $Model) {
   if ($LASTEXITCODE -ne 0) { throw "Could not download local model $Model." }
 }
 Write-Host "Local engine: ONLINE / $Model" -ForegroundColor Green
+Write-Host "Factory profile: workers=$env:PRODUCTION_WORKERS · model concurrency=$env:MODEL_CONCURRENCY · visual QA=$env:VISUAL_QA_CONCURRENCY" -ForegroundColor DarkCyan
 
 $tags = Invoke-RestMethod -Uri "http://127.0.0.1:11434/api/tags" -Method Get -TimeoutSec 5
 $models = @($tags.models | ForEach-Object { $_.name })
