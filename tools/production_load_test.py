@@ -193,7 +193,7 @@ def cleanup_old_loadtests(path: Path) -> dict[str,int]:
         jobs=0
         if project_ids:
             pp=",".join("?" for _ in project_ids)
-            for table in ("production_jobs","agent_supervisor_events","agent_supervisor_state"):
+            for table in ("production_jobs","agent_supervisor_events","agent_supervisor_state","project_lifecycle"):
                 try:
                     cur=con.execute(f"DELETE FROM {table} WHERE project_id IN ({pp})",project_ids)
                     if table=="production_jobs":
