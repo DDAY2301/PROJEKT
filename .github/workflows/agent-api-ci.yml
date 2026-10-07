@@ -625,6 +625,9 @@ jobs:
           test -f install-expert-model.ps1
           test -f tools/production_load_test.py
           grep -q 'KAT-Coder-V2.5-Dev-Imatrix-GGUF' install-expert-model.ps1
+          grep -q 'Qwen_Qwen3.6-35B-A3B-GGUF' install-expert-model.ps1
+          grep -q 'QWEN-IQ2_XXS' install-expert-model.ps1
+          grep -q 'QWEN-IQ2_M' install-expert-model.ps1
           grep -q 'MODEL_ROUTING = "adaptive"' start-product.ps1
           grep -q 'OLLAMA_EXPERT_KEEP_ALIVE = "45s"' start-product.ps1
           grep -q 'qwen2.5-coder:7b' start-product.ps1
