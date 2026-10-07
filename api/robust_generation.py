@@ -26,15 +26,28 @@ import api.main as core
 import api.model_router as model_router
 
 
-async def _generate(prompt: str, system: str, *, json_mode: bool = False, timeout: int = 360, num_predict: int = 4096) -> str:
+async def _generate(
+    prompt: str,
+    system: str,
+    *,
+    json_mode: bool = False,
+    timeout: int = 300,
+    num_predict: int = 4096,
+    tier: str = "fast",
+    num_ctx: int = 6144,
+) -> str:
+    # Website production intentionally stays on the fast model. Large expert
+    # models are reserved for repo/agent engineering so a customer repair
+    # cannot evict the hot 7B model and stall the factory.
     return await model_router.generate(
         prompt,
         system,
         json_mode=json_mode,
         timeout=timeout,
         num_predict=num_predict,
-        temperature=0.15,
-        num_ctx=8192,
+        temperature=0.12,
+        num_ctx=num_ctx,
+        tier=tier,
     )
 
 
@@ -60,7 +73,14 @@ async def _json_call(prompt: str, system: str, *, attempts: int = 3, num_predict
     retry_note = ""
     for _ in range(attempts):
         try:
-            raw = await _generate(prompt + retry_note, system, json_mode=True, num_predict=num_predict)
+            raw = await _generate(
+                prompt + retry_note,
+                system,
+                json_mode=True,
+                num_predict=num_predict,
+                tier="fast",
+                num_ctx=6144,
+            )
             return _json_from_text(raw)
         except Exception as exc:  # a local model format error should be retried
             last = exc
@@ -118,7 +138,14 @@ Keep copy concise, specific and credible. Avoid filler and repeated headings.
 Never invent awards, partners, funding claims or verified impact.
 """
     try:
-        data = await _json_call(prompt, "You are a senior product designer and information architect. Return JSON only.", attempts=2, num_predict=2400)
+        plan_tokens = min(2800, max(1250, 850 + page_budget * 160))
+        plan_ctx = 7168 if page_budget >= 10 else 6144
+        data = await _json_call(
+            prompt,
+            "You are a senior product designer and information architect. Return JSON only.",
+            attempts=1,
+            num_predict=plan_tokens,
+        )
         model_pages = data.get("pages")
         if not isinstance(model_pages, list) or not model_pages:
             raise ValueError("pages missing")
