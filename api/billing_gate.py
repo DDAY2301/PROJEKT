@@ -11,6 +11,7 @@ scoped sandbox bypass exists for maj@klemec.org when Stripe is using sk_test_.
 
 import asyncio
 import json
+import os
 import uuid
 
 from fastapi import Depends, HTTPException
@@ -44,6 +45,7 @@ _ACTIVE_TASKS: set[str] = set()
 
 class ProjectCreateControlled(core.ProjectCreate):
     defer_build: bool = False
+    benchmark_mode: bool = False
 
 
 def sandbox_payment_bypass(user_id: str) -> bool:
@@ -93,8 +95,15 @@ async def create_project_with_postbuild_payment(
     user_id: str = Depends(core.current_user),
 ):
     pid = str(uuid.uuid4())
-    cfg = data.model_dump(mode="json", exclude={"defer_build"})
+    cfg = data.model_dump(mode="json", exclude={"defer_build", "benchmark_mode"})
     bypass = sandbox_payment_bypass(user_id)
+    benchmark_allowed = False
+    if data.benchmark_mode and os.getenv("PV_ALLOW_BENCHMARK_MODE", "1").strip().lower() in {"1","true","yes","on"}:
+        with core.db() as con:
+            account = con.execute("SELECT email FROM users WHERE id=?", (user_id,)).fetchone()
+        email = str(account["email"] if account else "").strip().lower()
+        benchmark_allowed = email.startswith("pv.loadtest.") and email.endswith("@gmail.com")
+    cfg["_benchmark_mode"] = bool(data.benchmark_mode and benchmark_allowed)
     payment_required = billing.package_is_configured(data.package) and not bypass
 
     with core.db() as con:
@@ -122,6 +131,7 @@ async def create_project_with_postbuild_payment(
         "payment_required": payment_required,
         "payment_bypassed": bypass,
         "payment_stage": "after_build",
+        "benchmark_mode": bool(cfg.get("_benchmark_mode")),
     }
 
 
