@@ -68,7 +68,14 @@ def _json_from_text(raw: str) -> dict[str, Any]:
     raise ValueError("response is not a JSON object")
 
 
-async def _json_call(prompt: str, system: str, *, attempts: int = 3, num_predict: int = 4096) -> dict[str, Any]:
+async def _json_call(
+    prompt: str,
+    system: str,
+    *,
+    attempts: int = 3,
+    num_predict: int = 4096,
+    num_ctx: int = 6144,
+) -> dict[str, Any]:
     last: Exception | None = None
     retry_note = ""
     for _ in range(attempts):
@@ -79,7 +86,7 @@ async def _json_call(prompt: str, system: str, *, attempts: int = 3, num_predict
                 json_mode=True,
                 num_predict=num_predict,
                 tier="fast",
-                num_ctx=6144,
+                num_ctx=num_ctx,
             )
             return _json_from_text(raw)
         except Exception as exc:  # a local model format error should be retried
@@ -127,15 +134,33 @@ def _fallback_spec(config: dict[str, Any]) -> dict[str, Any]:
 
 async def design_site(config: dict[str, Any]) -> dict[str, Any]:
     page_budget = {"Start": 3, "Standard": 6, "Premium": 12}[config["package"]]
+    compact_brief = {
+        "name": config.get("name"),
+        "organization": config.get("organization"),
+        "package": config.get("package"),
+        "programme": config.get("programme"),
+        "language": config.get("language"),
+        "goal": config.get("goal"),
+        "audience": config.get("audience"),
+        "tone": config.get("tone"),
+        "pages": config.get("pages"),
+        "hero_title": config.get("hero_title"),
+        "hero_subtitle": config.get("hero_subtitle"),
+        "cta_text": config.get("cta_text"),
+        "brand": config.get("brand"),
+        "image_direction": str(config.get("image_direction") or "")[:1400],
+        "custom_requirements": str(config.get("custom_requirements") or "")[:6000],
+    }
     prompt = f"""
-Plan a polished production website using the customer brief below.
+Plan a polished production website from this compact customer brief.
 The package allows at most {page_budget} pages. Respect the requested pages and their purposes.
-CUSTOMER={json.dumps(config, ensure_ascii=False)}
-Return JSON with keys site_name, seo_description, navigation, pages.
-Each page must have slug, title, meta_description and exactly 3-4 purposeful sections.
-Each section must have type, heading and concise body; CTA is optional.
-Keep copy concise, specific and credible. Avoid filler and repeated headings.
-Never invent awards, partners, funding claims or verified impact.
+CUSTOMER={json.dumps(compact_brief, ensure_ascii=False)}
+Return JSON with keys site_name, seo_description, pages.
+Each page must have title, meta_description and exactly 3-4 purposeful sections.
+Each section must have type, heading and body; CTA is optional.
+Keep each body to roughly 1-2 useful sentences (max ~240 characters).
+Be specific and credible. Avoid filler, repeated headings and generic AI phrasing.
+Never invent awards, partners, funding claims, addresses, statistics or verified impact.
 """
     try:
         plan_tokens = min(2800, max(1250, 850 + page_budget * 160))
@@ -145,6 +170,7 @@ Never invent awards, partners, funding claims or verified impact.
             "You are a senior product designer and information architect. Return JSON only.",
             attempts=1,
             num_predict=plan_tokens,
+            num_ctx=plan_ctx,
         )
         model_pages = data.get("pages")
         if not isinstance(model_pages, list) or not model_pages:
