@@ -7,6 +7,8 @@ but the router can now use either Ollama or any local OpenAI-compatible server
 Configuration:
 - LOCAL_LLM_MODE=auto|ollama|openai
 - OLLAMA_FALLBACK_MODELS=model-a,model-b
+- OLLAMA_EXPERT_MODELS=kat-coder,qwen3.6-coding
+- MODEL_ROUTING=adaptive|fast|expert
 - OPENAI_COMPAT_BASE_URL=http://127.0.0.1:1234/v1
 - OPENAI_COMPAT_API_KEY=optional-local-token
 - OPENAI_COMPAT_MODELS=model-a,model-b
@@ -49,11 +51,73 @@ def _dedupe(values: list[str]) -> list[str]:
     return out
 
 
-def _ollama_models() -> list[str]:
-    return _dedupe(
-        [core.OLLAMA_MODEL]
-        + [x.strip() for x in os.getenv("OLLAMA_FALLBACK_MODELS", "").split(",")]
+def _fast_models() -> list[str]:
+    configured = [x.strip() for x in os.getenv("OLLAMA_FAST_MODELS", "").split(",")]
+    return _dedupe(([core.OLLAMA_MODEL] + configured) if configured else [core.OLLAMA_MODEL])
+
+
+def _expert_models() -> list[str]:
+    return _dedupe([x.strip() for x in os.getenv("OLLAMA_EXPERT_MODELS", "").split(",")])
+
+
+def _fallback_models() -> list[str]:
+    return _dedupe([x.strip() for x in os.getenv("OLLAMA_FALLBACK_MODELS", "").split(",")])
+
+
+def _routing_mode() -> str:
+    mode = os.getenv("MODEL_ROUTING", "adaptive").strip().lower()
+    return mode if mode in {"adaptive", "fast", "expert"} else "adaptive"
+
+
+def _needs_expert(prompt: str, system: str, *, num_predict: int = 0) -> bool:
+    if not _expert_models():
+        return False
+    text = f"{system}\n{prompt[:18000]}".lower()
+    expert_markers = (
+        "senior debugging engineer",
+        "repository-level",
+        "repo-level",
+        "codebase",
+        "stack trace",
+        "failing test",
+        "refactor",
+        "migration",
+        "unified diff",
+        "git conflict",
+        "merge conflict",
+        "security review",
+        "architecture review",
+        "agent manager",
+        "autonomous agent",
+        "tool calling",
+        "terminal session",
+        "root cause",
+        "repair this",
+        "fix this",
     )
+    if any(marker in text for marker in expert_markers):
+        return True
+    code_signal = sum(token in text for token in ("traceback", "exception", ".py", ".js", ".ts", ".tsx", ".ps1", "pytest", "npm", "github"))
+    return code_signal >= 3 and (len(prompt) >= 7000 or num_predict >= 3500)
+
+
+def _ollama_models(tier: str = "auto", *, prompt: str = "", system: str = "", num_predict: int = 0) -> list[str]:
+    mode = _routing_mode()
+    if tier not in {"auto", "fast", "expert"}:
+        tier = "auto"
+    if mode == "fast":
+        tier = "fast"
+    elif mode == "expert":
+        tier = "expert"
+    elif tier == "auto":
+        tier = "expert" if _needs_expert(prompt, system, num_predict=num_predict) else "fast"
+
+    fast = _fast_models()
+    expert = _expert_models()
+    fallback = _fallback_models()
+    if tier == "expert" and expert:
+        return _dedupe(expert + fast + fallback)
+    return _dedupe(fast + fallback + expert)
 
 
 def _openai_models() -> list[str]:
@@ -69,11 +133,20 @@ def _openai_base() -> str:
     return os.getenv("OPENAI_COMPAT_BASE_URL", "").strip().rstrip("/")
 
 
-def _candidates() -> list[Candidate]:
+def _candidates(
+    tier: str = "auto",
+    *,
+    prompt: str = "",
+    system: str = "",
+    num_predict: int = 0,
+) -> list[Candidate]:
     mode = _mode()
     out: list[Candidate] = []
     if mode in {"auto", "ollama"}:
-        out.extend(Candidate("ollama", model, core.OLLAMA_BASE_URL.rstrip("/")) for model in _ollama_models())
+        out.extend(
+            Candidate("ollama", model, core.OLLAMA_BASE_URL.rstrip("/"))
+            for model in _ollama_models(tier, prompt=prompt, system=system, num_predict=num_predict)
+        )
     if mode in {"auto", "openai"} and _openai_base():
         out.extend(Candidate("openai", model, _openai_base()) for model in _openai_models())
     return out
@@ -81,7 +154,7 @@ def _candidates() -> list[Candidate]:
 
 # Backwards-compatible helper used by capability reporting.
 def _models() -> list[str]:
-    return _dedupe([candidate.model for candidate in _candidates()])
+    return _dedupe(_fast_models() + _expert_models() + _fallback_models() + _openai_models())
 
 
 def ensure_schema() -> None:
@@ -225,8 +298,9 @@ async def generate(
     num_predict: int = 4096,
     temperature: float = 0.15,
     num_ctx: int = 8192,
+    tier: str = "auto",
 ) -> str:
-    candidates = _candidates()
+    candidates = _candidates(tier, prompt=prompt, system=system, num_predict=num_predict)
     if not candidates:
         raise RuntimeError("No local LLM backend is configured")
 
@@ -306,11 +380,17 @@ async def model_summary(user_id: str = Depends(core.current_user)):
             "SELECT provider,model,status,latency_ms,error,created_at FROM agent_model_runs ORDER BY created_at DESC LIMIT 20"
         ).fetchall()
 
-    candidates = _candidates()
+    candidates = _candidates("auto")
+    fast_models = _fast_models()
+    expert_models = _expert_models()
     return {
         "mode": _mode(),
-        "configured_models": [c.model for c in candidates],
-        "primary": candidates[0].model if candidates else None,
+        "routing": _routing_mode(),
+        "configured_models": _models(),
+        "fast_models": fast_models,
+        "expert_models": expert_models,
+        "primary": fast_models[0] if fast_models else (candidates[0].model if candidates else None),
+        "expert": expert_models[0] if expert_models else None,
         "backends": [
             {
                 "provider": c.provider,
