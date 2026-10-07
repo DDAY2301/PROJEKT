@@ -517,6 +517,31 @@ jobs:
           assert 'Dependencies: cached / unchanged' in local
           print('Fast production profile V2 checks passed')
           PY
+      - name: Validate PowerShell startup syntax
+        shell: pwsh
+        run: |
+          $files = @(
+            "start-product.ps1",
+            "api/start-local.ps1",
+            "run-production-load-test.ps1",
+            "install-expert-model.ps1"
+          )
+          foreach ($file in $files) {
+            $tokens = $null
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $file),
+              [ref]$tokens,
+              [ref]$errors
+            )
+            if ($errors.Count -gt 0) {
+              $errors | ForEach-Object {
+                Write-Error "$file line $($_.Extent.StartLineNumber): $($_.Message)"
+              }
+              exit 1
+            }
+          }
+          Write-Host "PowerShell startup syntax checks passed"
       - name: Validate release quality gate
         env:
           APP_SECRET: ci-only-secret
@@ -730,6 +755,8 @@ jobs:
           grep -q 'MODEL_CONCURRENCY = "2"' start-product.ps1
           grep -q 'requirements.sha256' api/start-local.ps1
           grep -q 'visual-qa-v4-smart-coverage' api/visual_qa.py
+          grep -q 'PowerShell syntax error' start-product.ps1
+          test "$(grep -c '^Write-Host "\[6/9\] Preparing Chromium visual QA engine' api/start-local.ps1)" -eq 1
           test -f dist/assets/dashboard-upgrades.js
           test -f api/visual_qa.py
           test -f api/vision_review.py
