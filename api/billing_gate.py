@@ -52,9 +52,12 @@ class ProjectCreateControlled(core.ProjectCreate):
 
 
 def _account_email(user_id: str) -> str:
-    with core.db() as con:
-        row = con.execute("SELECT email FROM users WHERE id=?", (user_id,)).fetchone()
-    return str(row["email"] if row else "").strip().lower()
+    try:
+        with core.db() as con:
+            row = con.execute("SELECT email FROM users WHERE id=?", (user_id,)).fetchone()
+        return str(row["email"] if row else "").strip().lower()
+    except Exception:
+        return ""
 
 
 def _quota_exempt(user_id: str) -> bool:
