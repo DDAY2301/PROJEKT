@@ -78,6 +78,8 @@ class Result:
     nearest_similarity: float | None = None
     motif: str = ""
     composition: str = ""
+    quality_gate_passed: bool | None = None
+    benchmark_mode: bool = False
     repository_ready: bool | None = None
     payment_required: bool | None = None
     public_live: bool | None = None
@@ -259,6 +261,8 @@ def hydrate(r: Result, project: dict[str,Any], db: Path, submitted: datetime, at
     r.nearest_similarity=originality.get("nearest_similarity")
     r.motif=str(originality.get("motif") or "")
     r.composition=str(originality.get("composition") or "")
+    r.quality_gate_passed=audit.get("quality_gate_passed") if "quality_gate_passed" in audit else None
+    r.benchmark_mode=bool(audit.get("benchmark_mode"))
     r.repository_ready=audit.get("repository_ready") if "repository_ready" in audit else None
     r.payment_required=audit.get("payment_required") if "payment_required" in audit else None
     r.public_live=audit.get("public_live") if "public_live" in audit else None
@@ -280,6 +284,8 @@ def summary(results: list[Result], started: datetime, finished: datetime, model:
         "ready":sum(r.status=="ready" for r in results),"needs_review":sum(r.status=="needs_review" for r in results),
         "failed":sum(r.status=="failed" for r in results),"ready_for_payment":sum(r.status=="ready_for_payment" for r in results),
         "quality_pass_90":len(quality),"quality_pass_rate":round(len(quality)/max(1,len(results)),4),
+        "build_ready":sum((r.quality_gate_passed is True) or (r.repository_ready is True) for r in results),
+        "build_ready_rate":round(sum((r.quality_gate_passed is True) or (r.repository_ready is True) for r in results)/max(1,len(results)),4),
         "repository_ready":sum(r.repository_ready is True for r in results),
         "delivery_ready_rate":round(sum(r.repository_ready is True for r in results)/max(1,len(results)),4),
         "public_live":sum(r.public_live is True for r in results),
@@ -312,7 +318,8 @@ def write_reports(folder: Path, results: list[Result], stats: dict[str,Any]):
         f"- Ready: **{stats['ready']}**",
         f"- Failed: **{stats['failed']}**",
         f"- Quality pass >=90: **{stats['quality_pass_rate']*100:.1f}%**",
-        f"- Delivery/repository ready: **{stats['delivery_ready_rate']*100:.1f}%**",
+        f"- Local build/quality ready: **{stats['build_ready_rate']*100:.1f}%**",
+        f"- GitHub delivery ready: **{stats['delivery_ready_rate']*100:.1f}%**",
         f"- Public live (may be payment-gated): **{stats['deployment_success_rate']*100:.1f}%**",
         f"- Throughput: **{stats['throughput_sites_per_hour']:.2f} sites/hour**",
         f"- QA failure rate: **{stats['qa_failure_rate']*100:.1f}%**",
@@ -408,7 +415,7 @@ def main() -> int:
                 stage_text=dict(active_stages)
                 try:
                     q=api.get("/agent/production-queue")
-                    print(f"[PROGRESS] final={done}/{len(results)} queue={q.get('states')} project_states={dict(states)} stages={stage_text} severe_codes={issue_text}")
+                    print(f"[PROGRESS] final={done}/{len(results)} workers={q.get('workers_alive',0)}/{q.get('workers',0)} queue={q.get('states')} project_states={dict(states)} stages={stage_text} severe_codes={issue_text}")
                 except Exception:
                     print(f"[PROGRESS] final={done}/{len(results)} project_states={dict(states)} stages={stage_text} severe_codes={issue_text}")
                 last=time.monotonic()
@@ -424,7 +431,7 @@ def main() -> int:
         print("\n=== PRODUCTION LOAD TEST ===")
         print(f"results={folder}")
         print(f"throughput={stats['throughput_sites_per_hour']} sites/hour")
-        print(f"quality_pass_90={stats['quality_pass_rate']*100:.1f}% delivery_ready={stats['delivery_ready_rate']*100:.1f}% public_live={stats['deployment_success_rate']*100:.1f}%")
+        print(f"quality_pass_90={stats['quality_pass_rate']*100:.1f}% build_ready={stats['build_ready_rate']*100:.1f}% delivery_ready={stats['delivery_ready_rate']*100:.1f}% public_live={stats['deployment_success_rate']*100:.1f}%")
         print(f"qa_failure={stats['qa_failure_rate']*100:.1f}% repairs={stats['repair_rate']*100:.1f}%")
         print(f"visual_avg_min={stats['visual']['avg']}/{stats['visual']['min']} max_similarity={stats['originality']['max_nearest_similarity']}")
         hard_fail=stats["failed"]>0 or stats["quality_pass_rate"]<.95 or stats["qa_failure_rate"]>.05 or stats["originality"]["near_duplicates"]>0
