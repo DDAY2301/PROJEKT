@@ -507,7 +507,10 @@ async def generate_project_observable(project_id: str):
         # Store the finished source in GitHub first, but do NOT enable Pages yet.
         phase = "repository delivery"
         set_status(project_id, "repository_ready")
-        await core.github_put_bundle(repo_name, files, f"Agent build for {config['name']}")
+        if hasattr(core, "github_replace_bundle"):
+            await core.github_replace_bundle(repo_name, files, f"Agent build for {config['name']}")
+        else:
+            await core.github_put_bundle(repo_name, files, f"Agent build for {config['name']}")
 
         audit_json = _audit_payload(
             issues,
