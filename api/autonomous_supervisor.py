@@ -570,7 +570,7 @@ def _mark_human_review(project_id: str, reason_code: str) -> None:
         if not row:
             return
         current_status = str(row["status"] or "")
-        if current_status in {"ready", "ready_for_payment", "payment_pending"}:
+        if current_status in {"ready", "ready_for_payment", "payment_pending", "cancelled", "cancel_requested", "archived"}:
             return
         audit = _read_json(row["last_audit_json"])
         issues = [item for item in (audit.get("issues") or []) if isinstance(item, dict)]
