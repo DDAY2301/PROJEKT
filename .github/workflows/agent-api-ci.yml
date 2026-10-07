@@ -25,7 +25,7 @@ jobs:
           api/learning_runtime.py api/revisions.py api/retry_routes.py api/dashboard.py
           api/preview.py api/notifications.py api/handoff_runtime.py
           api/model_router.py api/repo_map.py api/deep_static_qa.py api/design_critic.py
-          api/source_editor.py api/site_import.py api/brief_import.py api/image_studio.py api/autonomous_supervisor.py api/production_queue.py api/capabilities.py
+          api/source_editor.py api/site_import.py api/brief_import.py api/image_studio.py api/autonomous_supervisor.py api/production_queue.py api/production_lifecycle.py api/capabilities.py
           api/server.py api/create_test_user.py tools/production_load_test.py
       - name: Import complete server
         env:
@@ -60,6 +60,9 @@ jobs:
               '/agent/capabilities',
               '/agent/design-engine',
               '/agent/production-queue',
+              '/projects/{project_id}/cancel',
+              '/projects/{project_id}/archive',
+              '/projects/{project_id}/restore',
               '/agent/originality',
               '/agent/supervisor',
               '/agent/supervisor/run',
@@ -392,6 +395,50 @@ jobs:
               else: os.environ['MODEL_ROUTING']=old_routing
           print('Adaptive expert routing checks passed')
           PY
+      - name: Validate final product lifecycle and delivery
+        run: |
+          python - <<'PY'
+          import json, uuid
+          from api import enhanced_runtime
+          from api import production_queue
+          from tools.production_load_test import expand, payload
+
+          project_a='ci-'+uuid.uuid4().hex
+          project_b='ci-'+uuid.uuid4().hex
+          name={'name':'Same Customer Site'}
+          repo_a=enhanced_runtime.repo_name_for(name, project_a)
+          repo_b=enhanced_runtime.repo_name_for(name, project_b)
+          assert repo_a != repo_b
+          assert repo_a.startswith('generated-site-same-customer-site-')
+
+          files={'index.html':'<!doctype html><html><body>ok</body></html>','assets/site.css':'body{}'}
+          manifest=enhanced_runtime._delivery_manifest(
+              files,
+              project_id=project_a,
+              config={'name':'Same Customer Site','organization':'CI'},
+              visual_report={'score':94,'passed':True},
+              originality={'score':.9},
+          )
+          assert manifest['project_id']==project_a
+          assert manifest['file_count']==2
+          assert all(len(item['sha256'])==64 for item in manifest['files'])
+
+          qid='ci-cancel-'+uuid.uuid4().hex
+          assert production_queue.enqueue_project(qid)
+          assert production_queue.request_cancel(qid) == 'cancelled'
+          assert production_queue.cancel_requested(qid) is True
+
+          sample=payload(expand(1)[0])
+          assert sample['benchmark_mode'] is True
+          delivered=payload(expand(1)[0], benchmark_mode=False)
+          assert delivered['benchmark_mode'] is False
+
+          source=open('api/enhanced_runtime.py',encoding='utf-8').read()
+          revisions=open('api/revisions.py',encoding='utf-8').read()
+          assert 'github_replace_bundle(repo_name, files' in source
+          assert 'github_replace_bundle(' in revisions
+          print('Lifecycle, unique delivery, benchmark isolation and atomic publish checks passed')
+          PY
       - name: Validate release quality gate
         env:
           APP_SECRET: ci-only-secret
@@ -596,6 +643,9 @@ jobs:
           test -f dist/assets/media-fix.js
           test -f dist/assets/preview-email-ui.js
           test -f dist/assets/dashboard.js
+          grep -q 'data-cancel-project' dist/assets/dashboard.js
+          grep -q 'data-archive-project' dist/assets/dashboard.js
+          grep -q 'benchmark_mode' tools/production_load_test.py
           test -f dist/assets/dashboard-upgrades.js
           test -f api/visual_qa.py
           test -f api/vision_review.py
@@ -616,6 +666,7 @@ jobs:
           test -f api/capabilities.py
           test -f api/design_engine_v2.py
           test -f api/production_queue.py
+          test -f api/production_lifecycle.py
           test -f api/quality_originality_v2.py
           test -f api/create_test_user.py
           test -f configure-email.ps1
