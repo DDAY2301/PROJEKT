@@ -59,6 +59,9 @@ $env:VISUAL_QA_VISION_MAX_PAGES = "1"
 $env:TEXT_REPAIR_ATTEMPTS = "1"
 $env:VISUAL_REPAIR_ATTEMPTS = "1"
 $env:MODEL_REPAIR_FILES_PER_ATTEMPT = "2"
+$env:MODEL_ROUTING = "adaptive"
+$env:OLLAMA_EXPERT_KEEP_ALIVE = "45s"
+$env:OLLAMA_FAST_KEEP_ALIVE = "5m"
 
 Write-Host "[2/6] Starting/checking local engine..."
 $ollamaOk = $false
@@ -79,6 +82,26 @@ if ($models -notcontains $Model) {
   if ($LASTEXITCODE -ne 0) { throw "Could not download local model $Model." }
 }
 Write-Host "Local engine: ONLINE / $Model" -ForegroundColor Green
+
+$tags = Invoke-RestMethod -Uri "http://127.0.0.1:11434/api/tags" -Method Get -TimeoutSec 5
+$models = @($tags.models | ForEach-Object { $_.name })
+$experts = @(
+  $models |
+    Where-Object {
+      $_ -match '(?i)KAT-Coder-V2\.5-Dev' -or
+      $_ -match '(?i)qwen3\.6:35b-a3b-coding'
+    } |
+    Select-Object -Unique
+)
+if ($experts.Count -gt 0) {
+  $env:OLLAMA_EXPERT_MODELS = ($experts -join ',')
+  Write-Host "Expert router: ACTIVE / $($experts -join ' + ')" -ForegroundColor Green
+  Write-Host "Routing: 7B fast path -> expert model only for difficult coding/repair work" -ForegroundColor DarkCyan
+} else {
+  $env:OLLAMA_EXPERT_MODELS = ""
+  Write-Host "Expert router: no expert model installed; fast 7B path remains active." -ForegroundColor DarkGray
+  Write-Host "Optional install: .\install-expert-model.ps1" -ForegroundColor DarkGray
+}
 
 Write-Host "[3/6] Preparing GitHub publishing token..."
 Write-Host "Use a NEW token. Any token previously pasted into chat must be revoked." -ForegroundColor Yellow
