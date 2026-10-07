@@ -368,7 +368,9 @@ async def revise_project(project_id: str, data: RevisionIn, user_id: str = Depen
             raise HTTPException(404, "Project not found")
         if not row["repo_name"]:
             raise HTTPException(409, "Initial website build must finish before requesting a revision")
-        if row["status"] in {"designing", "building", "auditing", "visual_qa", "fixing", "publishing", "revising"}:
+        if row["status"] in {"cancelled", "archived"}:
+            raise HTTPException(409, f"Project is {row['status']} and cannot be revised until it is restored or rebuilt")
+        if row["status"] in {"queued", "cancel_requested", "designing", "building", "auditing", "visual_qa", "fixing", "publishing", "revising"}:
             raise HTTPException(409, "A build or revision is already running")
         revision_id = str(uuid.uuid4())
         con.execute(
