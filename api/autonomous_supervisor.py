@@ -281,6 +281,7 @@ def _state_from_project(row: dict[str, Any], supervisor: dict[str, Any]) -> dict
         "queue_state": queue_state,
         "queue_worker": queue_worker,
         "imported_site": bool(config.get("_imported_site")),
+        "benchmark_mode": bool(config.get("_benchmark_mode")),
         "status_age_seconds": round(_age_seconds(row.get("updated_at")), 1),
         "updated_at": row.get("updated_at"),
         "predates_process": bool(
@@ -340,6 +341,9 @@ def decide(state: dict[str, Any], runtime: dict[str, Any] | None = None) -> Type
 
     if state.get("imported_site") and status == "needs_review":
         return TypedDecision("wait", 1.0, 3, False, "imported_site_preserve_source", 1800)
+
+    if state.get("benchmark_mode") and status in {"ready", "needs_review", "failed"}:
+        return TypedDecision("complete", 1.0, 0, False, f"benchmark_terminal_{status}", 3600)
 
     if state.get("publish_action_required") == "github_pages_permission":
         return TypedDecision("human_review", 1.0, 8, False, "github_pages_permission", 1800)
