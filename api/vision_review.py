@@ -65,31 +65,31 @@ def _review_montage(screenshots: list[dict[str, Any]], page_file: str) -> bytes 
 
     try:
         with Image.open(desktop_path) as d0, Image.open(mobile_path) as m0:
-            desktop = _scaled(_crop_for_review(d0.convert("RGB"), 2300), 900)
-            mobile = _scaled(_crop_for_review(m0.convert("RGB"), 1800), 360)
+            desktop = _scaled(_crop_for_review(d0.convert("RGB"), 1750), 720)
+            mobile = _scaled(_crop_for_review(m0.convert("RGB"), 1400), 300)
 
             # Add a compact full-page overview beneath the two top-of-page crops.
             full = d0.convert("RGB")
-            full_thumb = _scaled(full, 900)
-            if full_thumb.height > 1450:
-                full_thumb = full_thumb.resize((900, 1450), Image.Resampling.LANCZOS)
+            full_thumb = _scaled(full, 720)
+            if full_thumb.height > 980:
+                full_thumb = full_thumb.resize((720, 980), Image.Resampling.LANCZOS)
 
             gap = 24
             label_h = 40
             top_h = max(desktop.height, mobile.height)
-            canvas_w = 900 + gap + 360
+            canvas_w = 720 + gap + 300
             canvas_h = label_h + top_h + gap + label_h + full_thumb.height
             canvas = Image.new("RGB", (canvas_w, canvas_h), "#eef1ee")
             draw = ImageDraw.Draw(canvas)
             draw.text((8, 10), "DESKTOP TOP / MOBILE TOP", fill="#102923")
             canvas.paste(desktop, (0, label_h))
-            canvas.paste(mobile, (900 + gap, label_h))
+            canvas.paste(mobile, (720 + gap, label_h))
             y = label_h + top_h + gap
             draw.text((8, y + 10), "DESKTOP FULL-PAGE OVERVIEW", fill="#102923")
             canvas.paste(full_thumb, (0, y + label_h))
 
             out = io.BytesIO()
-            canvas.save(out, format="JPEG", quality=82, optimize=True)
+            canvas.save(out, format="JPEG", quality=74, optimize=True)
             return out.getvalue()
     except (OSError, ValueError):
         return None
@@ -161,7 +161,8 @@ A strong professional page should normally score 85+. Do not manufacture issues 
             "content": prompt,
             "images": [base64.b64encode(jpeg).decode("ascii")],
         }],
-        "options": {"temperature": 0.1, "num_predict": 650},
+        "keep_alive": os.getenv("OLLAMA_VISION_KEEP_ALIVE", "10m"),
+        "options": {"temperature": 0.08, "num_predict": 420, "num_ctx": 4096},
     }
     response = await client.post(f"{OLLAMA_BASE_URL}/api/chat", json=payload)
     if response.status_code >= 400:
@@ -176,6 +177,17 @@ A strong professional page should normally score 85+. Do not manufacture issues 
 async def _vision_reviews(report: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
     if not VISION_ENABLED or not VISION_MODEL or not report.get("available"):
         return {"available": False, "model": VISION_MODEL, "reviews": [], "issues": []}
+
+    deterministic_score = int(report.get("score") or 0)
+    deterministic_blocked = not bool(report.get("passed"))
+    if deterministic_blocked or deterministic_score < 80:
+        return {
+            "available": False,
+            "model": VISION_MODEL,
+            "reviews": [],
+            "issues": [],
+            "skipped_reason": "deterministic_qa_requires_repair_first",
+        }
     screenshots = list(report.get("screenshots") or [])
     files: list[str] = []
     for shot in screenshots:
