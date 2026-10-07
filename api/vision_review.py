@@ -276,9 +276,11 @@ async def audit_files_with_vision(
             advisory.append(item)
         report.setdefault("issues", []).extend(advisory)
         deterministic = int(report.get("score") or 0)
+        browser_advisory = int(report.get("advisory_score") or deterministic)
         vision_score = int(vision.get("score") or deterministic)
         release_score, aesthetic_penalty = _bounded_release_score(deterministic, vision_score)
         report["deterministic_score"] = deterministic
+        report["browser_advisory_score"] = browser_advisory
         report["aesthetic_score"] = vision_score
         report["aesthetic_penalty"] = aesthetic_penalty
         report["score"] = release_score
