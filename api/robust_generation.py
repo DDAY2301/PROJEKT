@@ -132,6 +132,39 @@ def _fallback_spec(config: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _sanitize_planned_sections(sections: Any, config: dict[str, Any]) -> list[dict[str, Any]]:
+    """Remove unsupported contact facts before they ever reach QA/repair."""
+    fallback = []
+    if not isinstance(sections, list):
+        return fallback
+
+    brief = json.dumps(config, ensure_ascii=False)
+    brief_digits = re.sub(r"\D", "", brief)
+    phone_re = re.compile(r"\+\d[\d\s().-]{7,}\d")
+    clean: list[dict[str, Any]] = []
+
+    for raw in sections[:6]:
+        if not isinstance(raw, dict):
+            continue
+        item = dict(raw)
+        for key in ("heading", "body", "cta"):
+            value = str(item.get(key) or "")
+            if not value:
+                continue
+            def replace_phone(match: re.Match[str]) -> str:
+                digits = re.sub(r"\D", "", match.group(0))
+                return match.group(0) if digits and digits in brief_digits else ""
+            value = phone_re.sub(replace_phone, value)
+            value = re.sub(r"\s{2,}", " ", value).strip(" ,;:-")
+            item[key] = value
+        if not str(item.get("heading") or "").strip():
+            item["heading"] = "Get in touch"
+        if not str(item.get("body") or "").strip():
+            item["body"] = "Contact us to discuss the next step."
+        clean.append(item)
+    return clean
+
+
 async def design_site(config: dict[str, Any]) -> dict[str, Any]:
     page_budget = {"Start": 3, "Standard": 6, "Premium": 12}[config["package"]]
     compact_brief = {
@@ -186,7 +219,12 @@ Never invent awards, partners, funding claims, addresses, statistics or verified
                     "title": requested_page["title"],
                     "purpose": requested_page["purpose"],
                     "meta_description": str(model_page.get("meta_description") or requested_page["purpose"] or config.get("goal") or "")[:160],
-                    "sections": model_page.get("sections") if isinstance(model_page.get("sections"), list) and model_page.get("sections") else _fallback_spec(config)["pages"][index]["sections"],
+                    "sections": _sanitize_planned_sections(
+                        model_page.get("sections")
+                        if isinstance(model_page.get("sections"), list) and model_page.get("sections")
+                        else _fallback_spec(config)["pages"][index]["sections"],
+                        config,
+                    ),
                 }
             )
         return {
