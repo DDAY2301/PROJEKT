@@ -272,6 +272,15 @@ def _calibrated_issue_score(issues: list[dict[str, str]]) -> int:
     return max(0, round(100 - penalty))
 
 
+def _viewports_for_path(path: str, html_paths: list[str]) -> list[tuple[str, tuple[int, int]]]:
+    """Keep full responsive coverage where it matters without tripling every page."""
+    names = ["desktop", "mobile"]
+    representative = next((p for p in html_paths if p != "index.html"), None)
+    if path == "index.html" or (representative and path == representative):
+        names.insert(1, "tablet")
+    return [(name, VIEWPORTS[name]) for name in names if name in VIEWPORTS]
+
+
 def _run_visual_sync(files: dict[str, Any], project_id: str, uploaded_images: list[dict[str, Any]]) -> dict[str, Any]:
     stamp = time.strftime("%Y%m%d-%H%M%S")
     screenshot_dir = QA_ROOT / project_id / stamp
@@ -296,9 +305,9 @@ def _run_visual_sync(files: dict[str, Any], project_id: str, uploaded_images: li
                 browser = pw.chromium.launch(headless=True)
                 try:
                     for path in html_paths:
-                        for viewport, (width, height) in VIEWPORTS.items():
+                        for viewport, (width, height) in _viewports_for_path(path, html_paths):
                             page = browser.new_page(viewport={"width": width, "height": height}, device_scale_factor=1)
-                            page.set_default_timeout(15000)
+                            page.set_default_timeout(10000)
                             console_errors: list[str] = []
                             page_errors: list[str] = []
                             failed_requests: list[str] = []
@@ -306,7 +315,7 @@ def _run_visual_sync(files: dict[str, Any], project_id: str, uploaded_images: li
                             page.on("pageerror", lambda exc: page_errors.append(str(exc)[:300]))
                             page.on("requestfailed", lambda req: failed_requests.append(str(req.url)[:300]))
                             try:
-                                response = page.goto(f"{base}/{path}", wait_until="networkidle")
+                                response = page.goto(f"{base}/{path}", wait_until="load")
                                 if response is None or response.status >= 400:
                                     issues.append(_issue("critical", "VISUAL_PAGE_LOAD_FAILED", path, f"Rendered page returned an HTTP error at {viewport}.", viewport))
                                     continue
@@ -319,6 +328,7 @@ def _run_visual_sync(files: dict[str, Any], project_id: str, uploaded_images: li
                                     "page_errors": page_errors[:8],
                                     "failed_requests": failed_requests[:8],
                                 })
+                                issue_count_before = len(issues)
                                 issues.extend(_issues_from_metrics(path, viewport, metrics))
                                 if page_errors:
                                     issues.append(_issue("high", "BROWSER_PAGE_ERROR", path, f"JavaScript runtime error at {viewport}: {page_errors[0]}", viewport))
@@ -327,10 +337,19 @@ def _run_visual_sync(files: dict[str, Any], project_id: str, uploaded_images: li
                                 local_failures = [url for url in failed_requests if url.startswith(base)]
                                 if local_failures:
                                     issues.append(_issue("high", "BROWSER_REQUEST_FAILED", path, f"Local asset/request failed at {viewport}: {local_failures[0]}", viewport))
-                                safe = path.replace("/", "-").replace(".html", "") or "index"
-                                shot = screenshot_dir / f"{safe}-{viewport}.png"
-                                page.screenshot(path=str(shot), full_page=True)
-                                shots.append({"file": path, "viewport": viewport, "path": str(shot), "width": width, "height": height})
+
+                                # Vision needs only homepage desktop/mobile. For
+                                # other pages retain a screenshot only when a
+                                # render issue was actually detected.
+                                capture = (
+                                    (path == "index.html" and viewport in {"desktop", "mobile"})
+                                    or len(issues) > issue_count_before
+                                )
+                                if capture:
+                                    safe = path.replace("/", "-").replace(".html", "") or "index"
+                                    shot = screenshot_dir / f"{safe}-{viewport}.png"
+                                    page.screenshot(path=str(shot), full_page=True)
+                                    shots.append({"file": path, "viewport": viewport, "path": str(shot), "width": width, "height": height})
                             except Exception as exc:  # browser rendering must become a normal QA finding
                                 issues.append(_issue("high", "VISUAL_RENDER_ERROR", path, f"Chromium rendering failed at {viewport}: {str(exc)[:220]}", viewport))
                             finally:
@@ -372,7 +391,7 @@ def _run_visual_sync(files: dict[str, Any], project_id: str, uploaded_images: li
         "viewports": metrics_by_viewport,
         "pages_checked": len(html_paths),
         "render_count": len(shots),
-        "version": "visual-qa-v3",
+        "version": "visual-qa-v4-smart-coverage",
     }
 
 
