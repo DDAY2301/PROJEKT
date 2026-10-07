@@ -44,8 +44,11 @@ def ensure_schema() -> None:
               updated_at TEXT NOT NULL
             )"""
         )
+        columns = {str(row["name"]) for row in con.execute("PRAGMA table_info(production_jobs)").fetchall()}
+        if "cancel_requested" not in columns:
+            con.execute("ALTER TABLE production_jobs ADD COLUMN cancel_requested INTEGER NOT NULL DEFAULT 0")
         con.execute(
-            "CREATE INDEX IF NOT EXISTS idx_production_jobs_claim ON production_jobs(state,priority,enqueued_at)"
+            "CREATE INDEX IF NOT EXISTS idx_production_jobs_claim ON production_jobs(state,cancel_requested,priority,enqueued_at)"
         )
 
 
@@ -55,7 +58,7 @@ def enqueue_project(project_id: str, priority: int = 100) -> bool:
     now = core.now_iso()
     with core.db() as con:
         row = con.execute(
-            "SELECT state FROM production_jobs WHERE project_id=?",
+            "SELECT state,cancel_requested FROM production_jobs WHERE project_id=?",
             (project_id,),
         ).fetchone()
         if row and str(row["state"]) in {"queued", "running"}:
@@ -64,7 +67,7 @@ def enqueue_project(project_id: str, priority: int = 100) -> bool:
             con.execute(
                 """UPDATE production_jobs
                    SET state='queued',priority=?,worker_id=NULL,last_error='',
-                       enqueued_at=?,started_at=NULL,finished_at=NULL,updated_at=?
+                       cancel_requested=0,enqueued_at=?,started_at=NULL,finished_at=NULL,updated_at=?
                    WHERE project_id=?""",
                 (int(priority), now, now, project_id),
             )
@@ -72,9 +75,9 @@ def enqueue_project(project_id: str, priority: int = 100) -> bool:
             con.execute(
                 """INSERT INTO production_jobs(
                      project_id,state,priority,attempts,worker_id,last_error,
-                     enqueued_at,started_at,finished_at,updated_at
-                   ) VALUES(?,?,?,?,?,?,?,?,?,?)""",
-                (project_id, "queued", int(priority), 0, None, "", now, None, None, now),
+                     cancel_requested,enqueued_at,started_at,finished_at,updated_at
+                   ) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                (project_id, "queued", int(priority), 0, None, "", 0, now, None, None, now),
             )
     if _wake_event is not None:
         _wake_event.set()
@@ -88,7 +91,7 @@ def _claim_next(worker_id: str) -> str | None:
         con.execute("BEGIN IMMEDIATE")
         row = con.execute(
             """SELECT project_id FROM production_jobs
-               WHERE state='queued'
+               WHERE state='queued' AND cancel_requested=0
                ORDER BY priority ASC,enqueued_at ASC
                LIMIT 1"""
         ).fetchone()
@@ -101,7 +104,7 @@ def _claim_next(worker_id: str) -> str | None:
             """UPDATE production_jobs
                SET state='running',worker_id=?,attempts=attempts+1,
                    started_at=?,updated_at=?
-               WHERE project_id=? AND state='queued'""",
+               WHERE project_id=? AND state='queued' AND cancel_requested=0""",
             (worker_id, now, now, project_id),
         ).rowcount
         con.commit()
@@ -111,6 +114,45 @@ def _claim_next(worker_id: str) -> str | None:
         return None
     finally:
         con.close()
+
+
+def cancel_requested(project_id: str) -> bool:
+    ensure_schema()
+    with core.db() as con:
+        row = con.execute(
+            "SELECT cancel_requested FROM production_jobs WHERE project_id=?",
+            (project_id,),
+        ).fetchone()
+    return bool(row and int(row["cancel_requested"] or 0))
+
+
+def request_cancel(project_id: str) -> str:
+    """Request cooperative cancellation and return the queue state after the request."""
+    ensure_schema()
+    now = core.now_iso()
+    with core.db() as con:
+        row = con.execute(
+            "SELECT state FROM production_jobs WHERE project_id=?",
+            (project_id,),
+        ).fetchone()
+        if not row:
+            return "missing"
+        state = str(row["state"] or "")
+        if state == "queued":
+            con.execute(
+                """UPDATE production_jobs
+                   SET state='cancelled',cancel_requested=1,finished_at=?,updated_at=?
+                   WHERE project_id=?""",
+                (now, now, project_id),
+            )
+            return "cancelled"
+        if state == "running":
+            con.execute(
+                "UPDATE production_jobs SET cancel_requested=1,updated_at=? WHERE project_id=?",
+                (now, project_id),
+            )
+            return "cancel_requested"
+        return state
 
 
 def _finish(project_id: str, state: str, error: str = "") -> None:
@@ -127,6 +169,14 @@ def _finish(project_id: str, state: str, error: str = "") -> None:
 
 async def _execute(project_id: str, worker_id: str) -> None:
     try:
+        if cancel_requested(project_id):
+            _finish(project_id, "cancelled")
+            with core.db() as con:
+                con.execute(
+                    "UPDATE projects SET status='cancelled',updated_at=? WHERE id=?",
+                    (core.now_iso(), project_id),
+                )
+            return
         await core.generate_project(project_id)
         with core.db() as con:
             project = con.execute(
@@ -134,7 +184,9 @@ async def _execute(project_id: str, worker_id: str) -> None:
                 (project_id,),
             ).fetchone()
         status = str(project["status"] if project else "missing")
-        if status == "failed":
+        if cancel_requested(project_id) or status == "cancelled":
+            _finish(project_id, "cancelled")
+        elif status == "failed":
             detail = ""
             if project:
                 detail = str(project["last_audit_json"] or "")[:700]
@@ -179,15 +231,23 @@ def recover_interrupted_jobs() -> int:
     now = core.now_iso()
     with core.db() as con:
         rows = con.execute(
-            "SELECT project_id FROM production_jobs WHERE state='running'"
+            "SELECT project_id,cancel_requested FROM production_jobs WHERE state='running'"
         ).fetchall()
         for row in rows:
-            con.execute(
-                """UPDATE production_jobs
-                   SET state='queued',worker_id=NULL,started_at=NULL,updated_at=?
-                   WHERE project_id=?""",
-                (now, str(row["project_id"])),
-            )
+            if int(row["cancel_requested"] or 0):
+                con.execute(
+                    """UPDATE production_jobs
+                       SET state='cancelled',worker_id=NULL,finished_at=?,updated_at=?
+                       WHERE project_id=?""",
+                    (now, now, str(row["project_id"])),
+                )
+            else:
+                con.execute(
+                    """UPDATE production_jobs
+                       SET state='queued',worker_id=NULL,started_at=NULL,updated_at=?
+                       WHERE project_id=?""",
+                    (now, str(row["project_id"])),
+                )
         return len(rows)
 
 
@@ -198,12 +258,12 @@ def queue_snapshot() -> dict[str, Any]:
             "SELECT state,COUNT(*) AS n FROM production_jobs GROUP BY state"
         ).fetchall()
         running = con.execute(
-            """SELECT project_id,worker_id,attempts,started_at,updated_at
+            """SELECT project_id,worker_id,attempts,cancel_requested,started_at,updated_at
                FROM production_jobs WHERE state='running'
                ORDER BY started_at ASC LIMIT 30"""
         ).fetchall()
         queued = con.execute(
-            """SELECT project_id,priority,attempts,enqueued_at
+            """SELECT project_id,priority,attempts,cancel_requested,enqueued_at
                FROM production_jobs WHERE state='queued'
                ORDER BY priority ASC,enqueued_at ASC LIMIT 50"""
         ).fetchall()
