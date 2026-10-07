@@ -74,6 +74,13 @@ async def agent_capabilities(user_id: str = Depends(core.current_user)):
             "design_engine_v2": True,
             "quality_originality_gate_v2": True,
             "persistent_production_queue": True,
+            "cooperative_job_cancellation": True,
+            "customer_archive_restore": True,
+            "benchmark_repo_isolation": True,
+            "atomic_exact_tree_delivery": True,
+            "delivery_integrity_manifest": True,
+            "build_abuse_guard": True,
+            "production_preflight": True,
         },
         "runtime": {
             "git": _binary("git"),
