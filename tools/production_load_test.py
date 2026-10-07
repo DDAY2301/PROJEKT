@@ -124,7 +124,7 @@ def expand(count: int) -> list[tuple]:
         out.append(tuple(row))
     return out
 
-def payload(row: tuple) -> dict[str,Any]:
+def payload(row: tuple, *, benchmark_mode: bool = True) -> dict[str,Any]:
     name,org,programme,goal,audience,tone,primary,secondary,bg,text,font,mood,pages,hero,subtitle,cta,images,req=row
     page_rows=[]
     for i,title in enumerate(pages):
@@ -136,6 +136,7 @@ def payload(row: tuple) -> dict[str,Any]:
         "brand":{"primary_color":primary,"secondary_color":secondary,"background_color":bg,"text_color":text,"font_style":font,"mood":mood},
         "pages":page_rows,"hero_title":hero,"hero_subtitle":subtitle,"cta_text":cta,
         "contact_email":None,"image_direction":images,"custom_requirements":req,"defer_build":False,
+        "benchmark_mode": benchmark_mode,
     }
 
 class Api:
@@ -346,6 +347,7 @@ def main() -> int:
     p.add_argument("--output",default="")
     p.add_argument("--submit-delay",type=float,default=.12)
     p.add_argument("--keep-old-loadtests",action="store_true",help="Do not clear prior local pv.loadtest.* rows before this run")
+    p.add_argument("--with-delivery",action="store_true",help="Also create GitHub repositories during the benchmark. Default is local benchmark mode.")
     a=p.parse_args()
     if not 1<=a.count<=100: p.error("--count must be 1..100")
 
@@ -369,11 +371,11 @@ def main() -> int:
             # address still has to pass normal email syntax validation.
             account=f"pv.loadtest.{stamp.lower()}@gmail.com"
             api.register(account,"PV!"+secrets.token_urlsafe(18))
-        print(f"API={a.api} account={account} projects={a.count} db_metrics={db.exists()}")
+        print(f"API={a.api} account={account} projects={a.count} db_metrics={db.exists()} benchmark_mode={not a.with_delivery}")
 
         results=[]; submitted={}
         for i,row in enumerate(expand(a.count),1):
-            at=now(); data=api.post("/projects",payload(row)); pid=str(data["id"])
+            at=now(); data=api.post("/projects",payload(row, benchmark_mode=not a.with_delivery)); pid=str(data["id"])
             submitted[pid]=at; results.append(Result(i,pid,str(row[0]),iso(at)))
             print(f"[SUBMIT {i:02d}/{a.count}] {row[0]} -> {pid[:8]}")
             time.sleep(max(0,a.submit_delay))
