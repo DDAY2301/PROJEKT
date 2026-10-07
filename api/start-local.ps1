@@ -39,6 +39,9 @@ $env:VISUAL_QA_VISION_MAX_PAGES = "1"
 $env:TEXT_REPAIR_ATTEMPTS = "1"
 $env:VISUAL_REPAIR_ATTEMPTS = "1"
 $env:MODEL_REPAIR_FILES_PER_ATTEMPT = "2"
+$env:MODEL_ROUTING = "adaptive"
+$env:OLLAMA_EXPERT_KEEP_ALIVE = "45s"
+$env:OLLAMA_FAST_KEEP_ALIVE = "5m"
 
 Write-Host "[2/9] Checking local Ollama API..."
 try {
@@ -59,7 +62,13 @@ $models = @($tags.models | ForEach-Object { $_.name })
 if (-not $env:OLLAMA_FALLBACK_MODELS) {
   $fallbacks = @(
     $models |
-      Where-Object { $_ -ne $Model -and $_ -match '(?i)(coder|code|deepseek)' -and $_ -notmatch '(?i)vl' } |
+      Where-Object {
+        $_ -ne $Model -and
+        $_ -match '(?i)(coder|code|deepseek)' -and
+        $_ -notmatch '(?i)vl' -and
+        $_ -notmatch '(?i)KAT-Coder-V2\.5-Dev' -and
+        $_ -notmatch '(?i)qwen3\.6:35b-a3b-coding'
+      } |
       Select-Object -First 3
   )
   $env:OLLAMA_FALLBACK_MODELS = ($fallbacks -join ',')
@@ -68,6 +77,22 @@ if ($env:OLLAMA_FALLBACK_MODELS) {
   Write-Host "Local model fallbacks: $env:OLLAMA_FALLBACK_MODELS" -ForegroundColor DarkCyan
 } else {
   Write-Host "Local model fallbacks: none installed (primary model remains fully supported)" -ForegroundColor DarkGray
+}
+
+$expertModels = @(
+  $models |
+    Where-Object {
+      $_ -match '(?i)KAT-Coder-V2\.5-Dev' -or
+      $_ -match '(?i)qwen3\.6:35b-a3b-coding'
+    } |
+    Select-Object -Unique
+)
+$env:OLLAMA_EXPERT_MODELS = ($expertModels -join ',')
+if ($expertModels.Count -gt 0) {
+  Write-Host "Expert models: $env:OLLAMA_EXPERT_MODELS" -ForegroundColor Green
+  Write-Host "Adaptive routing: fast model for routine work, expert only for hard coding/repair tasks" -ForegroundColor DarkCyan
+} else {
+  Write-Host "Expert models: none installed. Run .\install-expert-model.ps1 from repo root." -ForegroundColor DarkGray
 }
 
 Write-Host "[3/9] Preparing local vision reviewer..."
