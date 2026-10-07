@@ -26,7 +26,7 @@ jobs:
           api/preview.py api/notifications.py api/handoff_runtime.py
           api/model_router.py api/repo_map.py api/deep_static_qa.py api/design_critic.py
           api/source_editor.py api/site_import.py api/brief_import.py api/image_studio.py api/autonomous_supervisor.py api/production_queue.py api/production_lifecycle.py api/capabilities.py
-          api/server.py api/create_test_user.py tools/production_load_test.py
+          api/server.py api/preflight.py api/create_test_user.py tools/production_load_test.py
       - name: Import complete server
         env:
           APP_SECRET: ci-only-secret
@@ -60,6 +60,7 @@ jobs:
               '/agent/capabilities',
               '/agent/design-engine',
               '/agent/production-queue',
+              '/agent/preflight',
               '/projects/{project_id}/cancel',
               '/projects/{project_id}/archive',
               '/projects/{project_id}/restore',
@@ -439,6 +440,20 @@ jobs:
           assert 'github_replace_bundle(' in revisions
           print('Lifecycle, unique delivery, benchmark isolation and atomic publish checks passed')
           PY
+      - name: Validate production security and preflight contract
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from api import main as core
+          from api import preflight
+
+          assert core.APP_SECRET != 'dev-change-me'
+          assert len(core.APP_SECRET) >= 40
+          assert preflight.MIN_DISK_BLOCK_GB > 0
+          assert preflight.MIN_DISK_WARN_GB > preflight.MIN_DISK_BLOCK_GB
+          assert Path(core.DB_PATH).parent.exists()
+          print('Persistent JWT secret and production preflight contract checks passed')
+          PY
       - name: Validate release quality gate
         env:
           APP_SECRET: ci-only-secret
@@ -667,6 +682,9 @@ jobs:
           test -f api/design_engine_v2.py
           test -f api/production_queue.py
           test -f api/production_lifecycle.py
+          test -f api/preflight.py
+          grep -q 'Production readiness' dist/assets/agent-console-v1.js
+          grep -q 'app-secret.txt' .gitignore
           test -f api/quality_originality_v2.py
           test -f api/create_test_user.py
           test -f configure-email.ps1
