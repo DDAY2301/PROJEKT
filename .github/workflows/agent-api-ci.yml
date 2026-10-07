@@ -464,6 +464,30 @@ jobs:
           assert billing_gate._quota_exempt('missing-user') is False
           print('Build abuse guard configuration checks passed')
           PY
+      - name: Validate self-healing production worker pool
+        run: |
+          python - <<'PY'
+          import asyncio
+          from api import production_queue
+
+          async def main():
+              production_queue.ensure_schema()
+              alive = production_queue.ensure_worker_pool()
+              assert alive == production_queue.WORKER_COUNT, (alive, production_queue.WORKER_COUNT)
+              snap = production_queue.queue_snapshot()
+              assert snap['workers_alive'] == production_queue.WORKER_COUNT, snap
+              assert snap['worker_pool_healthy'] is True, snap
+              assert snap['workers_crashed'] == 0, snap
+
+              for task in list(production_queue._worker_tasks):
+                  task.cancel()
+              if production_queue._worker_tasks:
+                  await asyncio.gather(*production_queue._worker_tasks, return_exceptions=True)
+              production_queue._worker_tasks.clear()
+
+          asyncio.run(main())
+          print('Self-healing worker pool checks passed')
+          PY
       - name: Validate release quality gate
         env:
           APP_SECRET: ci-only-secret
@@ -671,6 +695,9 @@ jobs:
           grep -q 'data-cancel-project' dist/assets/dashboard.js
           grep -q 'data-archive-project' dist/assets/dashboard.js
           grep -q 'benchmark_mode' tools/production_load_test.py
+          grep -q 'workers_alive' tools/production_load_test.py
+          grep -q 'ensure_worker_pool' api/production_queue.py
+          grep -q 'worker_pool_healthy' api/preflight.py
           test -f dist/assets/dashboard-upgrades.js
           test -f api/visual_qa.py
           test -f api/vision_review.py
