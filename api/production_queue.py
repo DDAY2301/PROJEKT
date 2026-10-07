@@ -318,6 +318,7 @@ def recover_interrupted_jobs() -> int:
 
 def queue_snapshot() -> dict[str, Any]:
     ensure_schema()
+    ensure_worker_pool()
     with core.db() as con:
         states = con.execute(
             "SELECT state,COUNT(*) AS n FROM production_jobs GROUP BY state"
