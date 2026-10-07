@@ -3,7 +3,8 @@ param(
   [string]$Mode = 'smoke',
   [string]$Api = 'http://127.0.0.1:8000',
   [int]$Count = 0,
-  [int]$TimeoutMinutes = 0
+  [int]$TimeoutMinutes = 0,
+  [switch]$WithDelivery
 )
 
 $ErrorActionPreference = 'Stop'
@@ -56,11 +57,17 @@ Write-Host "API: $Api"
 Write-Host "Projects: $Count"
 Write-Host "Timeout: $TimeoutMinutes min"
 Write-Host ""
-Write-Host "This test uses the REAL production pipeline and may create GitHub repositories / Pages deployments." -ForegroundColor Yellow
+if ($WithDelivery) {
+  Write-Host "This test uses the REAL production pipeline INCLUDING GitHub repository delivery." -ForegroundColor Yellow
+} else {
+  Write-Host "This test uses the REAL production pipeline in local benchmark mode; it does NOT create generated-site repositories." -ForegroundColor Yellow
+}
 Write-Host "Results will be stored under .\load-test-results\<timestamp>." -ForegroundColor Yellow
 Write-Host ""
 
-& $python $script --api $Api --count $Count --timeout-minutes $TimeoutMinutes
+$args = @('--api',$Api,'--count',$Count,'--timeout-minutes',$TimeoutMinutes)
+if ($WithDelivery) { $args += '--with-delivery' }
+& $python $script @args
 $code = $LASTEXITCODE
 
 if ($code -eq 0) {
