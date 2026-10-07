@@ -10,6 +10,7 @@ overlap with another project's planning.
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import socket
 import sqlite3
@@ -26,10 +27,16 @@ POLL_SECONDS = max(0.2, float(os.getenv("PRODUCTION_QUEUE_POLL_SECONDS", "0.8"))
 INSTANCE_ID = f"{socket.gethostname()}-{os.getpid()}-{uuid.uuid4().hex[:6]}"
 _worker_tasks: list[asyncio.Task] = []
 _wake_event: asyncio.Event | None = None
+_schema_ready = False
+logger = logging.getLogger("project_visibility.production_queue")
 
 
 def ensure_schema() -> None:
+    global _schema_ready
+    if _schema_ready:
+        return
     with core.db() as con:
+        con.execute("PRAGMA busy_timeout=10000")
         con.execute(
             """CREATE TABLE IF NOT EXISTS production_jobs (
               project_id TEXT PRIMARY KEY,
@@ -48,8 +55,9 @@ def ensure_schema() -> None:
         if "cancel_requested" not in columns:
             con.execute("ALTER TABLE production_jobs ADD COLUMN cancel_requested INTEGER NOT NULL DEFAULT 0")
         con.execute(
-            "CREATE INDEX IF NOT EXISTS idx_production_jobs_claim ON production_jobs(state,cancel_requested,priority,enqueued_at)"
+            "CREATE INDEX IF NOT EXISTS idx_production_jobs_claim_v2 ON production_jobs(state,cancel_requested,priority,enqueued_at)"
         )
+    _schema_ready = True
 
 
 def enqueue_project(project_id: str, priority: int = 100) -> bool:
@@ -79,15 +87,18 @@ def enqueue_project(project_id: str, priority: int = 100) -> bool:
                    ) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
                 (project_id, "queued", int(priority), 0, None, "", 0, now, None, None, now),
             )
+    ensure_worker_pool()
     if _wake_event is not None:
         _wake_event.set()
     return True
 
 
 def _claim_next(worker_id: str) -> str | None:
-    ensure_schema()
-    con = core.db()
+    con = None
     try:
+        ensure_schema()
+        con = core.db()
+        con.execute("PRAGMA busy_timeout=10000")
         con.execute("BEGIN IMMEDIATE")
         row = con.execute(
             """SELECT project_id FROM production_jobs
@@ -109,11 +120,17 @@ def _claim_next(worker_id: str) -> str | None:
         ).rowcount
         con.commit()
         return project_id if changed == 1 else None
-    except sqlite3.OperationalError:
-        con.rollback()
+    except sqlite3.OperationalError as exc:
+        if con is not None:
+            try:
+                con.rollback()
+            except Exception:
+                pass
+        logger.warning("Queue claim contention worker=%s error=%s", worker_id, exc)
         return None
     finally:
-        con.close()
+        if con is not None:
+            con.close()
 
 
 def cancel_requested(project_id: str) -> bool:
@@ -200,29 +217,77 @@ async def _execute(project_id: str, worker_id: str) -> None:
 
 async def _worker(index: int) -> None:
     worker_id = f"{INSTANCE_ID}-w{index + 1}"
+    logger.info("Production worker started id=%s", worker_id)
     while True:
-        project_id = _claim_next(worker_id)
-        if project_id:
-            try:
-                await _execute(project_id, worker_id)
-            except Exception:
-                # Project-level runtime already records failure details. Keep the
-                # worker alive so one bad build cannot stop production.
-                pass
-            continue
-
-        if _wake_event is None:
-            await asyncio.sleep(POLL_SECONDS)
-            continue
-        _wake_event.clear()
         try:
-            await asyncio.wait_for(_wake_event.wait(), timeout=POLL_SECONDS)
-        except asyncio.TimeoutError:
-            pass
+            project_id = _claim_next(worker_id)
+            if project_id:
+                try:
+                    await _execute(project_id, worker_id)
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    # Project-level runtime already records failure details. Keep
+                    # the worker alive so one bad build cannot stop production.
+                    logger.exception("Production job failed worker=%s project=%s", worker_id, project_id)
+                continue
+
+            if _wake_event is None:
+                await asyncio.sleep(POLL_SECONDS)
+                continue
+            _wake_event.clear()
+            try:
+                await asyncio.wait_for(_wake_event.wait(), timeout=POLL_SECONDS)
+            except asyncio.TimeoutError:
+                pass
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Production worker recovered from unexpected loop error worker=%s", worker_id)
+            await asyncio.sleep(max(POLL_SECONDS, 1.0))
 
 
 async def _compat_run_project_once(project_id: str) -> None:
     enqueue_project(project_id)
+
+
+def _alive_worker_tasks() -> list[asyncio.Task]:
+    return [task for task in _worker_tasks if not task.done()]
+
+
+def ensure_worker_pool() -> int:
+    """Ensure the configured worker count exists in the current event loop."""
+    global _wake_event
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return 0
+
+    if _wake_event is None:
+        _wake_event = asyncio.Event()
+
+    # Remove completed tasks after recording unexpected failures.
+    alive: list[asyncio.Task] = []
+    for task in list(_worker_tasks):
+        if not task.done():
+            alive.append(task)
+            continue
+        if not task.cancelled():
+            try:
+                exc = task.exception()
+            except Exception as read_exc:
+                exc = read_exc
+            if exc is not None:
+                logger.error("Respawning crashed production worker: %s", exc)
+    _worker_tasks[:] = alive
+
+    missing = max(0, WORKER_COUNT - len(_worker_tasks))
+    start_index = len(_worker_tasks)
+    for offset in range(missing):
+        _worker_tasks.append(asyncio.create_task(_worker(start_index + offset)))
+    if missing and _wake_event is not None:
+        _wake_event.set()
+    return len(_alive_worker_tasks())
 
 
 def recover_interrupted_jobs() -> int:
@@ -267,8 +332,13 @@ def queue_snapshot() -> dict[str, Any]:
                FROM production_jobs WHERE state='queued'
                ORDER BY priority ASC,enqueued_at ASC LIMIT 50"""
         ).fetchall()
+    alive = _alive_worker_tasks()
+    crashed = [task for task in _worker_tasks if task.done() and not task.cancelled()]
     return {
         "workers": WORKER_COUNT,
+        "workers_alive": len(alive),
+        "workers_crashed": len(crashed),
+        "worker_pool_healthy": len(alive) == WORKER_COUNT,
         "instance_id": INSTANCE_ID,
         "states": {str(row["state"]): int(row["n"]) for row in states},
         "running": [dict(row) for row in running],
@@ -278,18 +348,16 @@ def queue_snapshot() -> dict[str, Any]:
 
 @core.app.on_event("startup")
 async def start_production_workers() -> None:
-    global _wake_event
     ensure_schema()
-    recover_interrupted_jobs()
-    if _wake_event is None:
-        _wake_event = asyncio.Event()
-    alive = [task for task in _worker_tasks if not task.done()]
-    if alive:
-        return
-    _worker_tasks.clear()
-    for index in range(WORKER_COUNT):
-        _worker_tasks.append(asyncio.create_task(_worker(index)))
-    _wake_event.set()
+    recovered = recover_interrupted_jobs()
+    alive = ensure_worker_pool()
+    logger.info(
+        "Production queue online workers=%s/%s recovered=%s instance=%s",
+        alive,
+        WORKER_COUNT,
+        recovered,
+        INSTANCE_ID,
+    )
 
 
 @core.app.on_event("shutdown")
