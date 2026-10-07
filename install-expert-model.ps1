@@ -1,6 +1,6 @@
 param(
-  [ValidateSet('auto','IQ3_XXS','Q3_K_M','IQ3_M','Q4_K_M')]
-  [string]$Quant = 'auto',
+  [ValidateSet('auto','KAT-IQ3_XXS','KAT-Q3_K_M','KAT-IQ3_M','KAT-Q4_K_M','QWEN-IQ2_XXS','QWEN-IQ2_M')]
+  [string]$Profile = 'auto',
   [switch]$ForceLowMemory,
   [switch]$AlsoInstallQwen36
 )
@@ -30,9 +30,18 @@ function Get-RamGb {
   } catch { return 0 }
 }
 
+function Install-Expert([string]$Model) {
+  Write-Host "Downloading / verifying expert model..." -ForegroundColor Cyan
+  Write-Host "  $Model" -ForegroundColor Cyan
+  & ollama run $Model "Reply exactly READY and nothing else."
+  if ($LASTEXITCODE -ne 0) {
+    throw "Expert model download/import failed: $Model"
+  }
+}
+
 Write-Host ""
-Write-Host "PROJECT VISIBILITY - EXPERT MODEL INSTALLER" -ForegroundColor Green
-Write-Host "===========================================" -ForegroundColor Green
+Write-Host "PROJECT VISIBILITY - ADAPTIVE EXPERT INSTALLER" -ForegroundColor Green
+Write-Host "==============================================" -ForegroundColor Green
 Write-Host ""
 
 if (-not (Get-Command ollama -ErrorAction SilentlyContinue)) {
@@ -41,7 +50,7 @@ if (-not (Get-Command ollama -ErrorAction SilentlyContinue)) {
 
 $version = Get-OllamaVersion
 if ($version -lt [version]'0.30.0') {
-  throw "Ollama 0.30+ is required for current GGUF compatibility. Upgrade Ollama first, then rerun this script."
+  throw "Ollama 0.30+ is required. Upgrade Ollama first, then rerun this script."
 }
 
 $ramGb = Get-RamGb
@@ -51,77 +60,101 @@ Write-Host "Free disk: $diskGb GB"
 Write-Host "Ollama: $version"
 Write-Host ""
 
-if ($Quant -eq 'auto') {
+$katRepo = "hf.co/Abiray/KAT-Coder-V2.5-Dev-Imatrix-GGUF"
+$qwenRepo = "hf.co/bartowski/Qwen_Qwen3.6-35B-A3B-GGUF"
+
+if ($Profile -eq 'auto') {
   if ($ramGb -ge 40 -and $diskGb -ge 27) {
-    $Quant = 'Q4_K_M'
+    $Profile = 'KAT-Q4_K_M'
   } elseif ($ramGb -ge 24 -and $diskGb -ge 22) {
-    $Quant = 'IQ3_M'
+    $Profile = 'KAT-IQ3_M'
   } elseif ($ramGb -ge 20 -and $diskGb -ge 20) {
-    $Quant = 'Q3_K_M'
-  } elseif ($ForceLowMemory -and $diskGb -ge 18) {
-    $Quant = 'IQ3_XXS'
+    $Profile = 'KAT-IQ3_XXS'
+  } elseif ($ramGb -ge 17 -and $diskGb -ge 16) {
+    $Profile = 'QWEN-IQ2_M'
+  } elseif ($ramGb -ge 14 -and $diskGb -ge 14) {
+    $Profile = 'QWEN-IQ2_XXS'
+  } elseif ($ForceLowMemory -and $diskGb -ge 14) {
+    $Profile = 'QWEN-IQ2_XXS'
   } else {
-    throw "This machine does not have enough comfortable RAM/disk headroom for KAT-Coder. Keep qwen2.5-coder:7b, or rerun with -ForceLowMemory if you accept slower paging."
+    throw "This machine should stay on qwen2.5-coder:7b. There is not enough safe RAM headroom even for the compact 35B-A3B expert."
   }
 }
 
-$sizeHint = @{
-  'IQ3_XXS' = 'about 14.9 GB'
-  'Q3_K_M'  = 'about 16.2 GB'
-  'IQ3_M'   = 'about 16.9 GB'
-  'Q4_K_M'  = 'about 21.4 GB'
-}[$Quant]
-
-$kat = "hf.co/Abiray/KAT-Coder-V2.5-Dev-Imatrix-GGUF:$Quant"
-
-Write-Host "Selected expert model:" -ForegroundColor Cyan
-Write-Host "  $kat"
-Write-Host "  $sizeHint"
-Write-Host ""
-Write-Host "KAT is used only for difficult coding/repository/repair tasks." -ForegroundColor DarkCyan
-Write-Host "The fast 7B model remains the normal production model." -ForegroundColor DarkCyan
-Write-Host ""
-
-Write-Host "Downloading / verifying KAT-Coder..." -ForegroundColor Cyan
-& ollama run $kat "Reply exactly READY and nothing else."
-if ($LASTEXITCODE -ne 0) {
-  if ($Quant -eq 'IQ3_M') {
-    Write-Warning "IQ3_M could not be loaded directly. Retrying Q3_K_M."
-    $Quant = 'Q3_K_M'
-    $kat = "hf.co/Abiray/KAT-Coder-V2.5-Dev-Imatrix-GGUF:$Quant"
-    & ollama run $kat "Reply exactly READY and nothing else."
+switch ($Profile) {
+  'KAT-IQ3_XXS' {
+    $expert = $katRepo + ":IQ3_XXS"
+    $sizeHint = "about 14.9 GB"
+    $kind = "KAT expert"
   }
+  'KAT-Q3_K_M' {
+    $expert = $katRepo + ":Q3_K_M"
+    $sizeHint = "about 16.2 GB"
+    $kind = "KAT expert"
+  }
+  'KAT-IQ3_M' {
+    $expert = $katRepo + ":IQ3_M"
+    $sizeHint = "about 16.9 GB"
+    $kind = "KAT expert"
+  }
+  'KAT-Q4_K_M' {
+    $expert = $katRepo + ":Q4_K_M"
+    $sizeHint = "about 21.4 GB"
+    $kind = "KAT expert"
+  }
+  'QWEN-IQ2_M' {
+    $expert = $qwenRepo + ":IQ2_M"
+    $sizeHint = "about 13.0 GB"
+    $kind = "Qwen3.6 compact expert"
+  }
+  'QWEN-IQ2_XXS' {
+    $expert = $qwenRepo + ":IQ2_XXS"
+    $sizeHint = "about 10.7 GB"
+    $kind = "Qwen3.6 compact expert"
+  }
+  default { throw "Unsupported profile: $Profile" }
 }
-if ($LASTEXITCODE -ne 0) { throw "KAT-Coder download/import failed." }
 
-if ($AlsoInstallQwen36) {
-  $qwen = 'qwen3.6:35b-a3b-coding'
+Write-Host "Selected profile: $Profile" -ForegroundColor Green
+Write-Host "Expert type: $kind"
+Write-Host "Approx model weights: $sizeHint"
+Write-Host ""
+Write-Host "The normal production model remains qwen2.5-coder:7b." -ForegroundColor DarkCyan
+Write-Host "This larger model is loaded only for difficult coding/repository/repair tasks." -ForegroundColor DarkCyan
+Write-Host ""
+
+Install-Expert $expert
+
+if ($AlsoInstallQwen36 -and $kind -notmatch 'Qwen3\.6') {
   Write-Host ""
-  Write-Host "Downloading optional Qwen3.6 coding fallback..." -ForegroundColor Cyan
-  & ollama pull $qwen
+  Write-Host "Downloading optional full Qwen3.6 coding fallback..." -ForegroundColor Cyan
+  & ollama pull "qwen3.6:35b-a3b-coding"
   if ($LASTEXITCODE -ne 0) {
-    Write-Warning "Optional Qwen3.6 fallback failed; KAT remains installed."
+    Write-Warning "Optional Qwen3.6 coding fallback failed; the selected expert remains installed."
   }
 }
 
 $tags = Invoke-RestMethod -Uri 'http://127.0.0.1:11434/api/tags' -Method Get -TimeoutSec 15
 $names = @($tags.models | ForEach-Object { $_.name })
-$installedKat = @($names | Where-Object { $_ -match '(?i)KAT-Coder-V2\.5-Dev' })
-$installedQwen = @($names | Where-Object { $_ -match '(?i)qwen3\.6:35b-a3b-coding' })
+$installed = @(
+  $names |
+    Where-Object {
+      $_ -match '(?i)KAT-Coder-V2\.5-Dev' -or
+      $_ -match '(?i)Qwen_Qwen3\.6-35B-A3B' -or
+      $_ -match '(?i)qwen3\.6:35b-a3b-coding'
+    }
+)
 
 Write-Host ""
-if ($installedKat.Count -gt 0) {
-  Write-Host "KAT-Coder: INSTALLED" -ForegroundColor Green
-  $installedKat | ForEach-Object { Write-Host "  $_" -ForegroundColor Green }
+if ($installed.Count -gt 0) {
+  Write-Host "Expert models available to the adaptive router:" -ForegroundColor Green
+  $installed | ForEach-Object { Write-Host "  $_" -ForegroundColor Green }
 } else {
-  throw "Ollama finished without exposing KAT-Coder in /api/tags."
-}
-if ($installedQwen.Count -gt 0) {
-  Write-Host "Qwen3.6 coding fallback: INSTALLED" -ForegroundColor Green
+  throw "Ollama finished without exposing the installed expert in /api/tags."
 }
 
 Write-Host ""
 Write-Host "Next:" -ForegroundColor Cyan
 Write-Host "  .\start-product.ps1"
 Write-Host ""
-Write-Host "The startup script will automatically detect KAT and route only expert tasks to it." -ForegroundColor Green
+Write-Host "The startup script will auto-detect the compact or KAT expert model." -ForegroundColor Green
