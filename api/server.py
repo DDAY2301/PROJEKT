@@ -20,6 +20,7 @@ import api.deep_static_qa  # noqa: F401 - offline deterministic bundle/link/acce
 import api.vision_review  # noqa: F401 - adds local multimodal art-direction review to Chromium QA
 import api.enhanced_runtime  # noqa: F401 - adds media, rendered visual QA and publishing states
 import api.production_queue  # noqa: F401 - persistent multi-worker production queue
+import api.production_lifecycle  # noqa: F401 - cancel/archive/restore project lifecycle
 import api.learning_runtime  # noqa: F401 - persistent versioned operational learning memory
 import api.design_critic  # noqa: F401 - independent second-pass design review
 import api.revisions  # noqa: F401 - registers post-build revision routes
