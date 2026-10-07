@@ -350,6 +350,48 @@ jobs:
           assert rendered.count('<section') >= 5
           print('Deterministic art-direction diversity checks passed')
           PY
+      - name: Validate adaptive expert model routing
+        run: |
+          python - <<'PY'
+          import os
+          from api import model_router
+
+          old_expert=os.environ.get('OLLAMA_EXPERT_MODELS')
+          old_routing=os.environ.get('MODEL_ROUTING')
+          os.environ['OLLAMA_EXPERT_MODELS']='kat-coder-test,qwen3.6-test'
+          os.environ['MODEL_ROUTING']='adaptive'
+          try:
+              assert model_router._needs_expert(
+                  'Repair this Python traceback in the repository and produce a patch.',
+                  'You are a senior debugging engineer.',
+                  num_predict=4000,
+              )
+              assert not model_router._needs_expert(
+                  'Plan a polished five-page website from this customer brief.',
+                  'You are a senior product designer and information architect.',
+                  num_predict=2400,
+              )
+              expert=model_router._ollama_models(
+                  'auto',
+                  prompt='Fix this failing test and root cause in the codebase.',
+                  system='You are a senior debugging engineer.',
+                  num_predict=4000,
+              )
+              fast=model_router._ollama_models(
+                  'auto',
+                  prompt='Plan a website.',
+                  system='You are a senior product designer.',
+                  num_predict=2400,
+              )
+              assert expert[0]=='kat-coder-test', expert
+              assert fast[0] == model_router._fast_models()[0], fast
+          finally:
+              if old_expert is None: os.environ.pop('OLLAMA_EXPERT_MODELS',None)
+              else: os.environ['OLLAMA_EXPERT_MODELS']=old_expert
+              if old_routing is None: os.environ.pop('MODEL_ROUTING',None)
+              else: os.environ['MODEL_ROUTING']=old_routing
+          print('Adaptive expert routing checks passed')
+          PY
       - name: Validate release quality gate
         env:
           APP_SECRET: ci-only-secret
@@ -580,7 +622,11 @@ jobs:
           test -f start-product.ps1
           test -f start-stable-local.ps1
           test -f run-production-load-test.ps1
+          test -f install-expert-model.ps1
           test -f tools/production_load_test.py
+          grep -q 'KAT-Coder-V2.5-Dev-Imatrix-GGUF' install-expert-model.ps1
+          grep -q 'MODEL_ROUTING = "adaptive"' start-product.ps1
+          grep -q 'OLLAMA_EXPERT_KEEP_ALIVE = "45s"' start-product.ps1
           grep -q 'qwen2.5-coder:7b' start-product.ps1
           grep -q 'qwen2.5-coder:7b' api/start-local.ps1
           grep -q 'DESIGN_CRITIC_MODE = "adaptive"' start-product.ps1
