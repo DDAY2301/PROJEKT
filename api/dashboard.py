@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 
 import api.billing as billing
 import api.main as core
+import api.production_lifecycle as lifecycle
 
 
 class DomainIn(BaseModel):
@@ -107,6 +108,7 @@ async def dashboard_projects(user_id: str = Depends(core.current_user)):
             config = json.loads(project.get("config_json") or "{}")
             issues = audit.get("issues") or []
             severe = sum(1 for item in issues if isinstance(item, dict) and item.get("severity") in {"critical", "high"})
+            life = lifecycle.lifecycle_for(project["id"])
             result.append({
                 "id": project["id"],
                 "name": project["name"],
@@ -126,6 +128,9 @@ async def dashboard_projects(user_id: str = Depends(core.current_user)):
                 "visual_qa": audit.get("visual_qa") or None,
                 "issue_count": len(issues),
                 "severe_issue_count": severe,
+                "archived": bool(life.get("archived")),
+                "prior_status": life.get("prior_status") or "",
+                "archived_at": life.get("archived_at"),
             })
     return result
 
