@@ -238,6 +238,21 @@ async def _vision_reviews(report: dict[str, Any], config: dict[str, Any]) -> dic
     }
 
 
+def _bounded_release_score(deterministic: int, vision_score: int) -> tuple[int, int]:
+    """Return release score plus bounded aesthetic penalty.
+
+    Chromium/deterministic QA remains the release authority. The small local
+    vision model is useful as an art-direction critic but is intentionally
+    noisy, so it may shave at most eight points from an otherwise healthy
+    deterministic score. It can never add points.
+    """
+    deterministic = max(0, min(100, int(deterministic)))
+    vision_score = max(0, min(100, int(vision_score)))
+    gap = max(0, 90 - vision_score)
+    penalty = min(8, (gap + 4) // 5)
+    return max(0, deterministic - penalty), penalty
+
+
 async def audit_files_with_vision(
     files: dict[str, Any],
     project_id: str,
@@ -262,9 +277,13 @@ async def audit_files_with_vision(
         report.setdefault("issues", []).extend(advisory)
         deterministic = int(report.get("score") or 0)
         vision_score = int(vision.get("score") or deterministic)
-        report["score"] = round(deterministic * 0.65 + vision_score * 0.35)
+        release_score, aesthetic_penalty = _bounded_release_score(deterministic, vision_score)
+        report["deterministic_score"] = deterministic
+        report["aesthetic_score"] = vision_score
+        report["aesthetic_penalty"] = aesthetic_penalty
+        report["score"] = release_score
         report["passed"] = bool(report.get("passed"))
-        report["version"] = "visual-qa-v3-vision"
+        report["version"] = "visual-qa-v4-bounded-aesthetic"
     return report
 
 
