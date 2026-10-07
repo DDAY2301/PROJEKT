@@ -215,6 +215,38 @@ def _attach_uploaded_image_bytes(files: dict[str, Any], images: list[dict[str, A
                 logger.warning("Could not read uploaded image path=%s error=%s", stored_path, exc)
 
 
+def _strip_unsupported_contact_facts(files: dict[str, Any], config: dict[str, Any]) -> int:
+    brief_digits = re.sub(r"\D", "", json.dumps(config, ensure_ascii=False))
+    phone_re = re.compile(r"\+\d[\d\s().-]{7,}\d")
+    changed = 0
+
+    for path, content in list(files.items()):
+        if not path.endswith(".html") or not isinstance(content, str):
+            continue
+
+        def replace_phone(match: re.Match[str]) -> str:
+            nonlocal changed
+            digits = re.sub(r"\D", "", match.group(0))
+            if digits and digits in brief_digits:
+                return match.group(0)
+            changed += 1
+            return ""
+
+        cleaned = phone_re.sub(replace_phone, content)
+        if cleaned != content:
+            # Clean up empty tel links or punctuation left behind by a removed
+            # hallucinated phone number.
+            cleaned = re.sub(
+                r'<a([^>]*?)href=["\']tel:\s*["\']([^>]*)>\s*</a>',
+                "",
+                cleaned,
+                flags=re.I,
+            )
+            cleaned = re.sub(r"\s{2,}", " ", cleaned)
+            files[path] = cleaned
+    return changed
+
+
 def _severe(issues: list[dict[str, Any]]) -> bool:
     return any(item.get("severity") in {"critical", "high"} for item in issues)
 
@@ -312,6 +344,7 @@ async def _quality_cycle(
 ) -> tuple[dict[str, Any], list[dict[str, Any]], int, dict[str, Any]]:
     text_attempts = 0
     visual_attempts = 0
+    _strip_unsupported_contact_facts(files, config)
     audit1 = core.static_audit(files)
     audit2 = await core.ai_audit(files, config)
     text_issues = audit1["issues"] + audit2.get("issues", [])
@@ -326,6 +359,7 @@ async def _quality_cycle(
         _record_interim_quality(project_id, text_issues, "text_fixing", text_attempts)
         files = await core.fix_files(files, repairable, config)
         set_status(project_id, "auditing")
+        _strip_unsupported_contact_facts(files, config)
         audit1 = core.static_audit(files)
         audit2 = await core.ai_audit(files, config)
         text_issues = audit1["issues"] + audit2.get("issues", [])
@@ -345,6 +379,7 @@ async def _quality_cycle(
         _record_interim_quality(project_id, combined, "visual_fixing", visual_attempts)
         files = await core.fix_files(files, repairable, config)
         set_status(project_id, "auditing")
+        _strip_unsupported_contact_facts(files, config)
         audit1 = core.static_audit(files)
         audit2 = await core.ai_audit(files, config)
         text_issues = audit1["issues"] + audit2.get("issues", [])
