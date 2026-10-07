@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import re
+import secrets
 import sqlite3
 import subprocess
 import tempfile
@@ -18,7 +19,30 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr, Field
 
-APP_SECRET = os.getenv("APP_SECRET", "dev-change-me")
+def _persistent_app_secret() -> str:
+    configured = os.getenv("APP_SECRET", "").strip()
+    if configured and configured != "dev-change-me":
+        return configured
+
+    secret_path = Path(os.getenv("APP_SECRET_FILE", "api/data/app-secret.txt"))
+    secret_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        existing = secret_path.read_text(encoding="utf-8").strip()
+        if len(existing) >= 40:
+            return existing
+    except OSError:
+        pass
+
+    generated = secrets.token_urlsafe(64)
+    secret_path.write_text(generated, encoding="utf-8")
+    try:
+        os.chmod(secret_path, 0o600)
+    except OSError:
+        pass
+    return generated
+
+
+APP_SECRET = _persistent_app_secret()
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5-coder:7b")
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
