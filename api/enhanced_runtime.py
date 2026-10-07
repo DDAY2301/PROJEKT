@@ -51,6 +51,37 @@ def set_status(project_id: str, status: str) -> None:
         )
 
 
+def _cancel_requested(project_id: str) -> bool:
+    try:
+        with core.db() as con:
+            row = con.execute(
+                "SELECT cancel_requested FROM production_jobs WHERE project_id=?",
+                (project_id,),
+            ).fetchone()
+        return bool(row and int(row["cancel_requested"] or 0))
+    except Exception:
+        return False
+
+
+def _cancel_checkpoint(project_id: str, stage: str) -> bool:
+    if not _cancel_requested(project_id):
+        return False
+    payload = {
+        "cancelled": True,
+        "cancelled_stage": stage,
+        "issues": [],
+        "repository_ready": False,
+        "public_live": False,
+    }
+    with core.db() as con:
+        con.execute(
+            "UPDATE projects SET status='cancelled',last_audit_json=?,updated_at=? WHERE id=?",
+            (json.dumps(payload, ensure_ascii=False), core.now_iso(), project_id),
+        )
+    logger.info("Website build cancelled project=%s stage=%s", project_id, stage)
+    return True
+
+
 def repo_name_for(config: dict, project_id: str = "") -> str:
     base = re.sub(
         r"[^a-z0-9-]+",
@@ -407,6 +438,8 @@ async def generate_project_observable(project_id: str):
             config = json.loads(row["config_json"])
 
         audit = _read_audit(row)
+        if _cancel_checkpoint(project_id, "preparing"):
+            return
         bypass = _sandbox_payment_bypass(str(row["user_id"]))
         stripe_required = billing.package_is_configured(config.get("package", "")) and not bypass
 
@@ -428,14 +461,20 @@ async def generate_project_observable(project_id: str):
         uploaded_images = _inject_uploaded_image_metadata(project_id, config)
 
         phase = "structure"
+        if _cancel_checkpoint(project_id, "before_structure"):
+            return
         set_status(project_id, "designing")
         spec = await core.design_site(config)
 
         phase = "website build"
+        if _cancel_checkpoint(project_id, "before_build"):
+            return
         set_status(project_id, "building")
         files = await core.build_files(config, spec)
 
         phase = "quality and visual review"
+        if _cancel_checkpoint(project_id, "before_quality"):
+            return
         set_status(project_id, "auditing")
         files, issues, attempts, visual_report = await _quality_cycle(files, config, project_id, uploaded_images)
         final_originality_issues, originality_report = originality_v2._originality_issues(files, config)
@@ -446,6 +485,8 @@ async def generate_project_observable(project_id: str):
                 issues.append(item)
                 known.add(key)
 
+        if _cancel_checkpoint(project_id, "before_delivery"):
+            return
         _attach_uploaded_image_bytes(files, uploaded_images)
         _attach_delivery_manifest(
             files,
@@ -558,6 +599,8 @@ async def generate_project_observable(project_id: str):
 
         # Development mode and the dedicated sandbox QA account publish without
         # charging. Production users reach this point only after payment.
+        if _cancel_checkpoint(project_id, "before_publish"):
+            return
         with core.db() as con:
             fresh = con.execute("SELECT * FROM projects WHERE id=?", (project_id,)).fetchone()
         await _publish_existing_project(project_id, fresh, json.loads(audit_json))
