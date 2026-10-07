@@ -215,6 +215,27 @@ def _attach_uploaded_image_bytes(files: dict[str, Any], images: list[dict[str, A
                 logger.warning("Could not read uploaded image path=%s error=%s", stored_path, exc)
 
 
+def _apply_deterministic_overflow_guard(files: dict[str, Any]) -> bool:
+    path = "assets/site.css"
+    css = files.get(path)
+    if not isinstance(css, str):
+        return False
+    marker = "/* pv-overflow-guard */"
+    if marker in css:
+        return False
+    guard = """
+/* pv-overflow-guard */
+html,body{max-width:100%;overflow-x:hidden}
+img,video,svg,canvas,iframe{max-width:100%}
+.hero-grid>*,.intro-grid>*,.section-split>*,.section-split-reverse>*,
+.contact-grid>*,.story-grid>*,.footer-grid>*,.steps>*,.metrics>*{min-width:0}
+h1,h2,h3,.brand,.visual strong,.contact-box a{overflow-wrap:anywhere;word-break:normal}
+@media(max-width:980px){.hero-note{right:0;max-width:calc(100% - 12px)}}
+"""
+    files[path] = css.rstrip() + "\n" + guard
+    return True
+
+
 def _strip_unsupported_contact_facts(files: dict[str, Any], config: dict[str, Any]) -> int:
     brief_digits = re.sub(r"\D", "", json.dumps(config, ensure_ascii=False))
     phone_re = re.compile(r"\+\d[\d\s().-]{7,}\d")
@@ -371,6 +392,19 @@ async def _quality_cycle(
     combined = text_issues + visual_issues
 
     while _severe(visual_issues) and visual_attempts < VISUAL_REPAIR_ATTEMPTS:
+        visual_codes = {str(item.get("code") or "").upper() for item in visual_issues}
+        if "VISUAL_HORIZONTAL_OVERFLOW" in visual_codes and _apply_deterministic_overflow_guard(files):
+            visual_attempts += 1
+            set_status(project_id, "fixing")
+            _record_interim_quality(project_id, combined, "visual_fixing_deterministic", visual_attempts)
+            set_status(project_id, "visual_qa")
+            visual_report = await visual_qa.audit_files(files, project_id, config, uploaded_images)
+            visual_issues = list(visual_report.get("issues") or [])
+            combined = text_issues + visual_issues
+            if not _severe(visual_issues):
+                break
+            continue
+
         repairable = _model_repairable(combined)
         if not repairable:
             break
