@@ -488,6 +488,35 @@ jobs:
           asyncio.run(main())
           print('Self-healing worker pool checks passed')
           PY
+      - name: Validate fast production profile V2
+        run: |
+          python - <<'PY'
+          from api import visual_qa
+
+          paths=['index.html','about.html','contact.html','services.html']
+          assert [name for name,_ in visual_qa._viewports_for_path('index.html',paths)] == ['desktop','tablet','mobile']
+          assert [name for name,_ in visual_qa._viewports_for_path('about.html',paths)] == ['desktop','tablet','mobile']
+          assert [name for name,_ in visual_qa._viewports_for_path('contact.html',paths)] == ['desktop','mobile']
+          assert [name for name,_ in visual_qa._viewports_for_path('services.html',paths)] == ['desktop','mobile']
+
+          source=open('api/robust_generation.py',encoding='utf-8').read()
+          critic=open('api/design_critic.py',encoding='utf-8').read()
+          vision=open('api/vision_review.py',encoding='utf-8').read()
+          start=open('start-product.ps1',encoding='utf-8').read()
+          local=open('api/start-local.ps1',encoding='utf-8').read()
+
+          assert 'tier: str = "fast"' in source
+          assert 'attempts=1' in source
+          assert 'CUSTOMER={json.dumps(compact_brief' in source
+          assert 'tier="fast"' in critic
+          assert 'body_chars < 120' in critic
+          assert 'num_predict": 420' in vision
+          assert 'deterministic_qa_requires_repair_first' in vision
+          assert '$env:MODEL_CONCURRENCY = "2"' in start
+          assert '$env:MODEL_CONCURRENCY = "2"' in local
+          assert 'Dependencies: cached / unchanged' in local
+          print('Fast production profile V2 checks passed')
+          PY
       - name: Validate release quality gate
         env:
           APP_SECRET: ci-only-secret
@@ -698,6 +727,9 @@ jobs:
           grep -q 'workers_alive' tools/production_load_test.py
           grep -q 'ensure_worker_pool' api/production_queue.py
           grep -q 'worker_pool_healthy' api/preflight.py
+          grep -q 'MODEL_CONCURRENCY = "2"' start-product.ps1
+          grep -q 'requirements.sha256' api/start-local.ps1
+          grep -q 'visual-qa-v4-smart-coverage' api/visual_qa.py
           test -f dist/assets/dashboard-upgrades.js
           test -f api/visual_qa.py
           test -f api/vision_review.py
