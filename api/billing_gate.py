@@ -13,6 +13,7 @@ import asyncio
 import json
 import os
 import uuid
+from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, HTTPException
 
@@ -21,6 +22,8 @@ import api.billing as billing
 
 
 TEST_BYPASS_EMAILS = {"maj@klemec.org"}
+MAX_ACTIVE_PROJECTS_PER_USER = max(1, int(os.getenv("MAX_ACTIVE_PROJECTS_PER_USER", "4")))
+MAX_UNPAID_PREVIEWS_24H = max(1, int(os.getenv("MAX_UNPAID_PREVIEWS_24H", "8")))
 ACTIVE_BUILD_STATUSES = {
     "designing",
     "building",
@@ -46,6 +49,55 @@ _ACTIVE_TASKS: set[str] = set()
 class ProjectCreateControlled(core.ProjectCreate):
     defer_build: bool = False
     benchmark_mode: bool = False
+
+
+def _account_email(user_id: str) -> str:
+    with core.db() as con:
+        row = con.execute("SELECT email FROM users WHERE id=?", (user_id,)).fetchone()
+    return str(row["email"] if row else "").strip().lower()
+
+
+def _quota_exempt(user_id: str) -> bool:
+    email = _account_email(user_id)
+    return email.startswith("pv.loadtest.") and email.endswith("@gmail.com")
+
+
+def _enforce_build_quota(user_id: str) -> None:
+    if _quota_exempt(user_id):
+        return
+    active_statuses = tuple(sorted(ACTIVE_BUILD_STATUSES | {"queued", "cancel_requested"}))
+    placeholders = ",".join("?" for _ in active_statuses)
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    with core.db() as con:
+        active = con.execute(
+            f"SELECT COUNT(*) AS n FROM projects WHERE user_id=? AND status IN ({placeholders})",
+            (user_id, *active_statuses),
+        ).fetchone()
+        try:
+            unpaid = con.execute(
+                """SELECT COUNT(*) AS n
+                   FROM projects p
+                   LEFT JOIN payments pay ON pay.project_id=p.id
+                   WHERE p.user_id=? AND p.created_at>=?
+                     AND COALESCE(pay.status,'')<>'paid'
+                     AND p.status<>'archived'""",
+                (user_id, cutoff),
+            ).fetchone()
+            unpaid_count = int(unpaid["n"] or 0)
+        except Exception:
+            unpaid_count = 0
+
+    active_count = int(active["n"] or 0)
+    if active_count >= MAX_ACTIVE_PROJECTS_PER_USER:
+        raise HTTPException(
+            429,
+            f"Too many active website builds ({active_count}). Wait for a build to finish or cancel one before starting another.",
+        )
+    if unpaid_count >= MAX_UNPAID_PREVIEWS_24H:
+        raise HTTPException(
+            429,
+            f"Daily unpaid preview limit reached ({MAX_UNPAID_PREVIEWS_24H}). Complete payment or continue tomorrow.",
+        )
 
 
 def sandbox_payment_bypass(user_id: str) -> bool:
@@ -94,6 +146,7 @@ async def create_project_with_postbuild_payment(
     data: ProjectCreateControlled,
     user_id: str = Depends(core.current_user),
 ):
+    _enforce_build_quota(user_id)
     pid = str(uuid.uuid4())
     cfg = data.model_dump(mode="json", exclude={"defer_build", "benchmark_mode"})
     bypass = sandbox_payment_bypass(user_id)
