@@ -66,7 +66,9 @@
       const providers=[...new Set((models.backends||[]).map(x=>x.provider))];
       body.innerHTML=`
         <div class="agent-summary">
-          <div class="agent-metric"><span>Primary model</span><strong>${models.primary||caps.agent?.primary_model||'—'}</strong></div>
+          <div class="agent-metric"><span>Fast model</span><strong>${models.primary||caps.agent?.primary_model||'—'}</strong></div>
+          <div class="agent-metric"><span>Expert model</span><strong>${models.expert||caps.agent?.expert_model||'—'}</strong></div>
+          <div class="agent-metric"><span>Routing</span><strong>${models.routing||caps.agent?.model_routing||'adaptive'}</strong></div>
           <div class="agent-metric"><span>Model backend</span><strong>${providers.join(' + ')||models.mode||'—'}</strong></div>
           <div class="agent-metric"><span>Capabilities</span><strong>${enabled.length} aktivnih</strong></div>
           <div class="agent-metric"><span>Runtime tools</span><strong>${available.length}/${Object.keys(runtime).length}</strong></div>
