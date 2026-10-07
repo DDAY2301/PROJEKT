@@ -321,6 +321,7 @@ def _visual_summary(report: dict[str, Any]) -> dict[str, Any]:
         "passed": bool(report.get("passed")),
         "score": report.get("score"),
         "deterministic_score": report.get("deterministic_score", report.get("score")),
+        "browser_advisory_score": report.get("advisory_score", report.get("browser_advisory_score")),
         "aesthetic_score": report.get("aesthetic_score"),
         "aesthetic_penalty": report.get("aesthetic_penalty"),
         "pages_checked": int(report.get("pages_checked") or 0),
