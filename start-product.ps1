@@ -154,7 +154,20 @@ if ($health -and $health.ok) {
   Write-Host "Service: already ONLINE" -ForegroundColor Green
 } else {
   $apiScript = Join-Path $repoRoot "api\start-local.ps1"
-  Start-Process powershell -ArgumentList @('-NoExit','-ExecutionPolicy','Bypass','-File',$apiScript,'-Model',$Model)
+
+  $parseTokens = $null
+  $parseErrors = $null
+  [void][System.Management.Automation.Language.Parser]::ParseFile(
+    $apiScript,
+    [ref]$parseTokens,
+    [ref]$parseErrors
+  )
+  if ($parseErrors -and $parseErrors.Count -gt 0) {
+    $details = ($parseErrors | ForEach-Object { "line $($_.Extent.StartLineNumber): $($_.Message)" }) -join "; "
+    throw "Local API startup script has a PowerShell syntax error: $details"
+  }
+
+  Start-Process powershell -ArgumentList @('-NoExit','-NoProfile','-ExecutionPolicy','Bypass','-File',$apiScript,'-Model',$Model)
   $health = Wait-Url "http://127.0.0.1:$Port/health" 90
   if (-not $health -or -not $health.ok) { throw "Website service did not become healthy on port $Port." }
   if (-not $health.github_configured) { throw "Service started, but GitHub publishing is not configured." }
