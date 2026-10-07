@@ -512,8 +512,8 @@ jobs:
           assert 'body_chars < 120' in critic
           assert 'num_predict": 420' in vision
           assert 'deterministic_qa_requires_repair_first' in vision
-          assert '$env:MODEL_CONCURRENCY = "2"' in start
-          assert '$env:MODEL_CONCURRENCY = "2"' in local
+          assert '$autoModelConcurrency = if ($systemRamGB -ge 24) { "2" } else { "1" }' in start
+          assert '$autoModelConcurrency = if ($systemRamGB -ge 24) { "2" } else { "1" }' in local
           assert 'Dependencies: cached / unchanged' in local
           print('Fast production profile V2 checks passed')
           PY
@@ -542,6 +542,44 @@ jobs:
             }
           }
           Write-Host "PowerShell startup syntax checks passed"
+      - name: Validate first-pass success optimizations
+        run: |
+          python - <<'PY'
+          from api import autonomous_supervisor
+          from api import enhanced_runtime
+          from api import robust_generation
+
+          cfg={'name':'Test','custom_requirements':'No phone supplied','pages':[{'title':'Home','slug':'index'}]}
+          sections=[{'type':'content','heading':'Call us','body':'Reach us at +386 40 123 456 today.'}]
+          clean=robust_generation._sanitize_planned_sections(sections,cfg)
+          assert '+386' not in clean[0]['body']
+
+          files={'index.html':'<html><body><p>Call +386 40 123 456</p></body></html>','assets/site.css':'body{}'}
+          changed=enhanced_runtime._strip_unsupported_contact_facts(files,cfg)
+          assert changed == 1
+          assert '+386' not in files['index.html']
+
+          css={'assets/site.css':'body{}'}
+          assert enhanced_runtime._apply_deterministic_overflow_guard(css) is True
+          assert 'pv-overflow-guard' in css['assets/site.css']
+          assert enhanced_runtime._apply_deterministic_overflow_guard(css) is False
+
+          decision=autonomous_supervisor.decide({
+              'status':'needs_review',
+              'benchmark_mode':True,
+              'recovery_count':0,
+              'status_age_seconds':0,
+              'issues':{'severe':2},
+              'repository_ready':False,
+              'public_live':False,
+              'payment_blocked':False,
+              'queue_state':'done',
+              'imported_site':False,
+          }, {'disk_free_gb':100,'model_online':True})
+          assert decision.choice == 'complete', decision
+          assert decision.autonomous is False
+          print('First-pass success optimization checks passed')
+          PY
       - name: Validate release quality gate
         env:
           APP_SECRET: ci-only-secret
@@ -752,9 +790,13 @@ jobs:
           grep -q 'workers_alive' tools/production_load_test.py
           grep -q 'ensure_worker_pool' api/production_queue.py
           grep -q 'worker_pool_healthy' api/preflight.py
-          grep -q 'MODEL_CONCURRENCY = "2"' start-product.ps1
+          grep -q 'autoModelConcurrency' start-product.ps1
           grep -q 'requirements.sha256' api/start-local.ps1
           grep -q 'visual-qa-v4-smart-coverage' api/visual_qa.py
+          grep -q 'benchmark_terminal_' api/autonomous_supervisor.py
+          grep -q '_strip_unsupported_contact_facts' api/enhanced_runtime.py
+          grep -q '_apply_deterministic_overflow_guard' api/enhanced_runtime.py
+          grep -q 'autoModelConcurrency' start-product.ps1
           grep -q 'PowerShell syntax error' start-product.ps1
           test "$(grep -c '^Write-Host "\[6/9\] Preparing Chromium visual QA engine' api/start-local.ps1)" -eq 1
           test -f dist/assets/dashboard-upgrades.js
