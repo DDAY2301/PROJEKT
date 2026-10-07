@@ -8,6 +8,7 @@ without rebuilding the website.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -50,12 +51,16 @@ def set_status(project_id: str, status: str) -> None:
         )
 
 
-def repo_name_for(config: dict) -> str:
-    return re.sub(
+def repo_name_for(config: dict, project_id: str = "") -> str:
+    base = re.sub(
         r"[^a-z0-9-]+",
         "-",
-        (core.GITHUB_OUTPUT_PREFIX + config["name"]).lower(),
-    ).strip("-")[:90]
+        (core.GITHUB_OUTPUT_PREFIX + str(config.get("name") or "website")).lower(),
+    ).strip("-")
+    suffix = re.sub(r"[^a-f0-9]", "", str(project_id).lower())[:8]
+    if suffix:
+        base = f"{base[:80].rstrip('-')}-{suffix}"
+    return base[:90]
 
 
 def _sandbox_payment_bypass(user_id: str) -> bool:
@@ -97,6 +102,62 @@ def _inject_uploaded_image_metadata(project_id: str, config: dict) -> list[dict[
         })
     config["uploaded_images"] = public_images
     return images
+
+
+def _delivery_manifest(
+    files: dict[str, Any],
+    *,
+    project_id: str,
+    config: dict[str, Any],
+    visual_report: dict[str, Any],
+    originality: dict[str, Any],
+) -> dict[str, Any]:
+    manifest_files = []
+    for path, content in sorted(files.items()):
+        raw = content if isinstance(content, bytes) else str(content).encode("utf-8")
+        manifest_files.append({
+            "path": path,
+            "bytes": len(raw),
+            "sha256": hashlib.sha256(raw).hexdigest(),
+        })
+    design = {}
+    try:
+        design = json.loads(str(files.get("assets/design-manifest.json") or "{}"))
+    except Exception:
+        design = {}
+    return {
+        "project_id": project_id,
+        "name": str(config.get("name") or ""),
+        "organization": str(config.get("organization") or ""),
+        "generated_at": core.now_iso(),
+        "generator": "Project Visibility",
+        "quality": {
+            "visual_score": visual_report.get("score"),
+            "visual_passed": visual_report.get("passed"),
+            "originality": originality,
+        },
+        "design_system": design,
+        "file_count": len(manifest_files),
+        "files": manifest_files,
+    }
+
+
+def _attach_delivery_manifest(
+    files: dict[str, Any],
+    *,
+    project_id: str,
+    config: dict[str, Any],
+    visual_report: dict[str, Any],
+    originality: dict[str, Any],
+) -> None:
+    manifest = _delivery_manifest(
+        files,
+        project_id=project_id,
+        config=config,
+        visual_report=visual_report,
+        originality=originality,
+    )
+    files["PROJECT-VISIBILITY-MANIFEST.json"] = json.dumps(manifest, ensure_ascii=False, indent=2)
 
 
 def _attach_uploaded_image_bytes(files: dict[str, Any], images: list[dict[str, Any]]) -> None:
@@ -386,7 +447,62 @@ async def generate_project_observable(project_id: str):
                 known.add(key)
 
         _attach_uploaded_image_bytes(files, uploaded_images)
-        repo_name = repo_name_for(config)
+        _attach_delivery_manifest(
+            files,
+            project_id=project_id,
+            config=config,
+            visual_report=visual_report,
+            originality=originality_report,
+        )
+
+        benchmark_mode = bool(config.get("_benchmark_mode"))
+        if benchmark_mode:
+            passed = _quality_gate_passed(issues, visual_report)
+            benchmark_audit = _audit_payload(
+                issues,
+                visual_report,
+                repository_ready=False,
+                public_url=None,
+                public_live=False,
+                uploaded_images=len(uploaded_images),
+                extra={
+                    "benchmark_mode": True,
+                    "quality_gate_passed": passed,
+                    "payment_required": False,
+                    "payment_stage": "benchmark",
+                    "preview_ready": False,
+                    "originality": originality_report,
+                    "delivery_manifest": {
+                        "file_count": len(files),
+                        "sha256": hashlib.sha256(
+                            json.dumps(
+                                _delivery_manifest(
+                                    files,
+                                    project_id=project_id,
+                                    config=config,
+                                    visual_report=visual_report,
+                                    originality=originality_report,
+                                ),
+                                sort_keys=True,
+                            ).encode("utf-8")
+                        ).hexdigest(),
+                    },
+                },
+            )
+            with core.db() as con:
+                con.execute(
+                    "UPDATE projects SET status=?,repo_name=NULL,last_audit_json=?,auto_fix_attempts=?,updated_at=? WHERE id=?",
+                    (
+                        "ready" if passed else "needs_review",
+                        benchmark_audit,
+                        attempts,
+                        core.now_iso(),
+                        project_id,
+                    ),
+                )
+            return
+
+        repo_name = repo_name_for(config, project_id)
 
         # Store the finished source in GitHub first, but do NOT enable Pages yet.
         phase = "repository delivery"
