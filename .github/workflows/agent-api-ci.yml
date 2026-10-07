@@ -580,6 +580,26 @@ jobs:
           assert decision.autonomous is False
           print('First-pass success optimization checks passed')
           PY
+      - name: Validate bounded aesthetic release scoring
+        run: |
+          python - <<'PY'
+          from api import vision_review
+
+          # Advisory vision may influence but must not dominate a clean browser score.
+          assert vision_review._bounded_release_score(100, 90) == (100, 0)
+          assert vision_review._bounded_release_score(100, 68) == (95, 5)
+          assert vision_review._bounded_release_score(100, 49) == (92, 8)
+          assert vision_review._bounded_release_score(95, 49) == (87, 8)
+          assert vision_review._bounded_release_score(88, 100) == (88, 0)
+
+          source=open('api/vision_review.py',encoding='utf-8').read()
+          loadtest=open('tools/production_load_test.py',encoding='utf-8').read()
+          assert 'deterministic_score' in source
+          assert 'aesthetic_score' in source
+          assert 'aesthetic_penalty' in source
+          assert 'aesthetic_avg' in loadtest
+          print('Bounded aesthetic release scoring checks passed')
+          PY
       - name: Validate release quality gate
         env:
           APP_SECRET: ci-only-secret
@@ -793,6 +813,8 @@ jobs:
           grep -q 'autoModelConcurrency' start-product.ps1
           grep -q 'requirements.sha256' api/start-local.ps1
           grep -q 'visual-qa-v4-smart-coverage' api/visual_qa.py
+          grep -q 'visual-qa-v4-bounded-aesthetic' api/vision_review.py
+          grep -q 'aesthetic_penalty' tools/production_load_test.py
           grep -q 'benchmark_terminal_' api/autonomous_supervisor.py
           grep -q '_strip_unsupported_contact_facts' api/enhanced_runtime.py
           grep -q '_apply_deterministic_overflow_guard' api/enhanced_runtime.py
