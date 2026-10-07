@@ -40,6 +40,7 @@ class Candidate:
     provider: str
     model: str
     base_url: str
+    tier: str = "fast"
 
 
 def _dedupe(values: list[str]) -> list[str]:
@@ -143,12 +144,18 @@ def _candidates(
     mode = _mode()
     out: list[Candidate] = []
     if mode in {"auto", "ollama"}:
+        expert_set = set(_expert_models())
         out.extend(
-            Candidate("ollama", model, core.OLLAMA_BASE_URL.rstrip("/"))
+            Candidate(
+                "ollama",
+                model,
+                core.OLLAMA_BASE_URL.rstrip("/"),
+                "expert" if model in expert_set else "fast",
+            )
             for model in _ollama_models(tier, prompt=prompt, system=system, num_predict=num_predict)
         )
     if mode in {"auto", "openai"} and _openai_base():
-        out.extend(Candidate("openai", model, _openai_base()) for model in _openai_models())
+        out.extend(Candidate("openai", model, _openai_base(), "expert" if tier == "expert" else "fast") for model in _openai_models())
     return out
 
 
@@ -221,6 +228,11 @@ async def _ollama_generate(
         "prompt": prompt,
         "system": system,
         "stream": False,
+        "keep_alive": (
+            os.getenv("OLLAMA_EXPERT_KEEP_ALIVE", "45s")
+            if candidate.tier == "expert"
+            else os.getenv("OLLAMA_FAST_KEEP_ALIVE", "5m")
+        ),
         "options": {
             "temperature": temperature,
             "num_ctx": num_ctx,
@@ -396,6 +408,7 @@ async def model_summary(user_id: str = Depends(core.current_user)):
                 "provider": c.provider,
                 "model": c.model,
                 "base_url": c.base_url,
+                "tier": c.tier,
             }
             for c in candidates
         ],
