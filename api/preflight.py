@@ -106,6 +106,13 @@ async def production_preflight(user_id: str = Depends(core.current_user)):
     queue = production_queue.queue_snapshot()
     queued = int((queue.get("states") or {}).get("queued", 0))
     running = int((queue.get("states") or {}).get("running", 0))
+    workers_alive = int(queue.get("workers_alive") or 0)
+    if workers_alive < production_queue.WORKER_COUNT:
+        blockers.append(
+            f"Production worker pool is unhealthy: {workers_alive}/{production_queue.WORKER_COUNT} workers alive."
+        )
+    if queued > 0 and workers_alive == 0:
+        blockers.append("Production queue has waiting jobs but no live workers.")
     if queued > 50:
         warnings.append(f"Production queue is heavily loaded: {queued} queued jobs.")
 
@@ -126,6 +133,8 @@ async def production_preflight(user_id: str = Depends(core.current_user)):
             "security": {"strong_app_secret": secret_strong},
             "queue": {
                 "workers": production_queue.WORKER_COUNT,
+                "workers_alive": workers_alive,
+                "worker_pool_healthy": bool(queue.get("worker_pool_healthy")),
                 "queued": queued,
                 "running": running,
             },
