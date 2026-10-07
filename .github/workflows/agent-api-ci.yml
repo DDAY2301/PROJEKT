@@ -454,6 +454,16 @@ jobs:
           assert Path(core.DB_PATH).parent.exists()
           print('Persistent JWT secret and production preflight contract checks passed')
           PY
+      - name: Validate production abuse guard
+        run: |
+          python - <<'PY'
+          from api import billing_gate
+
+          assert billing_gate.MAX_ACTIVE_PROJECTS_PER_USER >= 1
+          assert billing_gate.MAX_UNPAID_PREVIEWS_24H >= 1
+          assert billing_gate._quota_exempt('missing-user') is False
+          print('Build abuse guard configuration checks passed')
+          PY
       - name: Validate release quality gate
         env:
           APP_SECRET: ci-only-secret
@@ -683,6 +693,9 @@ jobs:
           test -f api/production_queue.py
           test -f api/production_lifecycle.py
           test -f api/preflight.py
+          grep -q 'MAX_ACTIVE_PROJECTS_PER_USER' api/billing_gate.py
+          grep -q 'benchmark_repo_isolation' api/capabilities.py
+          grep -q 'atomic_exact_tree_delivery' api/capabilities.py
           grep -q 'Production readiness' dist/assets/agent-console-v1.js
           grep -q 'app-secret.txt' .gitignore
           test -f api/quality_originality_v2.py
