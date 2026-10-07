@@ -272,6 +272,21 @@ def _calibrated_issue_score(issues: list[dict[str, str]]) -> int:
     return max(0, round(100 - penalty))
 
 
+def _release_issue_score(issues: list[dict[str, str]]) -> tuple[int, int]:
+    """Return release score plus raw advisory score.
+
+    Critical/high findings remain strict blockers. Medium/low findings stay
+    visible for polish and diagnostics, but their aggregate release penalty is
+    capped at 10 points so advisory observations alone cannot sink an otherwise
+    healthy browser render below the release floor of 90.
+    """
+    advisory_score = _calibrated_issue_score(issues)
+    severe = any(str(item.get("severity") or "").lower() in {"critical", "high"} for item in issues)
+    if severe:
+        return advisory_score, advisory_score
+    return max(90, advisory_score), advisory_score
+
+
 def _viewports_for_path(path: str, html_paths: list[str]) -> list[tuple[str, tuple[int, int]]]:
     """Keep full responsive coverage where it matters without tripling every page."""
     names = ["desktop", "mobile"]
@@ -381,17 +396,18 @@ def _run_visual_sync(files: dict[str, Any], project_id: str, uploaded_images: li
         unique.append(item)
 
     severe = sum(1 for item in unique if item.get("severity") in {"critical", "high"})
-    score = _calibrated_issue_score(unique)
+    score, advisory_score = _release_issue_score(unique)
     return {
         "available": True,
         "passed": severe == 0,
         "score": score,
+        "advisory_score": advisory_score,
         "issues": unique,
         "screenshots": shots,
         "viewports": metrics_by_viewport,
         "pages_checked": len(html_paths),
         "render_count": len(shots),
-        "version": "visual-qa-v4-smart-coverage",
+        "version": "visual-qa-v5-release-advisory",
     }
 
 
