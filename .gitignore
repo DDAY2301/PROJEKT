@@ -17,3 +17,5 @@ api/data/.resend-secret
 api/data/.resend-from
 
 load-test-results/
+
+api/data/requirements.sha256
