@@ -14,6 +14,7 @@ from typing import Any
 
 import api.main as core
 import api.model_router as model_router
+import api.robust_generation as robust_generation
 
 _base_design_site = core.design_site
 ENABLED = os.getenv("DESIGN_CRITIC_ENABLED", "1").strip().lower() not in {"0", "false", "no", "off"}
@@ -130,7 +131,7 @@ Rules:
             candidate = revised[index] if isinstance(revised[index], dict) else {}
             sections = _valid_sections(candidate.get("sections"))
             if sections:
-                original["sections"] = sections
+                original["sections"] = robust_generation._sanitize_planned_sections(sections, config)
             next_pages.append(original)
 
         return {
