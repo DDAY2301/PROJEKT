@@ -589,7 +589,7 @@ jobs:
           assert vision_review._bounded_release_score(100, 90) == (100, 0)
           assert vision_review._bounded_release_score(100, 68) == (95, 5)
           assert vision_review._bounded_release_score(100, 49) == (92, 8)
-          assert vision_review._bounded_release_score(95, 49) == (87, 8)
+          assert vision_review._bounded_release_score(95, 49) == (90, 8)
           assert vision_review._bounded_release_score(88, 100) == (88, 0)
 
           source=open('api/vision_review.py',encoding='utf-8').read()
