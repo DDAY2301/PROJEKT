@@ -59,7 +59,7 @@
     const body=$('pvAgentBody');if(!body)return;
     body.innerHTML='<div class="agent-error">Preverjam lokalni agent …</div>';
     try{
-      const [caps,models,supervisor]=await Promise.all([get('/agent/capabilities'),get('/agent/models'),get('/agent/supervisor')]);
+      const [caps,models,supervisor,preflight]=await Promise.all([get('/agent/capabilities'),get('/agent/models'),get('/agent/supervisor'),get('/agent/preflight')]);
       const runtime=caps.runtime||{};const features=caps.features||{};
       const available=Object.entries(runtime).filter(([,v])=>runtimeState(v).active);
       const enabled=Object.entries(features).filter(([,v])=>Boolean(v));
@@ -74,10 +74,13 @@
           <div class="agent-metric"><span>Runtime tools</span><strong>${available.length}/${Object.keys(runtime).length}</strong></div>
           <div class="agent-metric"><span>Supervisor</span><strong>${supervisor.enabled?'ON':'OFF'} · ${supervisor.active_recoveries?.length||0} recovery</strong></div>
           <div class="agent-metric"><span>Recovery policy</span><strong>${supervisor.max_recoveries||'—'} max · ${supervisor.interval_seconds||'—'}s</strong></div>
+          <div class="agent-metric"><span>Production readiness</span><strong>${preflight.ready?'READY':'BLOCKED'}</strong></div>
+          <div class="agent-metric"><span>Queue</span><strong>${preflight.checks?.queue?.running??0} running · ${preflight.checks?.queue?.queued??0} queued</strong></div>
         </div>
         <div class="agent-runtime">${Object.entries(runtime).map(([name,val])=>{const state=runtimeState(val);return `<span class="agent-pill ${state.active?'ok':''}">${name} · ${state.label}</span>`}).join('')}</div>
         <div class="agent-features">${enabled.map(([name])=>name.replaceAll('_',' ')).join(' · ')}</div>
-        <div class="agent-features">supervisor: ${Object.entries(supervisor.decision_counts||{}).map(([k,v])=>`${k} ${v}`).join(' · ')||'no decisions yet'} · model ${supervisor.runtime?.model_online?'online':'offline'} · disk ${supervisor.runtime?.disk_free_gb??'—'} GB</div>`;
+        <div class="agent-features">supervisor: ${Object.entries(supervisor.decision_counts||{}).map(([k,v])=>`${k} ${v}`).join(' · ')||'no decisions yet'} · model ${supervisor.runtime?.model_online?'online':'offline'} · disk ${supervisor.runtime?.disk_free_gb??'—'} GB</div>
+        <div class="agent-features">${preflight.blockers?.length ? 'BLOCKERS: '+preflight.blockers.join(' · ') : 'preflight OK'}${preflight.warnings?.length ? ' · warnings: '+preflight.warnings.join(' · ') : ''}</div>`;
     }catch(err){body.innerHTML=`<div class="agent-error">${String(err.message||err)}</div>`;}
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install);else install();
