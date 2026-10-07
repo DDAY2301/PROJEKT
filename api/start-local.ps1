@@ -83,6 +83,7 @@ $expertModels = @(
   $models |
     Where-Object {
       $_ -match '(?i)KAT-Coder-V2\.5-Dev' -or
+      $_ -match '(?i)Qwen_Qwen3\.6-35B-A3B' -or
       $_ -match '(?i)qwen3\.6:35b-a3b-coding'
     } |
     Select-Object -Unique
