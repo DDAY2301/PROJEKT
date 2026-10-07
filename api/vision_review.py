@@ -250,7 +250,10 @@ def _bounded_release_score(deterministic: int, vision_score: int) -> tuple[int, 
     vision_score = max(0, min(100, int(vision_score)))
     gap = max(0, 90 - vision_score)
     penalty = min(8, (gap + 4) // 5)
-    return max(0, deterministic - penalty), penalty
+    adjusted = max(0, deterministic - penalty)
+    if deterministic >= 90:
+        adjusted = max(90, adjusted)
+    return adjusted, penalty
 
 
 async def audit_files_with_vision(
