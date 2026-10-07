@@ -600,6 +600,31 @@ jobs:
           assert 'aesthetic_avg' in loadtest
           print('Bounded aesthetic release scoring checks passed')
           PY
+      - name: Validate browser advisory release floor
+        run: |
+          python - <<'PY'
+          from api.visual_qa import _release_issue_score
+
+          mediums = [
+              {'severity':'medium','code':'VISUAL_LOW_CONTRAST','file':f'p{i}.html','viewport':'mobile'}
+              for i in range(8)
+          ]
+          release, advisory = _release_issue_score(mediums)
+          assert release == 90, (release, advisory)
+          assert advisory < 90, advisory
+
+          severe = mediums + [
+              {'severity':'high','code':'VISUAL_HORIZONTAL_OVERFLOW','file':'index.html','viewport':'mobile'}
+          ]
+          release2, advisory2 = _release_issue_score(severe)
+          assert release2 == advisory2
+          assert release2 < 90
+
+          source=open('api/enhanced_runtime.py',encoding='utf-8').read()
+          assert 'vision_skipped_reason' in source
+          assert 'vision_error' in source
+          print('Browser advisory release-floor checks passed')
+          PY
       - name: Validate release quality gate
         env:
           APP_SECRET: ci-only-secret
@@ -812,7 +837,7 @@ jobs:
           grep -q 'worker_pool_healthy' api/preflight.py
           grep -q 'autoModelConcurrency' start-product.ps1
           grep -q 'requirements.sha256' api/start-local.ps1
-          grep -q 'visual-qa-v4-smart-coverage' api/visual_qa.py
+          grep -q 'visual-qa-v5-release-advisory' api/visual_qa.py
           grep -q 'visual-qa-v4-bounded-aesthetic' api/vision_review.py
           grep -q 'aesthetic_penalty' tools/production_load_test.py
           grep -q 'benchmark_terminal_' api/autonomous_supervisor.py
