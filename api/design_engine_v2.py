@@ -200,7 +200,8 @@ def _motif_css(motif: str, composition: str) -> str:
 body{{font-family:var(--font)}}.hero-copy h1,.section-head h2{{font-family:var(--display);letter-spacing:var(--display-tracking)}}
 {profile['css']}
 {_composition_css(composition)}
-@media(max-width:760px){{.composition-rail .hero-copy,.composition-rail .hero-art{{order:initial}}.composition-centered .hero-grid{{text-align:left}}.composition-centered .hero-actions{{justify-content:flex-start}}}}
+@media(max-width:980px){{.hero-grid{{grid-template-columns:1fr}}.composition-rail .hero-grid{{grid-template-columns:1fr}}.composition-rail .hero-copy,.composition-rail .hero-art{{order:initial}}}}
+@media(max-width:760px){{.composition-centered .hero-grid{{text-align:left}}.composition-centered .hero-actions{{justify-content:flex-start}}}}
 """
 
 
