@@ -127,7 +127,12 @@ def _metric_script() -> str:
   const background = el => {
     let cur = el;
     while (cur) {
-      const bg = getComputedStyle(cur).backgroundColor;
+      const style = getComputedStyle(cur);
+      // A simple RGB contrast ratio is not valid over gradients/images. In
+      // those cases skip this deterministic check instead of comparing text to
+      // an unrelated ancestor/body colour and producing false 1.x ratios.
+      if (style.backgroundImage && style.backgroundImage !== 'none') return null;
+      const bg = style.backgroundColor;
       if (bg && !/rgba\([^)]*,\s*0(?:\.0+)?\)/.test(bg) && bg !== 'transparent') return bg;
       cur = cur.parentElement;
     }
