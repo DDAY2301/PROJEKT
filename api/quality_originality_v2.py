@@ -225,16 +225,20 @@ def _clean_visible(value: str) -> str:
 
 
 def _copy_tokens(value: str) -> set[str]:
-    words = {
-        token
-        for token in re.findall(r"[a-z0-9čšžćđáéíóúäöü]{3,}", value.lower(), re.UNICODE)
-        if token not in {
-            "the", "and", "for", "with", "this", "that", "from", "into", "your",
-            "ter", "ali", "tudi", "smo", "kot", "pri", "naše", "nasi", "naš",
-            "stran", "strani", "projekt", "projekta",
-        }
+    stop = {
+        "the", "and", "for", "with", "this", "that", "from", "into", "your",
+        "ter", "ali", "tudi", "smo", "kot", "pri", "naše", "nasi", "naš",
+        "stran", "strani", "projekt", "projekta",
     }
-    return words
+    out: set[str] = set()
+    for token in re.findall(r"[a-z0-9čšžćđáéíóúäöü]{3,}", value.lower(), re.UNICODE):
+        if token in stop:
+            continue
+        # Long content words are reduced to a stable lexical stem. This catches
+        # ordinary inflection/paraphrase changes such as skupina/skupinam or
+        # uporabljati/uporabljajo without needing a language-specific NLP model.
+        out.add(token[:6] if len(token) >= 8 else token)
+    return out
 
 
 def _copy_similarity(a: str, b: str) -> float:
