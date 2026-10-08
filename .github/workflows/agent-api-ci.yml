@@ -924,6 +924,8 @@ jobs:
               assert len(files) >= 4, config['name']
           print('Ten-brief cross-page editorial and document-shell regression passed')
           PY
+      - name: Regression - shared model-planned hero copy
+        run: python tools/editorial_smoke.py
       - name: Regression - incomplete model repair must not replace valid HTML
         env:
           APP_SECRET: ci-only-secret
