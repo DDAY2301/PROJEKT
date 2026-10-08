@@ -261,6 +261,18 @@ def _context_text_after(context: str, marker: str, limit: int = 700) -> str:
     return re.sub(r"\s+", " ", " ".join(chunks)).strip()[:limit]
 
 
+def _brief_is_sl(config: dict[str, Any]) -> bool:
+    language = _fold_text(config.get("language"))
+    if language:
+        if language.startswith("sl") or "sloven" in language:
+            return True
+        if language.startswith("en") or "english" in language or "angles" in language:
+            return False
+    titles = " ".join(str(p.get("title") or "") for p in _configured_pages(config))
+    folded = _fold_text(titles)
+    return any(token in folded for token in ("domov", "o nas", "kontakt", "programi", "pristop", "galerija"))
+
+
 _GENERIC_SECTION_HEADINGS = {
     "prednosti", "znacilnosti", "nacin dela", "overview", "details", "benefits",
     "learn more", "our services", "nase storitve", "nasi programi", "galerija",
@@ -275,6 +287,11 @@ def _grounded_sections(page: dict[str, str], context: str, config: dict[str, Any
     purpose = str(page.get("purpose") or "").strip()
     context = str(context or "").strip()
     out: list[dict[str, Any]] = []
+    sl = _brief_is_sl(config)
+    site_name = str(config.get("organization") or config.get("name") or title).strip()
+
+    def tr(sl_text: str, en_text: str) -> str:
+        return sl_text if sl else en_text
 
     def add(kind: str, heading: str, body: str) -> None:
         heading = re.sub(r"\s+", " ", heading).strip()
@@ -285,62 +302,62 @@ def _grounded_sections(page: dict[str, str], context: str, config: dict[str, Any
     if "program" in slug:
         items = _context_items(context, "Programi")
         if items:
-            add("program-list", "Programi na terenu", " • ".join(items[:4]))
+            add("program-list", tr("Programi na terenu", "Programmes in the field"), " • ".join(items[:4]))
         audience = str(config.get("audience") or "")
         if audience:
-            add("audience", "Komu so programi namenjeni", audience)
-        add("decision", "Izberi raven, ki ti ustreza", purpose or "Program izberi glede na izkušnje, skupino in cilj.")
+            add("audience", tr("Komu so programi namenjeni", "Who the programmes are for"), audience)
+        add("decision", tr("Izberi raven, ki ti ustreza", "Choose the right level"), purpose or tr("Program izberi glede na izkušnje, skupino in cilj.", "Choose according to experience, group and goal."))
 
     elif "galer" in slug:
         motifs = _context_items(context, "Predlagani motivi")
         if motifs:
-            add("gallery", "Teren, delo in detajli", " • ".join(motifs[:8]))
+            add("gallery", tr("Teren, delo in detajli", "Fieldwork and details"), " • ".join(motifs[:8]))
         direction = str(config.get("image_direction") or "")
         if direction:
-            add("visual-direction", "Vizualni občutek", direction)
-        add("gallery-note", "Brez generičnih podob", "Ko ni dejanskih fotografij, uporabimo oblikovane vizualne placeholderje in ne izmišljamo dogodkov ali oseb.")
+            add("visual-direction", tr("Vizualni občutek", "Visual direction"), direction)
+        add("gallery-note", tr("Brez generičnih podob", "No generic imagery"), tr("Ko ni dejanskih fotografij, uporabimo oblikovane vizualne placeholderje in ne izmišljamo dogodkov ali oseb.", "When real photographs are unavailable, use designed visual placeholders without inventing events or people."))
 
     elif any(token in slug for token in ("kontakt", "contact", "stik")):
         email = str(config.get("contact_email") or "")
         fields = _context_items(context, "Kontaktni obrazec naj vsebuje")
         if email:
-            add("contact", "Piši nam", f"Za vprašanja in povpraševanja: {email}.")
+            add("contact", tr("Piši nam", "Write to us"), (f"Za vprašanja in povpraševanja: {email}." if sl else f"For questions and enquiries: {email}."))
         if fields:
-            add("form-fields", "Kaj potrebujemo za dober odgovor", " • ".join(fields[:6]))
-        add("next-step", "Povej nam, kaj želiš organizirati", purpose or "Pošlji osnovne informacije in odgovorili bomo z naslednjim korakom.")
+            add("form-fields", tr("Kaj potrebujemo za dober odgovor", "What helps us respond"), " • ".join(fields[:6]))
+        add("next-step", tr("Povej nam, kaj želiš organizirati", "Tell us what you want to organise"), purpose or tr("Pošlji osnovne informacije in odgovorili bomo z naslednjim korakom.", "Send the essentials and we will respond with the next step."))
 
     elif slug in {"o-nas", "onas", "about", "o nas"} or "nas" in slug:
         text = _context_text_after(context, "Tekst", 900)
         if text:
-            add("story", "Alpine Field Lab", text)
-        add("principles", "Kaj je v središču našega dela", purpose or str(config.get("goal") or ""))
-        add("trust", "Brez izmišljenih referenc", "Predstavljamo samo preverljive informacije iz briefa, brez izmišljenih certifikatov, nagrad ali partnerjev.")
+            add("story", site_name, text)
+        add("principles", tr("Kaj je v središču našega dela", "What guides the work"), purpose or str(config.get("goal") or ""))
+        add("trust", tr("Samo preverljive informacije", "Only verifiable information"), tr("Predstavljamo samo preverljive informacije iz briefa, brez izmišljenih certifikatov, nagrad ali partnerjev.", "We present only verifiable information from the brief, without invented certificates, awards or partners."))
 
     elif "pristop" in slug or "approach" in slug:
         messages = _context_items(context, "Ključna sporočila")
         if messages:
-            add("principles", "Kako delamo na terenu", " • ".join(messages[:5]))
+            add("principles", tr("Kako delamo na terenu", "How we work in the field"), " • ".join(messages[:5]))
         structure = _context_text_after(context, "Predlagana struktura", 500)
         if structure:
-            add("process", "Od opazovanja do samostojne uporabe", structure)
-        add("outcome", "Cilj je dobra presoja", purpose or "Praksa, razumevanje in ponavljanje gradijo samozavest.")
+            add("process", tr("Od opazovanja do samostojne uporabe", "From observation to independent use"), structure)
+        add("outcome", tr("Cilj je dobra presoja", "The outcome is sound judgement"), purpose or tr("Praksa, razumevanje in ponavljanje gradijo samozavest.", "Practice, understanding and repetition build confidence."))
 
     else:
         # Home and unknown page types: use purpose + unique brief facts.
         if purpose:
-            add("intro", f"Zakaj {title}", purpose)
+            add("intro", (f"Zakaj {title}" if sl else f"Why {title}"), purpose)
         goal = str(config.get("goal") or "")
         if goal and _fold_text(goal) != _fold_text(purpose):
-            add("goal", "Kaj želimo omogočiti", goal)
+            add("goal", tr("Kaj želimo omogočiti", "What this should enable"), goal)
         audience = str(config.get("audience") or "")
         if audience:
-            add("audience", "Za koga je namenjeno", audience)
+            add("audience", tr("Za koga je namenjeno", "Who it is for"), audience)
 
     # Generic extraction fills any remaining slots from labelled brief blocks.
     for marker, heading, kind in (
-        ("Ključna sporočila", "Ključne točke", "key-points"),
-        ("Vsebinski poudarki", "Kaj je pomembno", "highlights"),
-        ("Namen", "Namen strani", "purpose"),
+        ("Ključna sporočila", tr("Ključne točke", "Key points"), "key-points"),
+        ("Vsebinski poudarki", tr("Kaj je pomembno", "What matters"), "highlights"),
+        ("Namen", tr("Namen strani", "Purpose of this page"), "purpose"),
     ):
         if len(out) >= 3:
             break
@@ -354,9 +371,9 @@ def _grounded_sections(page: dict[str, str], context: str, config: dict[str, Any
         cleaned = re.sub(r"(?m)^\s*\d+[.)-]\s*[A-ZČŠŽ ].*$", "", context)
         cleaned = re.sub(r"\s+", " ", cleaned).strip()
         if cleaned:
-            add("brief", f"{title}: bistvo", cleaned[:850])
+            add("brief", (f"{title}: bistvo" if sl else f"{title}: essentials"), cleaned[:850])
     if len(out) < 2 and purpose:
-        add("next-step", f"Naslednji korak za {title.lower()}", purpose)
+        add("next-step", (f"Naslednji korak za {title.lower()}" if sl else f"Next step for {title.lower()}"), purpose)
 
     return out[:4]
 
@@ -368,7 +385,12 @@ def _page_plan_is_weak(sections: list[dict[str, Any]], page: dict[str, str], con
     bodies = [_fold_text(s.get("body")) for s in sections if isinstance(s, dict)]
     if len([h for h in headings if h]) != len(set(h for h in headings if h)):
         return True
-    if sum(1 for h in headings if h in _GENERIC_SECTION_HEADINGS) >= 2:
+    generic_count = sum(1 for h in headings if h in _GENERIC_SECTION_HEADINGS)
+    if generic_count >= 2:
+        return True
+    if generic_count >= 1 and len(context.strip()) >= 120:
+        # A rich page-specific brief should not collapse to even one generic
+        # template heading when we can deterministically ground it.
         return True
     if any(len(str(s.get("body") or "").strip()) < 45 for s in sections if isinstance(s, dict)):
         return True
