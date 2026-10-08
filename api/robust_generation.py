@@ -466,7 +466,7 @@ def _de_duplicate_rendered_paragraphs(
     Retain the first occurrence of real copy and drop only exact long repeats.
     The release QA threshold remains unchanged.
     """
-    raw = re.sub(r"\\s+", " ", str(body or "")).strip()
+    raw = re.sub(r"\s+", " ", str(body or "")).strip()
     if not raw:
         return "", set()
     # Bulleted/list content is rendered as structured cards or list items,
@@ -475,7 +475,7 @@ def _de_duplicate_rendered_paragraphs(
         return raw, set()
     kept: list[str] = []
     new_keys: set[str] = set()
-    for part in re.split(r"(?<=[.!?])\\s+", raw):
+    for part in re.split(r"(?<=[.!?])\s+", raw):
         para = part.strip()
         if not para:
             continue
