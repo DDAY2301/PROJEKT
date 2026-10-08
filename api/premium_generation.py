@@ -220,6 +220,11 @@ def _render_crosslinks(config: dict[str, Any], spec: dict[str, Any], current_slu
 
     # Deterministic rotation makes different pages discover different neighbours.
     seed = int(hashlib.sha256(current_slug.encode("utf-8")).hexdigest()[:8], 16)
+    # Cross-link cards are useful discovery chrome, not mandatory content. Keep
+    # them on home and only about half of deeper pages so the site's rhythm does
+    # not repeat the same large component everywhere.
+    if current_slug != "index" and seed % 2:
+        return ""
     if candidates:
         offset = seed % len(candidates)
         candidates = candidates[offset:] + candidates[:offset]
