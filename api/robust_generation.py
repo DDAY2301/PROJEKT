@@ -506,6 +506,7 @@ async def design_site(config: dict[str, Any]) -> dict[str, Any]:
         "brand": config.get("brand"),
         "image_direction": str(config.get("image_direction") or "")[:1400],
         "page_contexts": page_contexts,
+        "quality_retry_seed": int(config.get("_quality_retry_seed") or 0),
         "global_requirements": str(config.get("custom_requirements") or "")[:2500],
     }
     prompt = f"""
@@ -519,6 +520,7 @@ Each section must have type, heading and body; CTA is optional.
 For every page, use concrete facts/names/steps from its page_contexts block when one exists.
 Named programmes, process steps, gallery motifs and requested form fields must survive into the page plan.
 Never reuse the same section heading or substantial body copy on two different pages.
+If quality_retry_seed is greater than 0, the previous attempt failed an originality/editorial gate: use materially different section headings, grouping and narrative rhythm while preserving customer facts.
 Keep each body concise but specific (roughly 1-3 useful sentences, max ~650 characters).
 Avoid filler and generic headings such as "Benefits", "Details", "Features", "Prednosti" or "Značilnosti" unless the brief explicitly uses them with concrete content.
 Never invent awards, partners, funding claims, addresses, statistics or verified impact.
