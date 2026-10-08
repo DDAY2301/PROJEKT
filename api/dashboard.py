@@ -126,6 +126,8 @@ async def dashboard_projects(user_id: str = Depends(core.current_user)):
                 "domain": dict(domain) if domain else {"domain": "", "status": "not_connected", "updated_at": None},
                 "revision_count": int(revision_count or 0),
                 "visual_qa": audit.get("visual_qa") or None,
+                "brief_coverage": audit.get("brief_coverage") or None,
+                "originality": audit.get("originality") or None,
                 "issue_count": len(issues),
                 "severe_issue_count": severe,
                 "archived": bool(life.get("archived")),
