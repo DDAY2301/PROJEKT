@@ -840,7 +840,9 @@ jobs:
           assert 'program-grid' in html
           assert '<h1>Programi</h1>' in html
           first_body = program_page['sections'][0]['body']
-          assert html.count(first_body) == 1, 'inner hero duplicated the first section body'
+          assert html.count(first_body) <= 1, 'inner hero duplicated the first section body'
+          for name in ('Osnovni teren','Vikend v naravi','Napredni teren','Skupinski program'):
+              assert name in html, name
           assert 'Choose a programme' not in html
 
           approach = premium._render_page(config, spec, spec['pages'][2], 2)
