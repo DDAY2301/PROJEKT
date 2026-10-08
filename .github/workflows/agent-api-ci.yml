@@ -961,7 +961,7 @@ jobs:
           )
           parsed = brief_import._labelled_fields(text)
           fields = brief_import._normalise(parsed, text)
-          assert str(fields['language']).lower().startswith('sl'), fields['language']
+          assert fields['language'] == 'sl', fields['language']
 
           text_en = (
               "PROJECT NAME:\n"
@@ -973,7 +973,7 @@ jobs:
           )
           parsed_en = brief_import._labelled_fields(text_en)
           fields_en = brief_import._normalise(parsed_en, text_en)
-          assert str(fields_en['language']).lower().startswith('english') or str(fields_en['language']).lower() == 'en'
+          assert fields_en['language'] == 'en', fields_en['language']
 
           html=open('dist/builder.html',encoding='utf-8').read()
           js=open('dist/assets/builder.js',encoding='utf-8').read()
