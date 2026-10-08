@@ -939,24 +939,26 @@ jobs:
           python - <<'PY'
           from api import brief_import
 
-          text = """IME PROJEKTA:
-ALPINE FIELD LAB
-JEZIK:
-slovenščina
-PROGRAM / VRSTA:
-Outdoor education studio
-"""
+          text = (
+              "IME PROJEKTA:\n"
+              "ALPINE FIELD LAB\n"
+              "JEZIK:\n"
+              "slovenščina\n"
+              "PROGRAM / VRSTA:\n"
+              "Outdoor education studio\n"
+          )
           parsed = brief_import._parse_labels(text)
           fields = brief_import._normalise(parsed, text)
           assert str(fields['language']).lower().startswith('sl'), fields['language']
 
-          text_en = """PROJECT NAME:
-FIELD LAB
-LANGUAGE:
-English
-PROGRAMME:
-Outdoor education studio
-"""
+          text_en = (
+              "PROJECT NAME:\n"
+              "FIELD LAB\n"
+              "LANGUAGE:\n"
+              "English\n"
+              "PROGRAMME:\n"
+              "Outdoor education studio\n"
+          )
           parsed_en = brief_import._parse_labels(text_en)
           fields_en = brief_import._normalise(parsed_en, text_en)
           assert str(fields_en['language']).lower().startswith('english') or str(fields_en['language']).lower() == 'en'
