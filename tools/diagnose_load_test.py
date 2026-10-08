@@ -68,7 +68,7 @@ def inspect(results_dir: Path, db_path: Path) -> tuple[list[dict], Counter]:
                         continue
                     code = safe_code(issue.get("code"))
                     names = re.findall(
-                        r"(?<![\\w.-])[A-Za-z0-9_.-]+\\.html\\b",
+                        r"(?<![\w.-])[A-Za-z0-9_.-]+\.html\b",
                         str(issue.get("message") or "") + " " + str(issue.get("file") or ""),
                         re.I,
                     )
