@@ -23,7 +23,7 @@ import statistics
 import sys
 import time
 from collections import Counter, defaultdict
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -90,6 +90,8 @@ class Result:
     public_live: bool | None = None
     public_url: str = ""
     error: str = ""
+    issue_codes: dict[str, int] = field(default_factory=dict)
+    severe_codes: dict[str, int] = field(default_factory=dict)
 
 def now() -> datetime:
     return datetime.now(timezone.utc)
@@ -253,7 +255,10 @@ def model_metrics(path: Path, since: datetime) -> dict[str,Any]:
 def hydrate(r: Result, project: dict[str,Any], db: Path, submitted: datetime, at: datetime):
     r.status=str(project.get("status") or "")
     r.repo_name=str(project.get("repo_name") or "")
-    r.total_s=round((at-submitted).total_seconds(),2)
+    # Preserve the timestamp of the first observed terminal state. The final
+    # snapshot must not replace every project duration with full-test elapsed time.
+    if r.total_s is None:
+        r.total_s=round((at-submitted).total_seconds(),2)
     audit=project.get("last_audit") or {}
     visual=audit.get("visual_qa") if isinstance(audit.get("visual_qa"),dict) else {}
     r.visual_score=visual.get("score")
@@ -264,6 +269,8 @@ def hydrate(r: Result, project: dict[str,Any], db: Path, submitted: datetime, at
     issues=audit.get("issues") or []
     sev=Counter(str(x.get("severity") or "").lower() for x in issues if isinstance(x,dict))
     r.critical,r.high,r.medium=sev["critical"],sev["high"],sev["medium"]
+    r.issue_codes=dict(sorted(Counter(str(x.get("code") or "UNKNOWN") for x in issues if isinstance(x,dict)).items()))
+    r.severe_codes=dict(sorted(Counter(str(x.get("code") or "UNKNOWN") for x in issues if isinstance(x,dict) and str(x.get("severity") or "").lower() in {"critical","high"}).items()))
     r.repairs=int(project.get("auto_fix_attempts") or 0)
     originality=audit.get("originality") if isinstance(audit.get("originality"),dict) else {}
     r.originality_score=originality.get("score")
@@ -295,8 +302,16 @@ def summary(results: list[Result], started: datetime, finished: datetime, model:
     sims=[float(r.nearest_similarity) for r in results if r.nearest_similarity is not None]
     coverages=[float(r.brief_coverage_score) for r in results if r.brief_coverage_score is not None]
     quality=[r for r in results if (r.visual_score or 0)>=90 and r.critical==0 and r.high==0]
+    terminal=[r for r in results if r.status in FINAL_STATES]
+    blockers=Counter(code for r in results for code in r.severe_codes)
+    blocker_occurrences=Counter()
+    for r in results:
+        blocker_occurrences.update(r.severe_codes)
     return {
         "started_at":iso(started),"finished_at":iso(finished),"elapsed_s":round(elapsed,2),"projects":len(results),
+        "terminal_projects":len(terminal),"incomplete_projects":len(results)-len(terminal),
+        "severe_codes_by_project":dict(blockers.most_common()),
+        "severe_code_occurrences":dict(blocker_occurrences.most_common()),
         "ready":sum(r.status=="ready" for r in results),"needs_review":sum(r.status=="needs_review" for r in results),
         "failed":sum(r.status=="failed" for r in results),"ready_for_payment":sum(r.status=="ready_for_payment" for r in results),
         "quality_pass_90":len(quality),"quality_pass_rate":round(len(quality)/max(1,len(results)),4),
@@ -306,7 +321,8 @@ def summary(results: list[Result], started: datetime, finished: datetime, model:
         "delivery_ready_rate":round(sum(r.repository_ready is True for r in results)/max(1,len(results)),4),
         "public_live":sum(r.public_live is True for r in results),
         "deployment_success_rate":round(sum(r.public_live is True for r in results)/max(1,len(results)),4),
-        "throughput_sites_per_hour":round(len(results)/elapsed*3600,3),
+        "throughput_sites_per_hour":round(len(terminal)/elapsed*3600,3),
+        "ready_throughput_sites_per_hour":round(sum(r.status=="ready" for r in results)/elapsed*3600,3),
         "total_time_s":{"avg":round(statistics.mean(totals),2) if totals else None,"p50":round(pct(totals,.5),2) if totals else None,"p95":round(pct(totals,.95),2) if totals else None},
         "queue_wait_s":{"avg":round(statistics.mean(waits),2) if waits else None,"p50":round(pct(waits,.5),2) if waits else None,"p95":round(pct(waits,.95),2) if waits else None},
         "execution_s":{"avg":round(statistics.mean(execs),2) if execs else None,"p50":round(pct(execs,.5),2) if execs else None,"p95":round(pct(execs,.95),2) if execs else None},
@@ -349,7 +365,9 @@ def write_reports(folder: Path, results: list[Result], stats: dict[str,Any]):
         f"- Local build/quality ready: **{stats['build_ready_rate']*100:.1f}%**",
         f"- GitHub delivery ready: **{stats['delivery_ready_rate']*100:.1f}%**",
         f"- Public live (may be payment-gated): **{stats['deployment_success_rate']*100:.1f}%**",
-        f"- Throughput: **{stats['throughput_sites_per_hour']:.2f} sites/hour**",
+        f"- Terminal throughput (includes needs_review): **{stats['throughput_sites_per_hour']:.2f} sites/hour**",
+        f"- Ready throughput: **{stats['ready_throughput_sites_per_hour']:.2f} sites/hour**",
+        f"- Incomplete at timeout: **{stats['incomplete_projects']}**",
         f"- QA failure rate: **{stats['qa_failure_rate']*100:.1f}%**",
         f"- Repair rate: **{stats['repair_rate']*100:.1f}%**","",
         "## Timing","",
@@ -368,12 +386,16 @@ def write_reports(folder: Path, results: list[Result], stats: dict[str,Any]):
         f"- Brief coverage below 100%: {stats['brief_coverage']['below_full']}",
         f"- Motifs: {json.dumps(stats['motifs'],ensure_ascii=False)}",
         f"- Compositions: {json.dumps(stats['compositions'],ensure_ascii=False)}","",
+        "## Blocking QA codes (affected projects)","",
+        *(f"- `{code}`: {count} project(s)" for code,count in stats["severe_codes_by_project"].items()),
+        *([] if stats["severe_codes_by_project"] else ["- No critical/high issue codes recorded."]),
+        "",
         "## Per project","",
-        "| # | Project | Status | Total s | Queue s | Exec s | Release | Browser | Browser advisory | Aesthetic | Penalty | Repairs | Motif | Composition | Similarity | Brief | Repo ready | Live |",
-        "|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---:|---:|---|---|",
+        "| # | Project | Status | Total s | Queue s | Exec s | Release | Browser | Browser advisory | Aesthetic | Penalty | Repairs | Motif | Composition | Similarity | Brief | Repo ready | Live | Blockers |",
+        "|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---:|---:|---|---|---|",
     ]
     for r in results:
-        lines.append(f"| {r.index} | {r.name} | {r.status} | {r.total_s or ''} | {r.queue_wait_s if r.queue_wait_s is not None else ''} | {r.execution_s if r.execution_s is not None else ''} | {r.visual_score if r.visual_score is not None else ''} | {r.deterministic_score if r.deterministic_score is not None else ''} | {r.browser_advisory_score if r.browser_advisory_score is not None else ''} | {r.aesthetic_score if r.aesthetic_score is not None else ''} | {r.aesthetic_penalty if r.aesthetic_penalty is not None else ''} | {r.repairs} | {r.motif} | {r.composition} | {r.nearest_similarity if r.nearest_similarity is not None else ''} | {r.brief_coverage_score if r.brief_coverage_score is not None else ''} | {'yes' if r.repository_ready else 'no'} | {'yes' if r.public_live else 'no'} |")
+        lines.append(f"| {r.index} | {r.name} | {r.status} | {r.total_s or ''} | {r.queue_wait_s if r.queue_wait_s is not None else ''} | {r.execution_s if r.execution_s is not None else ''} | {r.visual_score if r.visual_score is not None else ''} | {r.deterministic_score if r.deterministic_score is not None else ''} | {r.browser_advisory_score if r.browser_advisory_score is not None else ''} | {r.aesthetic_score if r.aesthetic_score is not None else ''} | {r.aesthetic_penalty if r.aesthetic_penalty is not None else ''} | {r.repairs} | {r.motif} | {r.composition} | {r.nearest_similarity if r.nearest_similarity is not None else ''} | {r.brief_coverage_score if r.brief_coverage_score is not None else ''} | {'yes' if r.repository_ready else 'no'} | {'yes' if r.public_live else 'no'} | {', '.join(r.severe_codes) or '-'} |")
     (folder/"REPORT.md").write_text("\n".join(lines)+"\n",encoding="utf-8")
 
 def main() -> int:
@@ -464,11 +486,14 @@ def main() -> int:
         write_reports(folder,results,stats)
         print("\n=== PRODUCTION LOAD TEST ===")
         print(f"results={folder}")
-        print(f"throughput={stats['throughput_sites_per_hour']} sites/hour")
+        print(f"throughput={stats['throughput_sites_per_hour']} terminal sites/hour; ready_throughput={stats['ready_throughput_sites_per_hour']} sites/hour")
+        print(f"top_qa_blockers={dict(list(stats['severe_codes_by_project'].items())[:10])}")
+        if stats["incomplete_projects"]:
+            print(f"incomplete_projects={stats['incomplete_projects']} (timeout or unobserved terminal state)")
         print(f"quality_pass_90={stats['quality_pass_rate']*100:.1f}% build_ready={stats['build_ready_rate']*100:.1f}% delivery_ready={stats['delivery_ready_rate']*100:.1f}% public_live={stats['deployment_success_rate']*100:.1f}%")
         print(f"qa_failure={stats['qa_failure_rate']*100:.1f}% repairs={stats['repair_rate']*100:.1f}%")
         print(f"visual_avg_min={stats['visual']['avg']}/{stats['visual']['min']} browser_avg_min={stats['visual']['deterministic_avg']}/{stats['visual']['deterministic_min']} browser_advisory_avg_min={stats['visual']['browser_advisory_avg']}/{stats['visual']['browser_advisory_min']} aesthetic_avg_min={stats['visual']['aesthetic_avg']}/{stats['visual']['aesthetic_min']} max_similarity={stats['originality']['max_nearest_similarity']} brief_avg_min={stats['brief_coverage']['avg']}/{stats['brief_coverage']['min']}")
-        hard_fail=stats["failed"]>0 or stats["quality_pass_rate"]<.95 or stats["qa_failure_rate"]>.05 or stats["originality"]["near_duplicates"]>0 or (stats["brief_coverage"]["min"] is not None and stats["brief_coverage"]["min"]<1.0)
+        hard_fail=stats["incomplete_projects"]>0 or stats["failed"]>0 or stats["quality_pass_rate"]<.95 or stats["qa_failure_rate"]>.05 or stats["originality"]["near_duplicates"]>0 or (stats["brief_coverage"]["min"] is not None and stats["brief_coverage"]["min"]<1.0)
         return 2 if hard_fail else 0
     finally:
         api.close()
