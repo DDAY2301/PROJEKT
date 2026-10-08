@@ -1218,6 +1218,9 @@ jobs:
                       'INSERT INTO projects VALUES (?, ?, ?)',
                       ('p1', 'needs_review', json.dumps({'issues': [
                           {'severity': 'high', 'code': 'DUPLICATE_ID'},
+                          {'severity': 'high', 'code': 'CROSS_PAGE_DUPLICATE_COPY',
+                           'file': 'index.html',
+                           'message': 'Substantial body copy repeated across 2 pages (index.html, about.html).'},
                           {'severity': 'medium', 'code': 'ADVISORY'},
                       ]})),
                   )
@@ -1225,8 +1228,11 @@ jobs:
                   {'project_id': 'p1', 'name': 'Sample'}
               ]), encoding='utf-8')
               rows, affected = inspect(root, db)
-              assert rows[0]['blockers'] == {'DUPLICATE_ID': 1}
-              assert dict(affected) == {'DUPLICATE_ID': 1}
+              assert rows[0]['blockers'] == {
+                  'DUPLICATE_ID': 1, 'CROSS_PAGE_DUPLICATE_COPY': 1
+              }
+              assert rows[0]['blocker_pages']['CROSS_PAGE_DUPLICATE_COPY'] == ['about.html', 'index.html']
+              assert dict(affected) == {'DUPLICATE_ID': 1, 'CROSS_PAGE_DUPLICATE_COPY': 1}
           print('Production load-test and offline blocker-diagnostic smoke checks passed')
           PY
       - name: Check browser JavaScript syntax
