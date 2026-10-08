@@ -873,13 +873,9 @@ async def ai_audit(files: dict[str, str], config: dict[str, Any]) -> dict[str, A
     if mode not in {"full", "model", "llm"}:
         return {
             "passed": True,
-            "issues": [{
-                "severity": "low",
-                "code": "MODEL_QA_ADAPTIVE_SKIP",
-                "file": "",
-                "message": "Routine model QA skipped; deterministic, browser and originality gates remain active.",
-            }],
+            "issues": [],
             "model_qa_skipped": True,
+            "model_qa_note": "Routine model QA skipped; deterministic, browser and originality gates remain active.",
         }
     compact = {k: v[:8000] for k, v in files.items() if k.endswith((".html", ".css", ".js"))}
     prompt = f"""
