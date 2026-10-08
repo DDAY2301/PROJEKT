@@ -948,7 +948,7 @@ jobs:
               "PROGRAM / VRSTA:\n"
               "Outdoor education studio\n"
           )
-          parsed = brief_import._parse_labels(text)
+          parsed = brief_import._labelled_fields(text)
           fields = brief_import._normalise(parsed, text)
           assert str(fields['language']).lower().startswith('sl'), fields['language']
 
@@ -960,7 +960,7 @@ jobs:
               "PROGRAMME:\n"
               "Outdoor education studio\n"
           )
-          parsed_en = brief_import._parse_labels(text_en)
+          parsed_en = brief_import._labelled_fields(text_en)
           fields_en = brief_import._normalise(parsed_en, text_en)
           assert str(fields_en['language']).lower().startswith('english') or str(fields_en['language']).lower() == 'en'
 
