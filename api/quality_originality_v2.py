@@ -223,9 +223,31 @@ def _clean_visible(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip().lower()
 
 
+def _copy_tokens(value: str) -> set[str]:
+    words = {
+        token
+        for token in re.findall(r"[a-z0-9čšžćđáéíóúäöü]{3,}", value.lower(), re.UNICODE)
+        if token not in {
+            "the", "and", "for", "with", "this", "that", "from", "into", "your",
+            "ter", "ali", "tudi", "smo", "kot", "pri", "naše", "nasi", "naš",
+            "stran", "strani", "projekt", "projekta",
+        }
+    }
+    return words
+
+
+def _copy_similarity(a: str, b: str) -> float:
+    ta, tb = _copy_tokens(a), _copy_tokens(b)
+    if len(ta) < 6 or len(tb) < 6:
+        return 0.0
+    union = ta | tb
+    return len(ta & tb) / len(union) if union else 0.0
+
+
 def _cross_page_copy_issues(html_files: dict[str, str]) -> list[dict[str, str]]:
     paragraph_pages: dict[str, set[str]] = {}
     heading_pages: dict[str, set[str]] = {}
+    paragraph_records: list[tuple[str, str]] = []
 
     for path, source in html_files.items():
         main = _main_content_for_uniqueness(source)
@@ -233,6 +255,7 @@ def _cross_page_copy_issues(html_files: dict[str, str]) -> list[dict[str, str]]:
             text = _clean_visible(raw)
             if len(text) >= 90:
                 paragraph_pages.setdefault(text, set()).add(path)
+                paragraph_records.append((path, text))
         for raw in re.findall(r"<h2\b[^>]*>(.*?)</h2>", main, re.I | re.S):
             text = _clean_visible(raw)
             if len(text) >= 5:
@@ -249,6 +272,27 @@ def _cross_page_copy_issues(html_files: dict[str, str]) -> list[dict[str, str]]:
             "CROSS_PAGE_DUPLICATE_COPY",
             sorted(pages)[0],
             f"Substantial body copy is repeated across {len(pages)} pages ({', '.join(sorted(pages)[:4])}); each page needs its own brief-grounded narrative.",
+        ))
+
+    # Catch template paraphrases, not only character-for-character copies.
+    best_near: tuple[float, str, str, str, str] | None = None
+    for i, (path_a, text_a) in enumerate(paragraph_records):
+        for path_b, text_b in paragraph_records[i + 1:]:
+            if path_a == path_b or text_a == text_b:
+                continue
+            similarity = _copy_similarity(text_a, text_b)
+            if similarity < 0.78:
+                continue
+            candidate = (similarity, path_a, path_b, text_a, text_b)
+            if best_near is None or candidate[0] > best_near[0]:
+                best_near = candidate
+    if best_near is not None:
+        similarity, path_a, path_b, _text_a, _text_b = best_near
+        issues.append(_issue(
+            "high",
+            "CROSS_PAGE_NEAR_DUPLICATE_COPY",
+            path_a,
+            f"Body copy on {path_a} and {path_b} is {similarity:.0%} semantically similar; each page needs a distinct brief-grounded narrative.",
         ))
 
     repeated_headings = [
