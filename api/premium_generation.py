@@ -48,8 +48,11 @@ def _text(value: Any, fallback: str = "") -> str:
 
 def _is_sl(config: dict[str, Any], spec: dict[str, Any] | None = None) -> bool:
     language = _text(config.get("language")).lower()
-    if language.startswith("sl") or "sloven" in language:
-        return True
+    if language:
+        if language.startswith("sl") or "sloven" in language:
+            return True
+        if language.startswith("en") or "english" in language or "angles" in base._fold_text(language):
+            return False
     pages = (spec or {}).get("pages") or config.get("pages") or []
     titles = " ".join(str(p.get("title") or "") for p in pages if isinstance(p, dict)).lower()
     return any(token in titles for token in ("domov", "o nas", "kontakt", "programi", "pristop", "galerija"))
