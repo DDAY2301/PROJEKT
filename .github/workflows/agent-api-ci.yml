@@ -881,6 +881,43 @@ jobs:
 
           print('Editorial uniqueness production-floor checks passed')
           PY
+      - name: Regression - 10 distinct website briefs without editorial duplicates
+        env:
+          APP_SECRET: ci-only-secret
+          VISUAL_QA_VISION: 'false'
+          MODEL_QA_MODE: deterministic
+        run: |
+          python - <<'PY'
+          from tools.production_load_test import expand, payload
+          from api import robust_generation as robust
+          from api import premium_generation as premium
+          from api import quality_originality_v2 as originality
+
+          forbidden = {
+              'DUPLICATE_BODY_COPY',
+              'REPEATED_SECTION_HEADING',
+              'CROSS_PAGE_DUPLICATE_COPY',
+              'CROSS_PAGE_NEAR_DUPLICATE_COPY',
+              'CROSS_PAGE_REPEATED_HEADING',
+          }
+          for row in expand(10):
+              config = payload(row)
+              spec = robust._fallback_spec(config)
+              files = {
+                  ('index.html' if p['slug'] == 'index' else f"{p['slug']}.html"):
+                  premium._render_page(config, spec, p, i)
+                  for i, p in enumerate(spec['pages'])
+              }
+              issues = originality._anti_slop_issues(files, config)
+              failures = [i for i in issues if i['code'] in forbidden]
+              assert not failures, f"{config['name']}: {failures}"
+              for path, html in files.items():
+                  assert '<!doctype html>' in html.lower(), (config['name'], path)
+                  assert '</html>' in html.lower(), (config['name'], path)
+                  assert '<nav' in html.lower(), (config['name'], path)
+              assert len(files) >= 4, config['name']
+          print('Ten-brief cross-page editorial and document-shell regression passed')
+          PY
       - name: Validate bilingual rich brief grounding
         run: |
           python - <<'PY'
