@@ -18,6 +18,7 @@ import html
 import json
 import os
 import re
+import unicodedata
 from typing import Any
 
 import httpx
@@ -110,20 +111,341 @@ def _configured_pages(config: dict[str, Any]) -> list[dict[str, str]]:
     return clean
 
 
+
+def _fold_text(value: Any) -> str:
+    text = unicodedata.normalize("NFKD", str(value or ""))
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
+
+
+_GLOBAL_BRIEF_HEADINGS = {
+    "dodatne zahteve", "zahteve", "image direction", "smer fotografij",
+    "seo naslov", "seo opis", "koncni cilj", "tipografija", "barve",
+    "vizualni slog", "ton komunikacije", "ciljna publika",
+    "glavni cilj spletne strani", "sekundarni cta", "glavni cta",
+}
+
+
+def _extract_page_contexts(config: dict[str, Any]) -> dict[str, str]:
+    """Extract page-specific blocks from a rich pasted/imported website brief."""
+    pages = _configured_pages(config)
+    if not pages:
+        return {}
+
+    source = str(config.get("custom_requirements") or "")
+    if "[CELOTEN IZVORNI BRIEF]" in source:
+        source = source.split("[CELOTEN IZVORNI BRIEF]", 1)[1]
+    if not source.strip():
+        return {p["slug"]: p.get("purpose", "") for p in pages}
+
+    title_map: dict[str, str] = {}
+    for page in pages:
+        folded = _fold_text(page["title"])
+        title_map[folded] = page["slug"]
+
+    lines = source.splitlines()
+    contexts: dict[str, list[str]] = {p["slug"]: [] for p in pages}
+    current: str | None = None
+
+    def match_page_heading(line: str) -> str | None:
+        raw = line.strip().strip("#").strip()
+        numbered = re.match(r"^\s*\d{1,2}\s*[.)-]\s*(.+?)\s*$", raw)
+        candidate = numbered.group(1) if numbered else raw
+        candidate = re.sub(r"[:：]\s*$", "", candidate).strip()
+        folded = _fold_text(candidate)
+        if folded in title_map:
+            return title_map[folded]
+        # Accept headings with a small suffix such as "DOMOV – landing".
+        for page_title, slug in title_map.items():
+            if len(page_title) >= 3 and (
+                folded.startswith(page_title + " ") or page_title.startswith(folded + " ")
+            ):
+                return slug
+        return None
+
+    for raw_line in lines:
+        line = raw_line.rstrip()
+        stripped = line.strip()
+        if not stripped:
+            if current and contexts[current] and contexts[current][-1] != "":
+                contexts[current].append("")
+            continue
+
+        page_slug = match_page_heading(stripped)
+        if page_slug:
+            current = page_slug
+            contexts[current].append(stripped)
+            continue
+
+        folded = _fold_text(re.sub(r"[:：]\s*$", "", stripped))
+        if current and folded in _GLOBAL_BRIEF_HEADINGS:
+            current = None
+            continue
+
+        # A new all-caps global section after the requested page blocks ends
+        # page capture, but normal labels such as "Namen:" remain in the block.
+        if current and re.match(r"^[A-ZČŠŽ0-9 /_-]{4,}:?$", stripped):
+            candidate = _fold_text(stripped.rstrip(":"))
+            if candidate in _GLOBAL_BRIEF_HEADINGS:
+                current = None
+                continue
+
+        if current:
+            contexts[current].append(stripped)
+
+    out: dict[str, str] = {}
+    for page in pages:
+        raw = "\n".join(contexts.get(page["slug"], [])).strip()
+        out[page["slug"]] = raw[:5000] if raw else str(page.get("purpose") or "")
+    return out
+
+
+def _context_items(context: str, marker: str) -> list[str]:
+    """Collect bullet/list items after a labelled marker until the next label."""
+    lines = context.splitlines()
+    target = _fold_text(marker)
+    collecting = False
+    items: list[str] = []
+    current = ""
+    for line in lines:
+        stripped = line.strip()
+        folded = _fold_text(stripped.rstrip(":"))
+        if not collecting:
+            if folded == target:
+                collecting = True
+            continue
+        if not stripped:
+            if current:
+                items.append(current.strip())
+                current = ""
+            continue
+        if re.match(r"^[^:]{2,45}:$", stripped) and not stripped.startswith(("-", "*", "•")):
+            break
+        if re.match(r"^[-*•]\s+", stripped):
+            if current:
+                items.append(current.strip())
+            current = re.sub(r"^[-*•]\s+", "", stripped).strip()
+        else:
+            if current:
+                current += " " + stripped
+            elif len(stripped) > 2:
+                current = stripped
+    if current:
+        items.append(current.strip())
+    return [x for x in items if x][:8]
+
+
+def _context_text_after(context: str, marker: str, limit: int = 700) -> str:
+    lines = context.splitlines()
+    target = _fold_text(marker)
+    collecting = False
+    chunks: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        folded = _fold_text(stripped.rstrip(":"))
+        if not collecting:
+            if folded == target:
+                collecting = True
+            continue
+        if not stripped:
+            if chunks:
+                break
+            continue
+        if re.match(r"^[^:]{2,45}:$", stripped) and chunks:
+            break
+        if re.match(r"^[^:]{2,45}:$", stripped) and not chunks:
+            continue
+        chunks.append(re.sub(r"^[-*•]\s+", "", stripped))
+        if len(" ".join(chunks)) >= limit:
+            break
+    return re.sub(r"\s+", " ", " ".join(chunks)).strip()[:limit]
+
+
+_GENERIC_SECTION_HEADINGS = {
+    "prednosti", "znacilnosti", "nacin dela", "overview", "details", "benefits",
+    "learn more", "our services", "nase storitve", "nasi programi", "galerija",
+    "kontakt", "o nas", "vec informacij", "zakaj mi",
+}
+
+
+def _grounded_sections(page: dict[str, str], context: str, config: dict[str, Any]) -> list[dict[str, Any]]:
+    """Build page-specific deterministic sections from the actual customer brief."""
+    slug = _fold_text(page.get("slug"))
+    title = str(page.get("title") or "Page")
+    purpose = str(page.get("purpose") or "").strip()
+    context = str(context or "").strip()
+    out: list[dict[str, Any]] = []
+
+    def add(kind: str, heading: str, body: str) -> None:
+        heading = re.sub(r"\s+", " ", heading).strip()
+        body = re.sub(r"\s+", " ", body).strip()
+        if heading and body and all(_fold_text(x.get("heading")) != _fold_text(heading) for x in out):
+            out.append({"type": kind, "heading": heading[:160], "body": body[:900]})
+
+    if "program" in slug:
+        items = _context_items(context, "Programi")
+        if items:
+            add("program-list", "Programi na terenu", " • ".join(items[:4]))
+        audience = str(config.get("audience") or "")
+        if audience:
+            add("audience", "Komu so programi namenjeni", audience)
+        add("decision", "Izberi raven, ki ti ustreza", purpose or "Program izberi glede na izkušnje, skupino in cilj.")
+
+    elif "galer" in slug:
+        motifs = _context_items(context, "Predlagani motivi")
+        if motifs:
+            add("gallery", "Teren, delo in detajli", " • ".join(motifs[:8]))
+        direction = str(config.get("image_direction") or "")
+        if direction:
+            add("visual-direction", "Vizualni občutek", direction)
+        add("gallery-note", "Brez generičnih podob", "Ko ni dejanskih fotografij, uporabimo oblikovane vizualne placeholderje in ne izmišljamo dogodkov ali oseb.")
+
+    elif any(token in slug for token in ("kontakt", "contact", "stik")):
+        email = str(config.get("contact_email") or "")
+        fields = _context_items(context, "Kontaktni obrazec naj vsebuje")
+        if email:
+            add("contact", "Piši nam", f"Za vprašanja in povpraševanja: {email}.")
+        if fields:
+            add("form-fields", "Kaj potrebujemo za dober odgovor", " • ".join(fields[:6]))
+        add("next-step", "Povej nam, kaj želiš organizirati", purpose or "Pošlji osnovne informacije in odgovorili bomo z naslednjim korakom.")
+
+    elif slug in {"o-nas", "onas", "about", "o nas"} or "nas" in slug:
+        text = _context_text_after(context, "Tekst", 900)
+        if text:
+            add("story", "Alpine Field Lab", text)
+        add("principles", "Kaj je v središču našega dela", purpose or str(config.get("goal") or ""))
+        add("trust", "Brez izmišljenih referenc", "Predstavljamo samo preverljive informacije iz briefa, brez izmišljenih certifikatov, nagrad ali partnerjev.")
+
+    elif "pristop" in slug or "approach" in slug:
+        messages = _context_items(context, "Ključna sporočila")
+        if messages:
+            add("principles", "Kako delamo na terenu", " • ".join(messages[:5]))
+        structure = _context_text_after(context, "Predlagana struktura", 500)
+        if structure:
+            add("process", "Od opazovanja do samostojne uporabe", structure)
+        add("outcome", "Cilj je dobra presoja", purpose or "Praksa, razumevanje in ponavljanje gradijo samozavest.")
+
+    else:
+        # Home and unknown page types: use purpose + unique brief facts.
+        if purpose:
+            add("intro", f"Zakaj {title}", purpose)
+        goal = str(config.get("goal") or "")
+        if goal and _fold_text(goal) != _fold_text(purpose):
+            add("goal", "Kaj želimo omogočiti", goal)
+        audience = str(config.get("audience") or "")
+        if audience:
+            add("audience", "Za koga je namenjeno", audience)
+
+    # Generic extraction fills any remaining slots from labelled brief blocks.
+    for marker, heading, kind in (
+        ("Ključna sporočila", "Ključne točke", "key-points"),
+        ("Vsebinski poudarki", "Kaj je pomembno", "highlights"),
+        ("Namen", "Namen strani", "purpose"),
+    ):
+        if len(out) >= 3:
+            break
+        items = _context_items(context, marker)
+        body = " • ".join(items[:6]) if items else _context_text_after(context, marker, 800)
+        if body:
+            add(kind, heading, body)
+
+    if len(out) < 3:
+        # Preserve grounded context rather than inventing generic marketing copy.
+        cleaned = re.sub(r"(?m)^\s*\d+[.)-]\s*[A-ZČŠŽ ].*$", "", context)
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
+        if cleaned:
+            add("brief", f"{title}: bistvo", cleaned[:850])
+    if len(out) < 2 and purpose:
+        add("next-step", f"Naslednji korak za {title.lower()}", purpose)
+
+    return out[:4]
+
+
+def _page_plan_is_weak(sections: list[dict[str, Any]], page: dict[str, str], context: str) -> bool:
+    if len(sections) < 3:
+        return True
+    headings = [_fold_text(s.get("heading")) for s in sections if isinstance(s, dict)]
+    bodies = [_fold_text(s.get("body")) for s in sections if isinstance(s, dict)]
+    if len([h for h in headings if h]) != len(set(h for h in headings if h)):
+        return True
+    if sum(1 for h in headings if h in _GENERIC_SECTION_HEADINGS) >= 2:
+        return True
+    if any(len(str(s.get("body") or "").strip()) < 45 for s in sections if isinstance(s, dict)):
+        return True
+    if len([b for b in bodies if b]) != len(set(b for b in bodies if b)):
+        return True
+
+    # Rich page-specific context should leave at least one lexical fingerprint in
+    # the planned copy; otherwise the model probably ignored the supplied brief.
+    important = [
+        token for token in re.findall(r"\b[\wčšžČŠŽ-]{5,}\b", context, re.UNICODE)
+        if _fold_text(token) not in {
+            "namen", "strani", "programi", "vsebina", "pomembno", "predlagani",
+            "kontaktni", "izobrazevanje", "naravi",
+        }
+    ]
+    if important:
+        planned = _fold_text(" ".join(str(s.get("heading") or "") + " " + str(s.get("body") or "") for s in sections))
+        anchors = {_fold_text(x) for x in important[:20]}
+        if not any(anchor and anchor in planned for anchor in anchors):
+            return True
+    return False
+
+
+def _enforce_plan_uniqueness(
+    pages: list[dict[str, Any]],
+    config: dict[str, Any],
+    contexts: dict[str, str],
+) -> list[dict[str, Any]]:
+    seen_headings: set[str] = set()
+    seen_bodies: set[str] = set()
+    out: list[dict[str, Any]] = []
+    for page in pages:
+        slug = str(page.get("slug") or "index")
+        context = contexts.get(slug, "")
+        sections = _sanitize_planned_sections(page.get("sections") or [], config)
+        cross_duplicate = False
+        for section in sections:
+            heading = _fold_text(section.get("heading"))
+            body = _fold_text(section.get("body"))
+            if heading and heading in seen_headings:
+                cross_duplicate = True
+            if len(body) >= 70 and body in seen_bodies:
+                cross_duplicate = True
+        if _page_plan_is_weak(sections, page, context) or cross_duplicate:
+            grounded = _grounded_sections(page, context, config)
+            if grounded:
+                sections = grounded
+        for section in sections:
+            heading = _fold_text(section.get("heading"))
+            body = _fold_text(section.get("body"))
+            if heading:
+                seen_headings.add(heading)
+            if len(body) >= 70:
+                seen_bodies.add(body)
+        out.append({**page, "sections": sections})
+    return out
+
+
 def _fallback_spec(config: dict[str, Any]) -> dict[str, Any]:
+    contexts = _extract_page_contexts(config)
     pages = []
     for page in _configured_pages(config):
+        sections = _grounded_sections(page, contexts.get(page["slug"], ""), config)
+        if not sections:
+            sections = [{
+                "type": "content",
+                "heading": page["title"],
+                "body": page["purpose"] or str(config.get("goal") or ""),
+            }]
         pages.append(
             {
                 **page,
                 "meta_description": (page["purpose"] or str(config.get("goal") or "")).strip()[:155],
-                "sections": [
-                    {"type": "hero", "heading": config.get("hero_title") or page["title"], "body": config.get("hero_subtitle") or page["purpose"] or config.get("goal", "")},
-                    {"type": "content", "heading": page["title"], "body": page["purpose"] or config.get("goal", "")},
-                    {"type": "cta", "heading": "Ready to take the next step?", "body": "Get in touch to learn more.", "cta": config.get("cta_text") or "Contact us"},
-                ],
+                "sections": sections,
             }
         )
+    pages = _enforce_plan_uniqueness(pages, config, contexts)
     return {
         "site_name": config.get("organization") or config.get("name") or "Website",
         "seo_description": str(config.get("goal") or "")[:155],
@@ -167,6 +489,7 @@ def _sanitize_planned_sections(sections: Any, config: dict[str, Any]) -> list[di
 
 async def design_site(config: dict[str, Any]) -> dict[str, Any]:
     page_budget = {"Start": 3, "Standard": 6, "Premium": 12}[config["package"]]
+    page_contexts = _extract_page_contexts(config)
     compact_brief = {
         "name": config.get("name"),
         "organization": config.get("organization"),
@@ -182,17 +505,22 @@ async def design_site(config: dict[str, Any]) -> dict[str, Any]:
         "cta_text": config.get("cta_text"),
         "brand": config.get("brand"),
         "image_direction": str(config.get("image_direction") or "")[:1400],
-        "custom_requirements": str(config.get("custom_requirements") or "")[:6000],
+        "page_contexts": page_contexts,
+        "global_requirements": str(config.get("custom_requirements") or "")[:2500],
     }
     prompt = f"""
 Plan a polished production website from this compact customer brief.
 The package allows at most {page_budget} pages. Respect the requested pages and their purposes.
 CUSTOMER={json.dumps(compact_brief, ensure_ascii=False)}
 Return JSON with keys site_name, seo_description, pages.
-Each page must have title, meta_description and exactly 3-4 purposeful sections.
+Each page must have title, meta_description and exactly 3-4 CONTENT sections.
+Do not include hero or final CTA in pages.sections; the renderer adds those.
 Each section must have type, heading and body; CTA is optional.
-Keep each body to roughly 1-2 useful sentences (max ~240 characters).
-Be specific and credible. Avoid filler, repeated headings and generic AI phrasing.
+For every page, use concrete facts/names/steps from its page_contexts block when one exists.
+Named programmes, process steps, gallery motifs and requested form fields must survive into the page plan.
+Never reuse the same section heading or substantial body copy on two different pages.
+Keep each body concise but specific (roughly 1-3 useful sentences, max ~650 characters).
+Avoid filler and generic headings such as "Benefits", "Details", "Features", "Prednosti" or "Značilnosti" unless the brief explicitly uses them with concrete content.
 Never invent awards, partners, funding claims, addresses, statistics or verified impact.
 """
     try:
@@ -227,6 +555,7 @@ Never invent awards, partners, funding claims, addresses, statistics or verified
                     ),
                 }
             )
+        normalized = _enforce_plan_uniqueness(normalized, config, page_contexts)
         return {
             "site_name": str(data.get("site_name") or config.get("organization") or config.get("name")),
             "seo_description": str(data.get("seo_description") or config.get("goal") or "")[:160],
