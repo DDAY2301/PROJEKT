@@ -60,7 +60,21 @@ def inspect(results_dir: Path, db_path: Path) -> tuple[list[dict], Counter]:
                     and str(issue.get("severity") or "").lower() in {"critical", "high"}
                 )
                 affected.update(blockers.keys())
+                # Export page filenames only, never QA messages or customer copy.
+                # Cross-page issues name both pages in their diagnostic message.
+                blocker_pages: dict[str, set[str]] = {}
+                for issue in issues:
+                    if not isinstance(issue, dict) or str(issue.get("severity") or "").lower() not in {"critical", "high"}:
+                        continue
+                    code = safe_code(issue.get("code"))
+                    names = re.findall(
+                        r"(?<![\\w.-])[A-Za-z0-9_.-]+\\.html\\b",
+                        str(issue.get("message") or "") + " " + str(issue.get("file") or ""),
+                        re.I,
+                    )
+                    blocker_pages.setdefault(code, set()).update(names)
                 row = {
+                    "blocker_pages": {code: sorted(names) for code, names in blocker_pages.items()},
                     "name": str(project.get("name") or "Unnamed"),
                     "status": str(record[0] or ""),
                     "blockers": dict(blockers.most_common()),
@@ -72,6 +86,7 @@ def inspect(results_dir: Path, db_path: Path) -> tuple[list[dict], Counter]:
                     "name": str(project.get("name") or "Unnamed"),
                     "status": str(project.get("status") or ""),
                     "blockers": {},
+                    "blocker_pages": {},
                     "quality_gate_passed": None,
                     "available": False,
                 }
@@ -103,10 +118,13 @@ def main() -> int:
         codes = ", ".join(f"{code} ({count})" for code, count in row["blockers"].items()) or "none recorded"
         prefix = "" if row["available"] else " [NOT FOUND IN DB]"
         lines.append(f"- {row['name']}: {row['status']}; blockers: {codes}{prefix}")
+        for code, pages in row["blocker_pages"].items():
+            if pages:
+                lines.append(f"  - {code} affected HTML: {', '.join(pages)}")
     lines.extend([
         "",
         "Codes are taken from the last stored audit for each project.",
-        "No customer source, brief, prompt, issue message, or token is exported.",
+        "Only blocker codes and HTML filenames are exported; no customer source, brief, prompt, issue message, or token is exported.",
     ])
     report = "\n".join(lines) + "\n"
     output = args.results / "BLOCKERS.md"
