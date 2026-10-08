@@ -91,6 +91,54 @@ def _ui(config: dict[str, Any], key: str, spec: dict[str, Any] | None = None) ->
     return _UI["sl" if _is_sl(config, spec) else "en"][key]
 
 
+
+_SECTION_LABELS = {
+    "sl": {
+        "program-list": "Programi", "audience": "Za koga", "decision": "Izbira",
+        "principles": "Pristop", "process": "Proces", "outcome": "Rezultat",
+        "story": "Zgodba", "trust": "Zaupanje", "gallery": "Galerija",
+        "visual-direction": "Vizualna smer", "gallery-note": "Pristop",
+        "contact": "Kontakt", "form-fields": "Povpraševanje", "next-step": "Naslednji korak",
+        "intro": "Uvod", "goal": "Cilj", "brief": "Bistvo",
+        "key-points": "Poudarki", "highlights": "Poudarki", "purpose": "Namen",
+    },
+    "en": {
+        "program-list": "Programmes", "audience": "For whom", "decision": "Choose",
+        "principles": "Approach", "process": "Process", "outcome": "Outcome",
+        "story": "Story", "trust": "Trust", "gallery": "Gallery",
+        "visual-direction": "Visual direction", "gallery-note": "Approach",
+        "contact": "Contact", "form-fields": "Enquiry", "next-step": "Next step",
+        "intro": "Introduction", "goal": "Goal", "brief": "Essentials",
+        "key-points": "Highlights", "highlights": "Highlights", "purpose": "Purpose",
+    },
+}
+
+
+def _section_label(config: dict[str, Any], value: Any, spec: dict[str, Any] | None = None) -> str:
+    raw = base._fold_text(value).replace(" ", "-")
+    lang = "sl" if _is_sl(config, spec) else "en"
+    return _SECTION_LABELS[lang].get(raw, _text(value, "Poudarki" if lang == "sl" else "Overview").replace("-", " ").title())
+
+
+def _public_summary(page: dict[str, Any], fallback: str = "") -> str:
+    meta = _text(page.get("meta_description"))
+    purpose = _text(page.get("purpose"))
+    instruction_prefixes = (
+        "predstaviti ", "razloziti ", "vizualno prikazati ", "preprost ", "mocan prvi vtis",
+        "show ", "explain ", "present ", "help the visitor ",
+    )
+    folded_meta = base._fold_text(meta)
+    if meta and not any(folded_meta.startswith(base._fold_text(x)) for x in instruction_prefixes):
+        return meta
+    sections = [s for s in (page.get("sections") or []) if isinstance(s, dict)]
+    for section in sections:
+        body = _text(section.get("body"))
+        if body:
+            body = body.replace(" • ", ". ").replace("•", ". ")
+            return re.sub(r"\s+", " ", body).strip()[:240]
+    return fallback or purpose
+
+
 def _brand_mark(site_name: str) -> str:
     words = re.findall(r"[A-Za-zÀ-ž0-9]+", site_name)
     if len(words) >= 2:
@@ -233,7 +281,7 @@ def _render_crosslinks(config: dict[str, Any], spec: dict[str, Any], current_slu
     for idx, p in enumerate(candidates[:3]):
         slug = str(p.get("slug") or "index")
         title = _e(p.get("title") or "Page")
-        purpose = _e(_text(p.get("purpose"), ""))
+        purpose = _e(_public_summary(p, _text(p.get("purpose"), "")))
         cards.append(
             f'''<a class="story-card reveal" href="{_e(_href(slug), quote=True)}">
               {_render_visual(str(p.get("title") or "Page"), idx + seed % 5, spec)}
@@ -247,7 +295,7 @@ def _render_crosslinks(config: dict[str, Any], spec: dict[str, Any], current_slu
       <div class="story-grid">{''.join(cards)}</div>
     </div></section>'''
 
-def _render_gallery_section(section: dict[str, Any], page: dict[str, Any], spec: dict[str, Any]) -> str:
+def _render_gallery_section(config: dict[str, Any], section: dict[str, Any], page: dict[str, Any], spec: dict[str, Any]) -> str:
     heading = _text(section.get("heading"), page.get("title") or "Gallery")
     body = _text(section.get("body"))
     items = [x.strip(" ·-•") for x in re.split(r"\s*[•|]\s*", body) if x.strip()]
@@ -264,7 +312,7 @@ def _render_gallery_section(section: dict[str, Any], page: dict[str, Any], spec:
             </div>'''
         )
     return f'''<section class="section gallery-section"><div class="shell">
-      <div class="section-head reveal"><span class="label">{_e(section.get('type') or 'Gallery')}</span><h2>{_e(heading)}</h2></div>
+      <div class="section-head reveal"><span class="label">{_e(_section_label(config, section.get('type') or 'Gallery', spec))}</span><h2>{_e(heading)}</h2></div>
       <div class="gallery-grid">{''.join(tiles)}</div>
     </div></section>'''
 
@@ -279,7 +327,7 @@ def _render_content_sections(config: dict[str, Any], spec: dict[str, Any], page:
     for idx, section in enumerate(filtered[:4]):
         kind = base._fold_text(section.get("type"))
         if "gallery" in kind:
-            out.append(_render_gallery_section(section, page, spec))
+            out.append(_render_gallery_section(config, section, page, spec))
             continue
 
         raw_heading = _text(section.get("heading"), page.get("title") or "Overview")
@@ -312,7 +360,7 @@ def _render_content_sections(config: dict[str, Any], spec: dict[str, Any], page:
         )
         variant = variants[layout_seed % len(variants)]
         out.append(f'''<section class="section content-section content-{idx + 1}"><div class="shell {variant}">
-          <div class="section-head reveal"><span class="label">{_e(section.get('type') or 'Overview')}</span><h2>{heading}</h2></div>
+          <div class="section-head reveal"><span class="label">{_e(_section_label(config, section.get('type') or 'Overview', spec))}</span><h2>{heading}</h2></div>
           <div class="prose reveal">{body_html}</div>
         </div></section>''')
     return "".join(out)
@@ -427,7 +475,7 @@ def _render_page(config: dict[str, Any], spec: dict[str, Any], page: dict[str, A
     meta = _text(page.get("meta_description"), page.get("purpose") or config.get("goal") or "")[:160]
     nav = _navigation(spec, slug)
     hero_title = _text(config.get("hero_title"), page_title) if is_home else page_title
-    hero_body = _text(config.get("hero_subtitle"), page.get("purpose") or config.get("goal") or "") if is_home else _text(page.get("purpose"), config.get("goal") or "")
+    hero_body = _text(config.get("hero_subtitle"), _public_summary(page, _text(config.get("goal")))) if is_home else _public_summary(page, _text(config.get("goal")))
     programme = _text(config.get("programme"), "Project / digital experience")
     email = _text(config.get("contact_email"))
     sl = _is_sl(config, spec)
