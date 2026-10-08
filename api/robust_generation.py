@@ -293,6 +293,20 @@ def _grounded_sections(page: dict[str, str], context: str, config: dict[str, Any
     def tr(sl_text: str, en_text: str) -> str:
         return sl_text if sl else en_text
 
+    def items_any(*markers: str) -> list[str]:
+        for marker in markers:
+            items = _context_items(context, marker)
+            if items:
+                return items
+        return []
+
+    def text_after_any(*markers: str, limit: int = 700) -> str:
+        for marker in markers:
+            value = _context_text_after(context, marker, limit)
+            if value:
+                return value
+        return ""
+
     def add(kind: str, heading: str, body: str) -> None:
         heading = re.sub(r"\s+", " ", heading).strip()
         body = re.sub(r"\s+", " ", body).strip()
@@ -300,7 +314,7 @@ def _grounded_sections(page: dict[str, str], context: str, config: dict[str, Any
             out.append({"type": kind, "heading": heading[:160], "body": body[:900]})
 
     if "program" in slug:
-        items = _context_items(context, "Programi")
+        items = items_any("Programi", "Programs", "Programmes", "Services")
         if items:
             add("program-list", tr("Programi na terenu", "Programmes in the field"), " • ".join(items[:4]))
         audience = str(config.get("audience") or "")
@@ -309,7 +323,7 @@ def _grounded_sections(page: dict[str, str], context: str, config: dict[str, Any
         add("decision", tr("Izberi raven, ki ti ustreza", "Choose the right level"), purpose or tr("Program izberi glede na izkušnje, skupino in cilj.", "Choose according to experience, group and goal."))
 
     elif "galer" in slug:
-        motifs = _context_items(context, "Predlagani motivi")
+        motifs = items_any("Predlagani motivi", "Suggested motifs", "Suggested imagery", "Visual motifs")
         if motifs:
             add("gallery", tr("Teren, delo in detajli", "Fieldwork and details"), " • ".join(motifs[:8]))
         direction = str(config.get("image_direction") or "")
@@ -319,7 +333,7 @@ def _grounded_sections(page: dict[str, str], context: str, config: dict[str, Any
 
     elif any(token in slug for token in ("kontakt", "contact", "stik")):
         email = str(config.get("contact_email") or "")
-        fields = _context_items(context, "Kontaktni obrazec naj vsebuje")
+        fields = items_any("Kontaktni obrazec naj vsebuje", "Contact form fields", "Contact form should include")
         if email:
             add("contact", tr("Piši nam", "Write to us"), (f"Za vprašanja in povpraševanja: {email}." if sl else f"For questions and enquiries: {email}."))
         if fields:
@@ -327,17 +341,17 @@ def _grounded_sections(page: dict[str, str], context: str, config: dict[str, Any
         add("next-step", tr("Povej nam, kaj želiš organizirati", "Tell us what you want to organise"), purpose or tr("Pošlji osnovne informacije in odgovorili bomo z naslednjim korakom.", "Send the essentials and we will respond with the next step."))
 
     elif slug in {"o-nas", "onas", "about", "o nas"} or "nas" in slug:
-        text = _context_text_after(context, "Tekst", 900)
+        text = text_after_any("Tekst", "Text", "About text", limit=900)
         if text:
             add("story", site_name, text)
         add("principles", tr("Kaj je v središču našega dela", "What guides the work"), purpose or str(config.get("goal") or ""))
         add("trust", tr("Samo preverljive informacije", "Only verifiable information"), tr("Predstavljamo samo preverljive informacije iz briefa, brez izmišljenih certifikatov, nagrad ali partnerjev.", "We present only verifiable information from the brief, without invented certificates, awards or partners."))
 
     elif "pristop" in slug or "approach" in slug:
-        messages = _context_items(context, "Ključna sporočila")
+        messages = items_any("Ključna sporočila", "Key messages", "Key points")
         if messages:
             add("principles", tr("Kako delamo na terenu", "How we work in the field"), " • ".join(messages[:5]))
-        structure = _context_text_after(context, "Predlagana struktura", 500)
+        structure = text_after_any("Predlagana struktura", "Suggested structure", "Process", limit=500)
         if structure:
             add("process", tr("Od opazovanja do samostojne uporabe", "From observation to independent use"), structure)
         add("outcome", tr("Cilj je dobra presoja", "The outcome is sound judgement"), purpose or tr("Praksa, razumevanje in ponavljanje gradijo samozavest.", "Practice, understanding and repetition build confidence."))
@@ -354,15 +368,15 @@ def _grounded_sections(page: dict[str, str], context: str, config: dict[str, Any
             add("audience", tr("Za koga je namenjeno", "Who it is for"), audience)
 
     # Generic extraction fills any remaining slots from labelled brief blocks.
-    for marker, heading, kind in (
-        ("Ključna sporočila", tr("Ključne točke", "Key points"), "key-points"),
-        ("Vsebinski poudarki", tr("Kaj je pomembno", "What matters"), "highlights"),
-        ("Namen", tr("Namen strani", "Purpose of this page"), "purpose"),
+    for markers, heading, kind in (
+        (("Ključna sporočila", "Key messages", "Key points"), tr("Ključne točke", "Key points"), "key-points"),
+        (("Vsebinski poudarki", "Content highlights", "Highlights"), tr("Kaj je pomembno", "What matters"), "highlights"),
+        (("Namen", "Purpose"), tr("Namen strani", "Purpose of this page"), "purpose"),
     ):
         if len(out) >= 3:
             break
-        items = _context_items(context, marker)
-        body = " • ".join(items[:6]) if items else _context_text_after(context, marker, 800)
+        items = items_any(*markers)
+        body = " • ".join(items[:6]) if items else text_after_any(*markers, limit=800)
         if body:
             add(kind, heading, body)
 
