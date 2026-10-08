@@ -17,9 +17,10 @@ from typing import Any
 from fastapi import Depends
 
 import api.main as core
+import api.robust_generation as robust_generation
 
 _BASE_AI_AUDIT = core.ai_audit
-GATE_VERSION = "quality-originality-v2"
+GATE_VERSION = "quality-originality-v3"
 HIGH_SIMILARITY = 0.93
 MEDIUM_SIMILARITY = 0.82
 
@@ -309,6 +310,80 @@ def _cross_page_copy_issues(html_files: dict[str, str]) -> list[dict[str, str]]:
     return issues
 
 
+def _coverage_anchor(item: str) -> str:
+    text = re.sub(r"\s+", " ", str(item or "")).strip(" -•")
+    # Programme/list items commonly contain a short title followed by a
+    # description. Prefer the title portion where possible.
+    text = re.split(r"\s+[–—:-]\s+|[.!?]\s+", text, maxsplit=1)[0].strip()
+    words = re.findall(r"[A-Za-zÀ-ž0-9]+", text, re.UNICODE)
+    return " ".join(words[:5]).strip()
+
+
+def _brief_coverage_issues(files: dict[str, Any], config: dict[str, Any]) -> tuple[list[dict[str, str]], dict[str, Any]]:
+    contexts = robust_generation._extract_page_contexts(config)
+    pages = robust_generation._configured_pages(config)
+    checks: list[dict[str, Any]] = []
+    issues: list[dict[str, str]] = []
+
+    marker_sets = {
+        "program": ("Programi",),
+        "galer": ("Predlagani motivi",),
+        "gallery": ("Predlagani motivi",),
+        "pristop": ("Ključna sporočila",),
+        "approach": ("Ključna sporočila",),
+        "kontakt": ("Kontaktni obrazec naj vsebuje",),
+        "contact": ("Kontaktni obrazec naj vsebuje",),
+    }
+
+    for page in pages:
+        slug = str(page.get("slug") or "index")
+        context = contexts.get(slug, "")
+        folded_slug = robust_generation._fold_text(slug)
+        markers: tuple[str, ...] = ()
+        for token, candidates in marker_sets.items():
+            if token in folded_slug:
+                markers = candidates
+                break
+        if not markers or not context:
+            continue
+
+        expected: list[str] = []
+        for marker in markers:
+            for item in robust_generation._context_items(context, marker):
+                anchor = _coverage_anchor(item)
+                if len(anchor) >= 3 and anchor not in expected:
+                    expected.append(anchor)
+        if not expected:
+            continue
+
+        path = "index.html" if slug == "index" else f"{slug}.html"
+        source = str(files.get(path) or "")
+        visible = _clean_visible(_main_content_for_uniqueness(source))
+        found = [anchor for anchor in expected if _clean_visible(anchor) in visible]
+        ratio = len(found) / len(expected) if expected else 1.0
+        checks.append({
+            "page": path,
+            "expected": expected[:10],
+            "found": found[:10],
+            "coverage": round(ratio, 3),
+        })
+        required = 1.0 if len(expected) <= 4 else 0.75
+        if ratio < required:
+            missing = [anchor for anchor in expected if anchor not in found]
+            issues.append(_issue(
+                "high",
+                "BRIEF_NAMED_CONTENT_MISSING",
+                path,
+                f"Only {len(found)}/{len(expected)} named brief items are present on the page. Missing: {', '.join(missing[:4])}.",
+            ))
+
+    overall = (
+        sum(float(item["coverage"]) for item in checks) / len(checks)
+        if checks else 1.0
+    )
+    return issues, {"score": round(overall, 3), "pages": checks}
+
+
 def _anti_slop_issues(files: dict[str, Any], config: dict[str, Any]) -> list[dict[str, str]]:
     issues: list[dict[str, str]] = []
     brief = json.dumps(config, ensure_ascii=False).lower()
@@ -371,6 +446,8 @@ async def ai_audit(files: dict[str, str], config: dict[str, Any]) -> dict[str, A
     base = await _BASE_AI_AUDIT(files, config)
     issues = list(base.get("issues") or [])
     issues.extend(_anti_slop_issues(files, config))
+    coverage_issues, brief_coverage = _brief_coverage_issues(files, config)
+    issues.extend(coverage_issues)
     originality_issues, originality = _originality_issues(files, config)
     issues.extend(originality_issues)
 
@@ -391,6 +468,7 @@ async def ai_audit(files: dict[str, str], config: dict[str, Any]) -> dict[str, A
         "issues": unique,
         "quality_floor": GATE_VERSION,
         "originality": originality,
+        "brief_coverage": brief_coverage,
     }
 
 
