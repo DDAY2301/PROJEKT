@@ -423,7 +423,15 @@ def _enforce_plan_uniqueness(
                 seen_headings.add(heading)
             if len(body) >= 70:
                 seen_bodies.add(body)
-        out.append({**page, "sections": sections})
+
+        meta = str(page.get("meta_description") or "").strip()
+        purpose = str(page.get("purpose") or "").strip()
+        if sections and (not meta or _fold_text(meta) == _fold_text(purpose)):
+            public_body = str(sections[0].get("body") or "").replace("•", " — ")
+            public_body = re.sub(r"\s+", " ", public_body).strip()
+            if public_body:
+                meta = public_body[:155]
+        out.append({**page, "meta_description": meta[:160], "sections": sections})
     return out
 
 
