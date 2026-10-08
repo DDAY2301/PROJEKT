@@ -435,6 +435,23 @@ def decide(state: dict[str, Any], runtime: dict[str, Any] | None = None) -> Type
             return TypedDecision("wait", 0.99, 5, False, "model_backend_offline", 120)
         if state.get("repository_ready") and not state.get("public_live") and severe == 0 and not state.get("payment_blocked"):
             return TypedDecision("retry_publish", 0.93, 4, True, "repository_ready_not_live", 90)
+
+        editorial_codes = {
+            "DUPLICATE_BODY_COPY",
+            "REPEATED_SECTION_HEADING",
+            "CROSS_PAGE_DUPLICATE_COPY",
+            "CROSS_PAGE_REPEATED_HEADING",
+            "AI_SLOP_DENSITY",
+            "GENERIC_MARKETING_PHRASE",
+            "DESIGN_NEAR_DUPLICATE",
+        }
+        # Rebuilding the same brief several times with the same deterministic
+        # design seed does not improve editorial/originality failures. Allow one
+        # regeneration after the initial build, then stop instead of burning
+        # three more full model/Chromium cycles.
+        if codes & editorial_codes and recovery_count >= 1:
+            return TypedDecision("human_review", 0.99, 7, False, "editorial_quality_circuit_open", 1800)
+
         return TypedDecision("retry_build", 0.92, 5 if severe else 4, True, "quality_retry", 120)
 
     return TypedDecision("human_review", 0.9, 6, False, "unknown_project_state", 1800)
