@@ -60,7 +60,39 @@ def run() -> int:
                     print(f"  -> {issue.get('file', '?')}: {issue.get('code')}")
         else:
             print(f"PASS: {config['name']}: {len(files)} pages; no repeated editorial blocks")
-    print(f"EDITORIAL PREFLIGHT: {10 - failed}/10 passed")
+    # Model-generated page meta can be identical even when all section bodies
+    # are unique. The ordinary fallback-only check above cannot catch this.
+    # Exercise the final renderer with a realistic shared hero description.
+    config = payload(expand(10)[1])
+    spec = robust._fallback_spec(config)
+    if len(spec["pages"]) >= 3:
+        shared = (
+            "A carefully assembled introduction to the organization and its work "
+            "that could appear unchanged across several model-planned pages "
+            "unless the renderer checks other pages before selecting hero copy."
+        )
+        spec["pages"][1]["meta_description"] = shared
+        spec["pages"][2]["meta_description"] = shared
+        first = premium._hero_lead(config, spec, spec["pages"][1])
+        second = premium._hero_lead(config, spec, spec["pages"][2])
+        collision_files = {
+            ("index.html" if p["slug"] == "index" else f"{p['slug']}.html"):
+                premium._render_page(config, spec, p, i)
+            for i, p in enumerate(spec["pages"])
+        }
+        collisions = {
+            issue["code"] for issue in quality._cross_page_copy_issues(collision_files)
+        }
+        if shared in (first, second) or "CROSS_PAGE_DUPLICATE_COPY" in collisions:
+            failed += 1
+            print(f"FAIL: model-planned shared hero description: {sorted(collisions)}")
+        else:
+            print("PASS: model-planned shared hero description is not repeated")
+    else:
+        failed += 1
+        print("FAIL: insufficient pages for shared-hero regression")
+
+    print(f"EDITORIAL PREFLIGHT: {11 - failed}/11 passed")
     return 1 if failed else 0
 
 
