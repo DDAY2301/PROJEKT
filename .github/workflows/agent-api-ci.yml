@@ -625,6 +625,160 @@ jobs:
           assert 'vision_error' in source
           print('Browser advisory release-floor checks passed')
           PY
+      - name: Validate rich-brief unique website regression
+        run: |
+          python - <<'PY'
+          from api import brief_import
+          from api import premium_generation as premium
+          from api import quality_originality_v2 as originality
+          from api import robust_generation as robust
+          from api import visual_qa
+
+          brief = """IME PROJEKTA:
+          ALPINE FIELD LAB
+
+          ORGANIZACIJA:
+          Alpine Field Lab
+
+          ZAHTEVANE STRANI:
+          1. DOMOV
+          Namen:
+          Močan prvi vtis in jasna predstavitev.
+
+          2. PROGRAMI
+          Namen:
+          Predstaviti različne programe.
+          Programi:
+          - Osnovni teren
+            Za začetnike z osnovami zavetja, vode in ognja.
+          - Vikend v naravi
+            Dvodnevni praktični program.
+          - Napredni teren
+            Za ljudi z osnovnim znanjem.
+          - Skupinski program
+            Za zaključene skupine in organizacije.
+
+          3. PRISTOP
+          Ključna sporočila:
+          - učimo skozi prakso
+          - razložimo zakaj nekaj deluje
+          Predlagana struktura:
+          Opazuj → Razumi → Poskusi → Ponovi → Uporabi samostojno
+
+          4. O NAS
+          Tekst:
+          Alpine Field Lab je praktično usmerjen outdoor studio.
+
+          5. GALERIJA
+          Predlagani motivi:
+          - gozd in teren
+          - postavljanje zavetja
+          - orientacija z zemljevidom
+          - delo z vrvmi
+
+          6. KONTAKT
+          Kontaktni obrazec naj vsebuje:
+          - ime
+          - email
+          - kateri program te zanima
+          - okvirno število oseb
+          - sporočilo
+
+          DODATNE ZAHTEVE:
+          Ne izmišljaj telefonske številke.
+          """
+
+          raw = {
+              "name": "ALPINE FIELD LAB",
+              "organization": "Alpine Field Lab",
+              "package": "Standard",
+              "programme": "Outdoor education studio",
+              "goal": "Praktični outdoor programi in učenje na terenu.",
+              "audience": "odrasli začetniki, družine, skupine in organizacije",
+              "tone": "naraven, profesionalen, neposreden",
+              "contact_email": "hello@alpinefieldlab.si",
+              "custom_requirements": "Ne izmišljaj telefonske številke.",
+              "pages": [
+                  {"title":"Domov","purpose":"Močan prvi vtis in jasna predstavitev."},
+                  {"title":"Programi","purpose":"Predstaviti različne programe."},
+                  {"title":"Pristop","purpose":"Razložiti način dela."},
+                  {"title":"O nas","purpose":"Predstaviti identiteto studia."},
+                  {"title":"Galerija","purpose":"Vizualno prikazati občutek programa."},
+                  {"title":"Kontakt","purpose":"Preprost kontaktni zaključek."},
+              ],
+          }
+          normalised = brief_import._normalise(raw, brief)
+          assert "[CELOTEN IZVORNI BRIEF]" in normalised["custom_requirements"]
+          normalised["language"] = "sl"
+          # Builder supplies slugs; mirror that production shape.
+          normalised["pages"] = [
+              {"slug":"index","title":"Domov","purpose":"Močan prvi vtis in jasna predstavitev."},
+              {"slug":"programi","title":"Programi","purpose":"Predstaviti različne programe."},
+              {"slug":"pristop","title":"Pristop","purpose":"Razložiti način dela."},
+              {"slug":"o-nas","title":"O nas","purpose":"Predstaviti identiteto studia."},
+              {"slug":"galerija","title":"Galerija","purpose":"Vizualno prikazati občutek programa."},
+              {"slug":"kontakt","title":"Kontakt","purpose":"Preprost kontaktni zaključek."},
+          ]
+
+          contexts = robust._extract_page_contexts(normalised)
+          assert "Osnovni teren" in contexts["programi"], contexts["programi"]
+          assert "Vikend v naravi" in contexts["programi"]
+          assert "postavljanje zavetja" in contexts["galerija"]
+          assert "okvirno število oseb" in contexts["kontakt"]
+
+          program_sections = robust._grounded_sections(
+              normalised["pages"][1], contexts["programi"], normalised
+          )
+          joined = " ".join(str(x.get("body") or "") for x in program_sections)
+          assert "Osnovni teren" in joined
+          assert "Napredni teren" in joined
+
+          generic = [
+              {"type":"text","heading":"Značilnosti","body":"Kratek generičen opis strani, ki ni dovolj specifičen za dejanski brief."},
+              {"type":"text","heading":"Prednosti","body":"Še en generičen opis brez imen programov ali vsebinskih sidrišč iz briefa."},
+              {"type":"text","heading":"Način dela","body":"Tretji splošen opis, ki ne uporablja konkretnih dejstev iz briefa."},
+          ]
+          weak_page = {**normalised["pages"][1], "meta_description":"", "sections":generic}
+          fixed = robust._enforce_plan_uniqueness([weak_page], normalised, contexts)[0]
+          fixed_text = " ".join(str(s.get("body") or "") for s in fixed["sections"])
+          assert "Osnovni teren" in fixed_text
+
+          spec = {
+              "site_name":"Alpine Field Lab",
+              "pages":[
+                  {**p, "meta_description":p["purpose"], "sections":robust._grounded_sections(p, contexts[p["slug"]], normalised)}
+                  for p in normalised["pages"]
+              ],
+              "design_system":{"motif":"outdoor_field","composition":"rail"},
+          }
+          home = premium._render_page(normalised, spec, spec["pages"][0], 0)
+          contact = premium._render_page(normalised, spec, spec["pages"][5], 5)
+          gallery = premium._render_page(normalised, spec, spec["pages"][4], 4)
+
+          assert 'class="brand-mark">AF<' in home
+          assert "Discover more" not in home
+          assert "More of the story." not in home
+          assert 'href="programi.html"' in home
+          assert 'class="contact-form reveal"' in contact
+          assert "Pošlji povpraševanje" in contact
+          assert 'class="gallery-grid"' in gallery
+
+          repeated = (
+              "To je namensko dovolj dolg ponovljen vsebinski odstavek, ki se ne sme pojaviti "
+              "na več različnih straneh, ker bi tak rezultat deloval kot generična predloga."
+          )
+          duplicate_files = {
+              "a.html": f"<main><section><p>{repeated}</p></section></main>",
+              "b.html": f"<main><section><p>{repeated}</p></section></main>",
+          }
+          codes = {i["code"] for i in originality._cross_page_copy_issues(duplicate_files)}
+          assert "CROSS_PAGE_DUPLICATE_COPY" in codes
+
+          metric_script = visual_qa._metric_script()
+          assert "backgroundImage" in metric_script
+          assert "backgroundImage !== 'none'" in metric_script
+          print("Rich-brief uniqueness regression checks passed")
+          PY
       - name: Validate release quality gate
         env:
           APP_SECRET: ci-only-secret
@@ -867,6 +1021,11 @@ jobs:
           test -f api/design_engine_v2.py
           test -f api/production_queue.py
           test -f api/production_lifecycle.py
+          grep -q '_extract_page_contexts' api/robust_generation.py
+          grep -q '_grounded_sections' api/robust_generation.py
+          grep -q '_cross_page_copy_issues' api/quality_originality_v2.py
+          grep -q 'contact-form' api/premium_generation.py
+          grep -q 'backgroundImage' api/visual_qa.py
           test -f api/preflight.py
           grep -q 'MAX_ACTIVE_PROJECTS_PER_USER' api/billing_gate.py
           grep -q 'benchmark_repo_isolation' api/capabilities.py
