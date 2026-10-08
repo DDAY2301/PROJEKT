@@ -869,6 +869,77 @@ jobs:
 
           print('Editorial uniqueness production-floor checks passed')
           PY
+      - name: Validate bilingual rich brief grounding
+        run: |
+          python - <<'PY'
+          from api import robust_generation as robust
+          from api import quality_originality_v2 as quality
+
+          cfg = {
+              'name':'Field Lab',
+              'organization':'Field Lab',
+              'package':'Standard',
+              'language':'English',
+              'pages':[
+                  {'slug':'index','title':'Home','purpose':'Introduce the studio.'},
+                  {'slug':'programmes','title':'Programmes','purpose':'Help visitors choose.'},
+                  {'slug':'approach','title':'Approach','purpose':'Explain the method.'},
+                  {'slug':'gallery','title':'Gallery','purpose':'Show the field experience.'},
+                  {'slug':'contact','title':'Contact','purpose':'Start an enquiry.'},
+              ],
+              'custom_requirements': '''[CELOTEN IZVORNI BRIEF]
+2. PROGRAMMES
+Programmes:
+- Foundation Field — For beginners.
+- Weekend Field — Two-day practical format.
+- Advanced Field — For experienced participants.
+
+3. APPROACH
+Key messages:
+- learn through practice
+- explain why methods work
+- adapt to weather and terrain
+Suggested structure:
+Observe → Understand → Try → Repeat → Apply
+
+4. GALLERY
+Suggested motifs:
+- woodland terrain
+- shelter building
+- map navigation
+
+5. CONTACT
+Contact form fields:
+- name
+- email
+- programme
+- group size
+- message
+'''
+          }
+          contexts = robust._extract_page_contexts(cfg)
+          sections = robust._grounded_sections(cfg['pages'][1], contexts['programmes'], cfg)
+          text = ' '.join(str(s.get('heading',''))+' '+str(s.get('body','')) for s in sections)
+          assert 'Foundation Field' in text
+          assert 'Weekend Field' in text
+
+          approach = robust._grounded_sections(cfg['pages'][2], contexts['approach'], cfg)
+          joined = ' '.join(str(s.get('body','')) for s in approach)
+          assert 'learn through practice' in joined
+          assert 'Observe' in joined
+
+          files = {
+              'programmes.html':'<main><p>Foundation Field</p><p>Weekend Field</p><p>Advanced Field</p></main>',
+              'approach.html':'<main><p>learn through practice</p><p>explain why methods work</p><p>adapt to weather and terrain</p></main>',
+              'gallery.html':'<main><p>woodland terrain</p><p>shelter building</p><p>map navigation</p></main>',
+              'contact.html':'<main><p>name email programme group size message</p></main>',
+              'index.html':'<main><p>Field Lab</p></main>',
+          }
+          issues, coverage = quality._brief_coverage_issues(files, cfg)
+          assert not issues, issues
+          assert coverage['score'] == 1.0, coverage
+          print('Bilingual rich-brief grounding checks passed')
+          PY
       - name: Validate release quality gate
         env:
           APP_SECRET: ci-only-secret
