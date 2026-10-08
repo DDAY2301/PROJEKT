@@ -762,7 +762,18 @@ jobs:
           assert 'href="programi.html"' in home
           assert 'class="contact-form reveal"' in contact
           assert "Pošlji povpraševanje" in contact
+          assert "kateri program te zanima" in contact.lower()
+          assert "okvirno število oseb" in contact.lower()
           assert 'class="gallery-grid"' in gallery
+
+          rendered_files = {
+              ("index.html" if p["slug"] == "index" else f"{p['slug']}.html"):
+                  premium._render_page(normalised, spec, p, idx)
+              for idx, p in enumerate(spec["pages"])
+          }
+          coverage_issues, coverage_report = originality._brief_coverage_issues(rendered_files, normalised)
+          assert not coverage_issues, coverage_issues
+          assert coverage_report["score"] == 1.0, coverage_report
 
           repeated = (
               "To je namensko dovolj dolg ponovljen vsebinski odstavek, ki se ne sme pojaviti "
