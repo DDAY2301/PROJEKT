@@ -206,7 +206,7 @@ def _page_kind(page: dict[str, Any]) -> str:
         return "contact"
     if any(x in low for x in ("galer", "gallery")):
         return "gallery"
-    if any(x in low for x in ("program", "service", "storitev", "ponud")):
+    if any(x in low for x in ("program", "service", "storitev", "ponud", "tecaj", "course", "training")):
         return "programs"
     if any(x in low for x in ("pristop", "approach", "process", "metod")):
         return "approach"
@@ -469,7 +469,11 @@ def _lead_repeats_editorial_copy(candidate: str, spec: dict[str, Any], page: dic
     current_slug = str(page.get("slug") or "")
     # Hero and section prose on the same page should not duplicate either.
     for section in page.get("sections") or []:
-        if isinstance(section, dict) and key == base._fold_text(section.get("body")):
+        if isinstance(section, dict) and any(
+            key == base._fold_text(copy) for copy in (
+                section.get("body"), *_sentences(section.get("body"), 4)
+            )
+        ):
             return True
     home_lead = _text(config.get("hero_subtitle"), _text(config.get("goal")))
     if current_slug != "index" and key == base._fold_text(home_lead):
@@ -481,7 +485,11 @@ def _lead_repeats_editorial_copy(candidate: str, spec: dict[str, Any], page: dic
             if key == base._fold_text(value):
                 return True
         for section in other.get("sections") or []:
-            if isinstance(section, dict) and key == base._fold_text(section.get("body")):
+            if isinstance(section, dict) and any(
+                key == base._fold_text(copy) for copy in (
+                    section.get("body"), *_sentences(section.get("body"), 4)
+                )
+            ):
                 return True
     return False
 
