@@ -38,6 +38,7 @@ ALIASES = {
     "name": {"ime", "ime projekta", "project name", "naziv", "naziv projekta"},
     "organization": {"organizacija", "podjetje", "organization", "company", "narocnik"},
     "programme": {"program", "program ali dejavnost", "dejavnost", "programme", "service", "storitev", "produkt"},
+    "language": {"jezik", "language", "lang", "jezik strani", "website language"},
     "audience": {"ciljna publika", "ciljna skupina", "publika", "audience", "target audience", "target group"},
     "goal": {"cilj", "glavni cilj", "namen strani", "goal", "website goal", "objective"},
     "tone": {"ton", "ton komunikacije", "tone", "voice"},
@@ -230,6 +231,7 @@ def _normalise(raw: dict[str, Any], source_text: str) -> dict[str, Any]:
         "name": _text(raw.get("name"), 120),
         "organization": _text(raw.get("organization"), 120),
         "programme": _text(raw.get("programme"), 180),
+        "language": _text(raw.get("language"), 80) or ("sl" if re.search(r"\b(domov|kontakt|o nas|programi|pristop|galerija)\b", source_text.lower()) else "en"),
         "audience": _text(raw.get("audience"), 500),
         "goal": goal,
         "tone": _text(raw.get("tone"), 300) or "professional and human",
@@ -254,7 +256,7 @@ def _normalise(raw: dict[str, Any], source_text: str) -> dict[str, Any]:
 
 def _looks_like_project_json(data: Any) -> bool:
     return isinstance(data, dict) and bool(set(data) & {
-        "name", "organization", "goal", "audience", "brand", "pages",
+        "name", "organization", "language", "goal", "audience", "brand", "pages",
         "hero_title", "hero_subtitle", "custom_requirements", "fields",
     })
 
@@ -279,6 +281,7 @@ Return exactly this JSON shape:
   "name": "",
   "organization": "",
   "programme": "",
+  "language": "",
   "audience": "",
   "goal": "",
   "tone": "",
@@ -304,6 +307,7 @@ Rules:
 - Maximum 12 pages.
 - If pages are absent, propose a practical structure.
 - Preserve the user's language and terminology.
+- language must be the explicit requested website language when provided; otherwise infer it conservatively from the document.
 - Put important unmapped instructions into custom_requirements.
 - contact_email must be null unless explicitly present.
 
