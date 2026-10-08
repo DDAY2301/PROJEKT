@@ -357,15 +357,24 @@ def _grounded_sections(page: dict[str, str], context: str, config: dict[str, Any
         add("outcome", tr("Cilj je dobra presoja", "The outcome is sound judgement"), purpose or tr("Praksa, razumevanje in ponavljanje gradijo samozavest.", "Practice, understanding and repetition build confidence."))
 
     else:
-        # Home and unknown page types: use purpose + unique brief facts.
+        # Organisation-wide goal/audience are NOT independent filler sections
+        # on every internal page. On generic pages this was producing the
+        # same H2 and substantial copy across the entire site.
         if purpose:
             add("intro", (f"Zakaj {title}" if sl else f"Why {title}"), purpose)
-        goal = str(config.get("goal") or "")
-        if goal and _fold_text(goal) != _fold_text(purpose):
-            add("goal", tr("Kaj želimo omogočiti", "What this should enable"), goal)
-        audience = str(config.get("audience") or "")
-        if audience:
-            add("audience", tr("Za koga je namenjeno", "Who it is for"), audience)
+        if slug == "index":
+            goal = str(config.get("goal") or "")
+            if goal and _fold_text(goal) != _fold_text(purpose):
+                add("goal", tr("Kaj želimo omogočiti", "What this should enable"), goal)
+            audience = str(config.get("audience") or "")
+            has_program_page = any(
+                "program" in _fold_text(p.get("slug")) or
+                "service" in _fold_text(p.get("slug")) or
+                "storitev" in _fold_text(p.get("slug"))
+                for p in _configured_pages(config)
+            )
+            if audience and not has_program_page:
+                add("audience", tr("Za koga je namenjeno", "Who it is for"), audience)
 
     # Generic extraction fills any remaining slots from labelled brief blocks.
     for markers, heading, kind in (
@@ -452,13 +461,38 @@ def _enforce_plan_uniqueness(
             grounded = _grounded_sections(page, context, config)
             if grounded:
                 sections = grounded
-        for section in sections:
+        # The fallback itself can still repeat headings/body (especially when
+        # every page purpose is derived from a shared global goal). Reconcile
+        # the FINAL section set, never only the initial model plan.
+        resolved: list[dict[str, Any]] = []
+        page_headings: set[str] = set()
+        page_bodies: set[str] = set()
+        title = str(page.get("title") or slug).strip()
+        for raw in sections:
+            section = dict(raw)
             heading = _fold_text(section.get("heading"))
             body = _fold_text(section.get("body"))
-            if heading:
-                seen_headings.add(heading)
+            if not heading or not body:
+                continue
+            if len(body) >= 70 and (body in seen_bodies or body in page_bodies):
+                # Exact repeated paragraphs add no new information. Do not
+                # invent replacement facts merely to reach a section quota.
+                continue
+            if heading in seen_headings or heading in page_headings:
+                # Keep unique page-specific copy, but give it a meaningful,
+                # contextual heading. The original subject remains explicit.
+                qualified = f"{title}: {str(section.get('heading') or '').strip()}"
+                if _fold_text(qualified) in seen_headings | page_headings:
+                    qualified = f"{title}: {str(section.get('type') or 'details').replace('-', ' ')}"
+                section["heading"] = qualified[:160]
+                heading = _fold_text(section["heading"])
+            resolved.append(section)
+            page_headings.add(heading)
             if len(body) >= 70:
-                seen_bodies.add(body)
+                page_bodies.add(body)
+        sections = resolved
+        seen_headings.update(page_headings)
+        seen_bodies.update(page_bodies)
 
         meta = str(page.get("meta_description") or "").strip()
         purpose = str(page.get("purpose") or "").strip()
