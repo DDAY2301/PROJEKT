@@ -227,7 +227,7 @@ def _context_items(context: str, marker: str) -> list[str]:
             current = re.sub(r"^[-*•]\s+", "", stripped).strip()
         else:
             if current:
-                current += " " + stripped
+                current += " — " + stripped
             elif len(stripped) > 2:
                 current = stripped
     if current:
