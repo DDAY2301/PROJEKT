@@ -214,7 +214,17 @@ def _normalise(raw: dict[str, Any], source_text: str) -> dict[str, Any]:
     if not goal:
         goal = next((p.strip() for p in re.split(r"\n\s*\n", source_text) if len(p.strip()) > 25), "")[:1200]
 
-    requirements = _multiline(raw.get("custom_requirements"), 7000) or source_text[:7000].strip()
+    # Keep explicit requirements, but also retain a bounded copy of the original
+    # brief. Rich briefs often contain page-specific material (programme names,
+    # gallery motifs, form fields, process steps) that cannot fit into the
+    # simple title|purpose page control in the browser. The planner can extract
+    # those page blocks later instead of silently losing them during auto-fill.
+    explicit_requirements = _multiline(raw.get("custom_requirements"), 6000)
+    source_excerpt = source_text[:12000].strip()
+    if explicit_requirements and source_excerpt:
+        requirements = (explicit_requirements + "\n\n[CELOTEN IZVORNI BRIEF]\n" + source_excerpt)[:16000]
+    else:
+        requirements = (explicit_requirements or source_excerpt)[:16000]
 
     return {
         "name": _text(raw.get("name"), 120),
