@@ -274,6 +274,7 @@ function payload() {
     organization:$('organization').value.trim(),
     package:$('package').value,
     programme:$('programme').value.trim(),
+    language:$('language').value,
     goal:$('goal').value.trim(),
     audience:$('audience').value.trim(),
     tone:$('tone').value.trim(),
