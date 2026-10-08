@@ -133,13 +133,19 @@ def _candidate_score(name: str, profile: dict[str, Any], text: str) -> int:
 def _select_motif(config: dict[str, Any]) -> tuple[str, str]:
     _ensure_history()
     key = _site_key(config)
+    retry_seed = max(0, min(3, int(config.get("_design_retry_seed") or 0)))
+    existing_motif = ""
+    existing_composition = ""
     with core.db() as con:
         existing = con.execute(
             "SELECT motif,composition FROM design_motif_history WHERE site_key=?",
             (key,),
         ).fetchone()
         if existing and existing["motif"] in MOTIFS:
-            return str(existing["motif"]), str(existing["composition"])
+            existing_motif = str(existing["motif"])
+            existing_composition = str(existing["composition"])
+            if retry_seed == 0:
+                return existing_motif, existing_composition
         rows = con.execute(
             "SELECT motif,composition FROM design_motif_history ORDER BY updated_at DESC LIMIT 120"
         ).fetchall()
@@ -156,10 +162,13 @@ def _select_motif(config: dict[str, Any]) -> tuple[str, str]:
             pool = ranked[:3]
     else:
         pool = list(MOTIFS)
+    if retry_seed and existing_motif in pool and len(pool) > 1:
+        pool = [name for name in pool if name != existing_motif]
+
     minimum_use = min((usage[name] for name in pool), default=0)
     least_used = [name for name in pool if usage[name] == minimum_use]
 
-    digest = hashlib.sha256((key + text[:4000]).encode("utf-8")).hexdigest()
+    digest = hashlib.sha256((key + f"|retry:{retry_seed}|" + text[:4000]).encode("utf-8")).hexdigest()
     motif = sorted(least_used)[int(digest[:8], 16) % len(least_used)]
     combo_usage = Counter(
         str(row["composition"])
@@ -168,6 +177,8 @@ def _select_motif(config: dict[str, Any]) -> tuple[str, str]:
     )
     minimum_combo_use = min((combo_usage[name] for name in COMPOSITIONS), default=0)
     least_used_compositions = [name for name in COMPOSITIONS if combo_usage[name] == minimum_combo_use]
+    if retry_seed and motif == existing_motif and existing_composition in least_used_compositions and len(least_used_compositions) > 1:
+        least_used_compositions = [name for name in least_used_compositions if name != existing_composition]
     composition = sorted(least_used_compositions)[int(digest[8:16], 16) % len(least_used_compositions)]
 
     with core.db() as con:
