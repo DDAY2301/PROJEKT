@@ -511,14 +511,24 @@ async function watch(id) {
     await sleep(3500);
     try {
       const project = await request(`/projects/${id}`);
-      const issues = project.last_audit?.issues || [];
+      const audit = project.last_audit || {};
+      const issues = audit.issues || [];
+      const qa = audit.visual_qa || null;
+      const coverage = audit.brief_coverage || null;
+      const originality = audit.originality || null;
       updatePipeline(project.status);
       const severe = issues.filter(x => ['critical','high'].includes(x.severity)).length;
+      const coveragePct = typeof coverage?.score === 'number' ? Math.round(coverage.score * 100) : null;
+      const similarityPct = typeof originality?.nearest_similarity === 'number' ? Math.round(originality.nearest_similarity * 100) : null;
       const lines = [
         statusLabels[project.status] || project.status,
         `Projekt: ${id}`,
         `GitHub repo: ${project.repo_name || 'še ni ustvarjen'}`,
         `Samodejni popravki: ${project.auto_fix_attempts || 0}`,
+        `Slike: ${audit.uploaded_images ?? 0}`,
+        `Visual QA: ${qa?.score ?? '—'}${qa?.render_count ? ` / ${qa.render_count} renderjev` : ''}`,
+        `Brief coverage: ${coveragePct === null ? '—' : `${coveragePct}%`}`,
+        `Design similarity: ${similarityPct === null ? '—' : `${similarityPct}%`}`,
         `Najdene težave: ${issues.length}${severe ? ` (${severe} pomembnih)` : ''}`
       ];
       if (project.status === 'awaiting_payment') lines.push('', 'Projekt čaka na uspešno Stripe plačilo.');
