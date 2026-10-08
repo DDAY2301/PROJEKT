@@ -455,6 +455,39 @@ def _page_plan_is_weak(sections: list[dict[str, Any]], page: dict[str, str], con
     return False
 
 
+def _de_duplicate_rendered_paragraphs(
+    body: str, used_paragraphs: set[str],
+) -> tuple[str, set[str]]:
+    """Deduplicate the paragraphs the HTML renderer will actually emit.
+
+    A model can put three sentences into one section body, then repeat only
+    the middle sentence on another page. Comparing the complete section body
+    misses this; premium_generation renders each sentence as a separate <p>.
+    Retain the first occurrence of real copy and drop only exact long repeats.
+    The release QA threshold remains unchanged.
+    """
+    raw = re.sub(r"\\s+", " ", str(body or "")).strip()
+    if not raw:
+        return "", set()
+    # Bulleted/list content is rendered as structured cards or list items,
+    # not the standalone editorial paragraphs covered by this guard.
+    if raw.count("•") >= 2 or raw.count("→") >= 2:
+        return raw, set()
+    kept: list[str] = []
+    new_keys: set[str] = set()
+    for part in re.split(r"(?<=[.!?])\\s+", raw):
+        para = part.strip()
+        if not para:
+            continue
+        key = _fold_text(para) if len(para) >= 90 else ""
+        if key and (key in used_paragraphs or key in new_keys):
+            continue
+        kept.append(para)
+        if key:
+            new_keys.add(key)
+    return " ".join(kept), new_keys
+
+
 def _enforce_plan_uniqueness(
     pages: list[dict[str, Any]],
     config: dict[str, Any],
@@ -462,6 +495,12 @@ def _enforce_plan_uniqueness(
 ) -> list[dict[str, Any]]:
     seen_headings: set[str] = set()
     seen_bodies: set[str] = set()
+    # Home hero is emitted as a separate HTML paragraph and may already
+    # contain the sentence a model later reuses on a course/service page.
+    home_lead = str(config.get("hero_subtitle") or config.get("goal") or "").strip()
+    seen_paragraphs: set[str] = {
+        _fold_text(home_lead)
+    } if len(home_lead) >= 90 else set()
     out: list[dict[str, Any]] = []
     for page in pages:
         slug = str(page.get("slug") or "index")
@@ -488,11 +527,16 @@ def _enforce_plan_uniqueness(
         resolved: list[dict[str, Any]] = []
         page_headings: set[str] = set()
         page_bodies: set[str] = set()
+        page_paragraphs: set[str] = set()
         title = str(page.get("title") or slug).strip()
         for raw in sections:
             section = dict(raw)
+            body_copy, body_keys = _de_duplicate_rendered_paragraphs(
+                str(section.get("body") or ""), seen_paragraphs | page_paragraphs,
+            )
+            section["body"] = body_copy
             heading = _fold_text(section.get("heading"))
-            body = _fold_text(section.get("body"))
+            body = _fold_text(body_copy)
             if not heading or not body:
                 continue
             if len(body) >= 70 and (body in seen_bodies or body in page_bodies):
@@ -509,11 +553,13 @@ def _enforce_plan_uniqueness(
                 heading = _fold_text(section["heading"])
             resolved.append(section)
             page_headings.add(heading)
+            page_paragraphs.update(body_keys)
             if len(body) >= 70:
                 page_bodies.add(body)
         sections = resolved
         seen_headings.update(page_headings)
         seen_bodies.update(page_bodies)
+        seen_paragraphs.update(page_paragraphs)
 
         meta = str(page.get("meta_description") or "").strip()
         purpose = str(page.get("purpose") or "").strip()
