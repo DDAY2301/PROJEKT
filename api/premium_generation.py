@@ -65,6 +65,7 @@ _UI = {
         "open": "Odpri stran ↗",
         "next": "Naslednji korak",
         "navigate": "Navigacija",
+        "footer_nav": "Navigacija v nogi",
         "contact": "Kontakt",
         "project": "Projekt",
         "footer_note": "Responsive · dostopno · hitro",
@@ -79,6 +80,7 @@ _UI = {
         "open": "Open page ↗",
         "next": "Next step",
         "navigate": "Navigate",
+        "footer_nav": "Footer navigation",
         "contact": "Contact",
         "project": "Project",
         "footer_note": "Responsive · accessible · lightweight",
@@ -323,6 +325,9 @@ def _render_content_sections(config: dict[str, Any], spec: dict[str, Any], page:
     filtered = [s for s in sections if str(s.get("type") or "").lower() not in {"hero", "cta"}]
     seen_headings: set[str] = set()
     slug = str(page.get("slug") or "index")
+    if not filtered:
+        contexts = base._extract_page_contexts(config)
+        filtered = base._grounded_sections(page, contexts.get(slug, ""), config)
 
     for idx, section in enumerate(filtered[:4]):
         kind = base._fold_text(section.get("type"))
@@ -522,7 +527,7 @@ def _render_page(config: dict[str, Any], spec: dict[str, Any], page: dict[str, A
 <body class="page page-{_e(slug, quote=True)} page-kind-{_page_kind(page)}"><a class="skip" href="#content">{_e(_ui(config, "skip", spec))}</a>
 <header class="site-header"><div class="shell nav"><a class="brand" href="index.html"><span class="brand-mark">{_e(mark)}</span><span>{_e(site_name)}</span></a><button class="menu" type="button" aria-label="{_e(_ui(config, "menu", spec), quote=True)}" aria-expanded="false" aria-controls="navLinks"><span></span><span></span></button><nav id="navLinks" class="nav-links" aria-label="{_e(_ui(config, "primary_nav", spec), quote=True)}">{nav}</nav></div></header>
 <main>{''.join(body)}</main>
-<footer class="site-footer"><div class="shell footer-grid"><div><a class="brand brand-footer" href="index.html"><span class="brand-mark">{_e(mark)}</span><span>{_e(site_name)}</span></a><p>{_e(footer_summary)}</p></div><div><span class="footer-label">{_e(_ui(config, "navigate", spec))}</span><nav class="footer-nav" aria-label="{_e(_ui(config, "navigate", spec), quote=True)}">{nav}</nav></div><div><span class="footer-label">{_e(_ui(config, "contact", spec))}</span>{contact_link or f'<span>{_e(no_contact)}</span>'}</div></div><div class="shell footer-bottom"><span>© {_e(site_name)}</span><span>{_e(_ui(config, "footer_note", spec))}</span></div></footer>
+<footer class="site-footer"><div class="shell footer-grid"><div><a class="brand brand-footer" href="index.html"><span class="brand-mark">{_e(mark)}</span><span>{_e(site_name)}</span></a><p>{_e(footer_summary)}</p></div><div><span class="footer-label">{_e(_ui(config, "navigate", spec))}</span><nav class="footer-nav" aria-label="{_e(_ui(config, "footer_nav", spec), quote=True)}">{nav}</nav></div><div><span class="footer-label">{_e(_ui(config, "contact", spec))}</span>{contact_link or f'<span>{_e(no_contact)}</span>'}</div></div><div class="shell footer-bottom"><span>© {_e(site_name)}</span><span>{_e(_ui(config, "footer_note", spec))}</span></div></footer>
 <script src="assets/site.js" defer></script></body></html>'''
 
 def _css(config: dict[str, Any]) -> str:
