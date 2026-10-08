@@ -142,6 +142,7 @@ def _delivery_manifest(
     config: dict[str, Any],
     visual_report: dict[str, Any],
     originality: dict[str, Any],
+    brief_coverage: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     manifest_files = []
     for path, content in sorted(files.items()):
@@ -166,6 +167,7 @@ def _delivery_manifest(
             "visual_score": visual_report.get("score"),
             "visual_passed": visual_report.get("passed"),
             "originality": originality,
+            "brief_coverage": brief_coverage or {"score": 1.0, "pages": []},
         },
         "design_system": design,
         "file_count": len(manifest_files),
@@ -180,6 +182,7 @@ def _attach_delivery_manifest(
     config: dict[str, Any],
     visual_report: dict[str, Any],
     originality: dict[str, Any],
+    brief_coverage: dict[str, Any] | None = None,
 ) -> None:
     manifest = _delivery_manifest(
         files,
@@ -187,6 +190,7 @@ def _attach_delivery_manifest(
         config=config,
         visual_report=visual_report,
         originality=originality,
+        brief_coverage=brief_coverage,
     )
     files["PROJECT-VISIBILITY-MANIFEST.json"] = json.dumps(manifest, ensure_ascii=False, indent=2)
 
@@ -554,8 +558,9 @@ async def generate_project_observable(project_id: str):
         set_status(project_id, "auditing")
         files, issues, attempts, visual_report = await _quality_cycle(files, config, project_id, uploaded_images)
         final_originality_issues, originality_report = originality_v2._originality_issues(files, config)
+        final_coverage_issues, brief_coverage_report = originality_v2._brief_coverage_issues(files, config)
         known = {(str(i.get("code") or ""), str(i.get("file") or ""), str(i.get("message") or "")) for i in issues}
-        for item in final_originality_issues:
+        for item in final_originality_issues + final_coverage_issues:
             key = (str(item.get("code") or ""), str(item.get("file") or ""), str(item.get("message") or ""))
             if key not in known:
                 issues.append(item)
@@ -570,6 +575,7 @@ async def generate_project_observable(project_id: str):
             config=config,
             visual_report=visual_report,
             originality=originality_report,
+            brief_coverage=brief_coverage_report,
         )
 
         benchmark_mode = bool(config.get("_benchmark_mode"))
@@ -589,6 +595,7 @@ async def generate_project_observable(project_id: str):
                     "payment_stage": "benchmark",
                     "preview_ready": False,
                     "originality": originality_report,
+                    "brief_coverage": brief_coverage_report,
                     "delivery_manifest": {
                         "file_count": len(files),
                         "sha256": hashlib.sha256(
@@ -599,6 +606,7 @@ async def generate_project_observable(project_id: str):
                                     config=config,
                                     visual_report=visual_report,
                                     originality=originality_report,
+                                    brief_coverage=brief_coverage_report,
                                 ),
                                 sort_keys=True,
                             ).encode("utf-8")
@@ -649,6 +657,7 @@ async def generate_project_observable(project_id: str):
                 "quality_gate_passed": _quality_gate_passed(issues, visual_report),
                 "preview_ready": True,
                 "originality": originality_report,
+                "brief_coverage": brief_coverage_report,
             },
         )
         with core.db() as con:
