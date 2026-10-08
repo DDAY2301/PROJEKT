@@ -70,7 +70,7 @@
     const f=(data&&data.fields)||{};
     let count=0;
     if(applyPackage(f.package))count++;
-    const mapping={name:'name',organization:'organization',programme:'programme',audience:'audience',goal:'goal',tone:'tone',hero_title:'heroTitle',hero_subtitle:'heroSubtitle',cta_text:'cta',contact_email:'contact',image_direction:'imageDirection',custom_requirements:'requirements'};
+    const mapping={name:'name',organization:'organization',programme:'programme',language:'language',audience:'audience',goal:'goal',tone:'tone',hero_title:'heroTitle',hero_subtitle:'heroSubtitle',cta_text:'cta',contact_email:'contact',image_direction:'imageDirection',custom_requirements:'requirements'};
     Object.entries(mapping).forEach(function(entry){if(setField(entry[1],f[entry[0]]))count++});
     if(setField('pages',pagesText(f.pages)))count++;
     const brand=f.brand||{};
