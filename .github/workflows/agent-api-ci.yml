@@ -309,7 +309,8 @@ jobs:
               try:
                   result = await robust_generation.ai_audit({'index.html':'<!doctype html><html><body></body></html>'}, {})
                   assert result.get('model_qa_skipped') is True
-                  assert result['issues'][0]['code'] == 'MODEL_QA_ADAPTIVE_SKIP'
+                  assert result['issues'] == []
+                  assert 'deterministic, browser and originality' in result.get('model_qa_note','')
               finally:
                   if old is None:
                       os.environ.pop('MODEL_QA_MODE', None)
