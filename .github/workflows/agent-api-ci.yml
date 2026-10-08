@@ -915,6 +915,12 @@ jobs:
                   assert '<!doctype html>' in html.lower(), (config['name'], path)
                   assert '</html>' in html.lower(), (config['name'], path)
                   assert '<nav' in html.lower(), (config['name'], path)
+              contact = files.get('kontakt.html') or files.get('contact.html')
+              assert contact and 'class="contact-panel"' in contact, config['name']
+              assert 'class="contact-form reveal"' in contact, config['name']
+              # Once all generic contact sections are filtered, the renderer
+              # must not repopulate them with long duplicate brief paragraphs.
+              assert 'content-section' not in contact, config['name']
               assert len(files) >= 4, config['name']
           print('Ten-brief cross-page editorial and document-shell regression passed')
           PY
