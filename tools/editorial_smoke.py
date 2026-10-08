@@ -53,6 +53,11 @@ def run() -> int:
         if len(files) < 4 or codes or structure:
             failed += 1
             print(f"FAIL: {config['name']}: blockers={codes}; bad_shell={structure}")
+            # Include only QA code and affected HTML path. Customer copy is
+            # deliberately not printed into shared console logs.
+            for issue in issues:
+                if issue.get("code") in BLOCKERS:
+                    print(f"  -> {issue.get('file', '?')}: {issue.get('code')}")
         else:
             print(f"PASS: {config['name']}: {len(files)} pages; no repeated editorial blocks")
     print(f"EDITORIAL PREFLIGHT: {10 - failed}/10 passed")
