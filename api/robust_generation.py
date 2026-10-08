@@ -410,7 +410,9 @@ def _grounded_sections(page: dict[str, str], context: str, config: dict[str, Any
 
 
 def _page_plan_is_weak(sections: list[dict[str, Any]], page: dict[str, str], context: str) -> bool:
-    if len(sections) < 3:
+    # Two specific, well-formed sections can be enough for a concise page.
+    # A rich detailed brief still deserves three or more authored sections.
+    if len(sections) < 2 or (len(sections) < 3 and len(context.strip()) >= 120):
         return True
     headings = [_fold_text(s.get("heading")) for s in sections if isinstance(s, dict)]
     bodies = [_fold_text(s.get("body")) for s in sections if isinstance(s, dict)]
@@ -465,10 +467,13 @@ def _enforce_plan_uniqueness(
                 cross_duplicate = True
             if len(body) >= 70 and body in seen_bodies:
                 cross_duplicate = True
-        if _page_plan_is_weak(sections, page, context) or cross_duplicate:
+        if _page_plan_is_weak(sections, page, context):
             grounded = _grounded_sections(page, context, config)
             if grounded:
                 sections = grounded
+        # A repeated heading or one duplicated paragraph must not discard
+        # three otherwise distinctive, model-authored sections. The final
+        # reconciliation below handles those individual conflicts.
         # The fallback itself can still repeat headings/body (especially when
         # every page purpose is derived from a shared global goal). Reconcile
         # the FINAL section set, never only the initial model plan.
