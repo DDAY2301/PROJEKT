@@ -37,17 +37,17 @@ DEFAULT_BRAND = {
 ALIASES = {
     "name": {"ime", "ime projekta", "project name", "naziv", "naziv projekta"},
     "organization": {"organizacija", "podjetje", "organization", "company", "narocnik"},
-    "programme": {"program", "program ali dejavnost", "dejavnost", "programme", "service", "storitev", "produkt"},
+    "programme": {"program", "program ali dejavnost", "program / vrsta", "program/vrsta", "vrsta programa", "dejavnost", "programme", "project type", "service", "storitev", "produkt"},
     "language": {"jezik", "language", "lang", "jezik strani", "website language"},
     "audience": {"ciljna publika", "ciljna skupina", "publika", "audience", "target audience", "target group"},
-    "goal": {"cilj", "glavni cilj", "namen strani", "goal", "website goal", "objective"},
+    "goal": {"cilj", "glavni cilj", "glavni cilj spletne strani", "namen strani", "namen spletne strani", "goal", "website goal", "objective"},
     "tone": {"ton", "ton komunikacije", "tone", "voice"},
     "package": {"paket", "package"},
     "hero_title": {"hero naslov", "glavni naslov", "hero title", "headline"},
     "hero_subtitle": {"hero podnaslov", "podnaslov", "hero subtitle", "subtitle"},
     "cta_text": {"cta", "cta gumb", "poziv k dejanju", "button", "call to action"},
     "contact_email": {"kontakt", "kontaktni email", "kontaktni e-mail", "email", "e-mail", "contact email"},
-    "image_direction": {"smer fotografij", "smer slik", "fotografije", "image direction", "visual imagery"},
+    "image_direction": {"smer fotografij", "smer slik", "smer fotografij / slik", "smer fotografij/slik", "fotografije", "image direction", "visual imagery"},
     "custom_requirements": {"dodatne zahteve", "zahteve", "requirements", "notes", "opombe"},
     "primary_color": {"primarna barva", "primary color"},
     "secondary_color": {"sekundarna barva", "poudarek", "accent color", "secondary color"},
@@ -55,7 +55,7 @@ ALIASES = {
     "text_color": {"barva besedila", "text color"},
     "font_style": {"font", "slog pisave", "font style", "tipografija", "typography"},
     "mood": {"vizualna smer", "mood", "look", "style", "stil"},
-    "pages": {"strani", "zelene strani", "pages", "sitemap", "site map"},
+    "pages": {"strani", "zelene strani", "zelene strani", "želene strani", "zahtevane strani", "struktura strani", "pages", "required pages", "requested pages", "sitemap", "site map"},
 }
 
 
