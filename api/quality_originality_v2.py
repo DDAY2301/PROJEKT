@@ -237,7 +237,7 @@ def _copy_tokens(value: str) -> set[str]:
         # Long content words are reduced to a stable lexical stem. This catches
         # ordinary inflection/paraphrase changes such as skupina/skupinam or
         # uporabljati/uporabljajo without needing a language-specific NLP model.
-        out.add(token[:6] if len(token) >= 8 else token)
+        out.add(token[:5] if len(token) >= 7 else token)
     return out
 
 
