@@ -9,6 +9,7 @@ component library to remain consistent.
 from __future__ import annotations
 
 import hashlib
+import html as html_lib
 import json
 import re
 from typing import Any
@@ -200,6 +201,70 @@ def _originality_issues(files: dict[str, Any], config: dict[str, Any]) -> tuple[
     }
 
 
+
+def _main_content_for_uniqueness(source: str) -> str:
+    main = re.search(r"<main\b[^>]*>(.*?)</main>", source, re.I | re.S)
+    value = main.group(1) if main else source
+    # Shared discovery/CTA modules are intentionally reusable chrome and should
+    # not pollute the editorial cross-page uniqueness measurement.
+    value = re.sub(
+        r'<section\b[^>]*class="[^"]*\b(?:related-section|final-cta)\b[^"]*"[^>]*>.*?</section>',
+        " ",
+        value,
+        flags=re.I | re.S,
+    )
+    value = re.sub(r"<script\b.*?</script>|<style\b.*?</style>", " ", value, flags=re.I | re.S)
+    return value
+
+
+def _clean_visible(value: str) -> str:
+    value = re.sub(r"<[^>]+>", " ", value)
+    value = html_lib.unescape(value)
+    return re.sub(r"\s+", " ", value).strip().lower()
+
+
+def _cross_page_copy_issues(html_files: dict[str, str]) -> list[dict[str, str]]:
+    paragraph_pages: dict[str, set[str]] = {}
+    heading_pages: dict[str, set[str]] = {}
+
+    for path, source in html_files.items():
+        main = _main_content_for_uniqueness(source)
+        for raw in re.findall(r"<p\b[^>]*>(.*?)</p>", main, re.I | re.S):
+            text = _clean_visible(raw)
+            if len(text) >= 90:
+                paragraph_pages.setdefault(text, set()).add(path)
+        for raw in re.findall(r"<h2\b[^>]*>(.*?)</h2>", main, re.I | re.S):
+            text = _clean_visible(raw)
+            if len(text) >= 5:
+                heading_pages.setdefault(text, set()).add(path)
+
+    issues: list[dict[str, str]] = []
+    repeated_paragraphs = [
+        (text, pages) for text, pages in paragraph_pages.items() if len(pages) >= 2
+    ]
+    if repeated_paragraphs:
+        text, pages = sorted(repeated_paragraphs, key=lambda item: (-len(item[1]), item[0]))[0]
+        issues.append(_issue(
+            "high",
+            "CROSS_PAGE_DUPLICATE_COPY",
+            sorted(pages)[0],
+            f"Substantial body copy is repeated across {len(pages)} pages ({', '.join(sorted(pages)[:4])}); each page needs its own brief-grounded narrative.",
+        ))
+
+    repeated_headings = [
+        (text, pages) for text, pages in heading_pages.items() if len(pages) >= 3
+    ]
+    if repeated_headings:
+        text, pages = sorted(repeated_headings, key=lambda item: (-len(item[1]), item[0]))[0]
+        issues.append(_issue(
+            "high",
+            "CROSS_PAGE_REPEATED_HEADING",
+            sorted(pages)[0],
+            f'Section heading "{text[:80]}" is reused across {len(pages)} pages; this makes the site feel templated.',
+        ))
+    return issues
+
+
 def _anti_slop_issues(files: dict[str, Any], config: dict[str, Any]) -> list[dict[str, str]]:
     issues: list[dict[str, str]] = []
     brief = json.dumps(config, ensure_ascii=False).lower()
@@ -240,6 +305,8 @@ def _anti_slop_issues(files: dict[str, Any], config: dict[str, Any]) -> list[dic
                 path,
                 "The same substantial paragraph appears more than once on the page.",
             ))
+
+    issues.extend(_cross_page_copy_issues(html_files))
 
     unique_hits = sorted(set(hits))
     if len(unique_hits) >= 3:
