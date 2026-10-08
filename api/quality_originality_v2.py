@@ -330,13 +330,13 @@ def _brief_coverage_issues(files: dict[str, Any], config: dict[str, Any]) -> tup
     issues: list[dict[str, str]] = []
 
     marker_sets = {
-        "program": ("Programi",),
-        "galer": ("Predlagani motivi",),
-        "gallery": ("Predlagani motivi",),
-        "pristop": ("Ključna sporočila",),
-        "approach": ("Ključna sporočila",),
-        "kontakt": ("Kontaktni obrazec naj vsebuje",),
-        "contact": ("Kontaktni obrazec naj vsebuje",),
+        "program": ("Programi", "Programs", "Programmes", "Services"),
+        "galer": ("Predlagani motivi", "Suggested motifs", "Suggested imagery", "Visual motifs"),
+        "gallery": ("Predlagani motivi", "Suggested motifs", "Suggested imagery", "Visual motifs"),
+        "pristop": ("Ključna sporočila", "Key messages", "Key points"),
+        "approach": ("Ključna sporočila", "Key messages", "Key points"),
+        "kontakt": ("Kontaktni obrazec naj vsebuje", "Contact form fields", "Contact form should include"),
+        "contact": ("Kontaktni obrazec naj vsebuje", "Contact form fields", "Contact form should include"),
     }
 
     for page in pages:
