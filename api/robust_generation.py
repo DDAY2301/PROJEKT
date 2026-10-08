@@ -310,7 +310,15 @@ def _grounded_sections(page: dict[str, str], context: str, config: dict[str, Any
     def add(kind: str, heading: str, body: str) -> None:
         heading = re.sub(r"\s+", " ", heading).strip()
         body = re.sub(r"\s+", " ", body).strip()
-        if heading and body and all(_fold_text(x.get("heading")) != _fold_text(heading) for x in out):
+        # A brief label can describe the same purpose as an earlier section.
+        # Prevent the duplicate at its source, including shorter paragraphs
+        # which the release duplicate-copy gate does not otherwise flag.
+        heading_key, body_key = _fold_text(heading), _fold_text(body)
+        if heading and body and all(
+            _fold_text(x.get("heading")) != heading_key
+            and _fold_text(x.get("body")) != body_key
+            for x in out
+        ):
             out.append({"type": kind, "heading": heading[:160], "body": body[:900]})
 
     if any(token in slug for token in ("program", "service", "storitev", "tecaj", "course", "paket", "package")):
