@@ -934,6 +934,41 @@ jobs:
           assert coverage['score'] == 1.0, coverage
           print('Bilingual rich-brief grounding checks passed')
           PY
+      - name: Validate brief language and named-content pipeline
+        run: |
+          python - <<'PY'
+          from api import brief_import
+
+          text = """IME PROJEKTA:
+ALPINE FIELD LAB
+JEZIK:
+slovenščina
+PROGRAM / VRSTA:
+Outdoor education studio
+"""
+          parsed = brief_import._parse_labels(text)
+          fields = brief_import._normalise(parsed, text)
+          assert str(fields['language']).lower().startswith('sl'), fields['language']
+
+          text_en = """PROJECT NAME:
+FIELD LAB
+LANGUAGE:
+English
+PROGRAMME:
+Outdoor education studio
+"""
+          parsed_en = brief_import._parse_labels(text_en)
+          fields_en = brief_import._normalise(parsed_en, text_en)
+          assert str(fields_en['language']).lower().startswith('english') or str(fields_en['language']).lower() == 'en'
+
+          html=open('dist/builder.html',encoding='utf-8').read()
+          js=open('dist/assets/builder.js',encoding='utf-8').read()
+          importer=open('dist/assets/brief-import-v1.js',encoding='utf-8').read()
+          assert 'id="language"' in html
+          assert "language:$('language')" in js
+          assert "language:'language'" in importer
+          print('Brief language and named-content pipeline checks passed')
+          PY
       - name: Validate release quality gate
         env:
           APP_SECRET: ci-only-secret
@@ -1151,6 +1186,9 @@ jobs:
           grep -q 'aesthetic_penalty' tools/production_load_test.py
           grep -q 'benchmark_terminal_' api/autonomous_supervisor.py
           grep -q 'CROSS_PAGE_NEAR_DUPLICATE_COPY' api/quality_originality_v2.py
+          grep -q 'BRIEF_NAMED_CONTENT_MISSING' api/quality_originality_v2.py
+          grep -q 'brief_coverage' api/enhanced_runtime.py
+          grep -q 'id="language"' dist/builder.html
           grep -q 'program-grid' api/premium_generation.py
           grep -q 'process-strip' api/premium_generation.py
           grep -q 'accent-readable' api/premium_generation.py
