@@ -322,6 +322,134 @@ def _render_gallery_section(config: dict[str, Any], section: dict[str, Any], pag
     </div></section>'''
 
 
+def _structured_items(value: Any, limit: int = 8) -> list[str]:
+    raw = _text(value)
+    if not raw:
+        return []
+    if "•" in raw:
+        parts = re.split(r"\s*•\s*", raw)
+    elif "→" in raw:
+        parts = re.split(r"\s*→\s*", raw)
+    else:
+        parts = re.split(r"(?<=[.!?])\s+", raw)
+    out = []
+    for part in parts:
+        item = re.sub(r"\s+", " ", part).strip(" -•→")
+        if item and item not in out:
+            out.append(item)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _render_program_section(config: dict[str, Any], section: dict[str, Any], spec: dict[str, Any]) -> str:
+    heading = _text(section.get("heading"), "Programi" if _is_sl(config, spec) else "Programmes")
+    items = _structured_items(section.get("body"), 6)
+    if len(items) < 2:
+        return ""
+    cards = []
+    for index, item in enumerate(items):
+        cards.append(
+            f'<article class="program-card reveal"><span>0{index + 1}</span><h3>{_e(item)}</h3></article>'
+        )
+    return f'''<section class="section programme-section"><div class="shell">
+      <div class="section-head reveal"><span class="label">{_e(_section_label(config, section.get("type") or "program-list", spec))}</span><h2>{_e(heading)}</h2></div>
+      <div class="program-grid">{"".join(cards)}</div>
+    </div></section>'''
+
+
+def _render_process_section(config: dict[str, Any], section: dict[str, Any], spec: dict[str, Any]) -> str:
+    heading = _text(section.get("heading"), "Proces" if _is_sl(config, spec) else "Process")
+    items = _structured_items(section.get("body"), 7)
+    if len(items) < 3:
+        return ""
+    steps = "".join(
+        f'<div class="process-step reveal"><span>0{i}</span><strong>{_e(item)}</strong></div>'
+        for i, item in enumerate(items, 1)
+    )
+    return f'''<section class="section process-section"><div class="shell">
+      <div class="section-head reveal"><span class="label">{_e(_section_label(config, section.get("type") or "process", spec))}</span><h2>{_e(heading)}</h2></div>
+      <div class="process-strip">{steps}</div>
+    </div></section>'''
+
+
+def _render_principles_section(config: dict[str, Any], section: dict[str, Any], spec: dict[str, Any]) -> str:
+    heading = _text(section.get("heading"), "Pristop" if _is_sl(config, spec) else "Approach")
+    items = _structured_items(section.get("body"), 6)
+    if len(items) < 2:
+        return ""
+    blocks = "".join(
+        f'<article class="principle-card reveal"><span>{i:02d}</span><p>{_e(item)}</p></article>'
+        for i, item in enumerate(items, 1)
+    )
+    return f'''<section class="section principles-section"><div class="shell">
+      <div class="section-head reveal"><span class="label">{_e(_section_label(config, section.get("type") or "principles", spec))}</span><h2>{_e(heading)}</h2></div>
+      <div class="principles-grid">{blocks}</div>
+    </div></section>'''
+
+
+def _render_story_section(config: dict[str, Any], section: dict[str, Any], spec: dict[str, Any]) -> str:
+    heading = _text(section.get("heading"), "Zgodba" if _is_sl(config, spec) else "Story")
+    body = _text(section.get("body"))
+    paras = _sentences(body, 5) or [body]
+    body_html = "".join(f"<p>{_e(p)}</p>" for p in paras if p)
+    return f'''<section class="section story-editorial"><div class="shell story-editorial-grid">
+      <div class="section-head reveal"><span class="label">{_e(_section_label(config, section.get("type") or "story", spec))}</span><h2>{_e(heading)}</h2></div>
+      <div class="story-editorial-copy reveal">{body_html}</div>
+    </div></section>'''
+
+
+def _hero_lead(config: dict[str, Any], spec: dict[str, Any], page: dict[str, Any]) -> str:
+    """Create a page lead that never duplicates the first content paragraph."""
+    if str(page.get("slug") or "") == "index":
+        return _text(config.get("hero_subtitle"), _text(config.get("goal")))
+
+    sl = _is_sl(config, spec)
+    kind = _page_kind(page)
+    role_copy = {
+        "programs": (
+            "Izberi program glede na izkušnje, velikost skupine in cilj."
+            if sl else "Choose a programme around experience, group size and the outcome you want."
+        ),
+        "approach": (
+            "Praktičen proces od opazovanja in razumevanja do samostojne uporabe."
+            if sl else "A practical path from observation and understanding to independent use."
+        ),
+        "about": (
+            "Kaj stoji za studiem, kako delamo in kaj je v središču našega pristopa."
+            if sl else "What sits behind the studio, how we work and what guides the approach."
+        ),
+        "gallery": (
+            "Teren, delo in detajli, ki pokažejo značaj programa brez generičnih podob."
+            if sl else "Fieldwork, process and details that show the character of the programme without generic imagery."
+        ),
+        "contact": (
+            "Povej nam, kaj želiš organizirati, in pošlji osnovne informacije za naslednji korak."
+            if sl else "Tell us what you want to organise and share the essentials for the next step."
+        ),
+        "content": (
+            "Vsebina te strani izhaja neposredno iz briefa projekta."
+            if sl else "This page is built directly from the project brief."
+        ),
+    }
+
+    sections = [s for s in (page.get("sections") or []) if isinstance(s, dict)]
+    bodies = {base._fold_text(_text(s.get("body"))) for s in sections if _text(s.get("body"))}
+    meta = _text(page.get("meta_description"))
+    purpose = _text(page.get("purpose"))
+    for candidate in (meta, purpose):
+        folded = base._fold_text(candidate)
+        if not candidate or folded in bodies:
+            continue
+        if any(folded.startswith(base._fold_text(prefix)) for prefix in (
+            "predstaviti ", "razloziti ", "vizualno prikazati ", "preprost ", "mocan prvi vtis",
+            "show ", "explain ", "present ",
+        )):
+            continue
+        return candidate
+    return role_copy.get(kind, role_copy["content"])
+
+
 def _render_content_sections(config: dict[str, Any], spec: dict[str, Any], page: dict[str, Any]) -> str:
     out: list[str] = []
     sections = [s for s in (page.get("sections") or []) if isinstance(s, dict)]
@@ -336,6 +464,24 @@ def _render_content_sections(config: dict[str, Any], spec: dict[str, Any], page:
         kind = base._fold_text(section.get("type"))
         if "gallery" in kind:
             out.append(_render_gallery_section(config, section, page, spec))
+            continue
+        if kind in {"program-list", "programs", "services", "service-list"}:
+            rendered = _render_program_section(config, section, spec)
+            if rendered:
+                out.append(rendered)
+                continue
+        if kind in {"process", "journey", "steps"}:
+            rendered = _render_process_section(config, section, spec)
+            if rendered:
+                out.append(rendered)
+                continue
+        if kind in {"principles", "key-points", "highlights", "audience"}:
+            rendered = _render_principles_section(config, section, spec)
+            if rendered:
+                out.append(rendered)
+                continue
+        if kind in {"story", "trust"}:
+            out.append(_render_story_section(config, section, spec))
             continue
 
         raw_heading = _text(section.get("heading"), page.get("title") or "Overview")
@@ -483,7 +629,7 @@ def _render_page(config: dict[str, Any], spec: dict[str, Any], page: dict[str, A
     meta = _text(page.get("meta_description"), page.get("purpose") or config.get("goal") or "")[:160]
     nav = _navigation(spec, slug)
     hero_title = _text(config.get("hero_title"), page_title) if is_home else page_title
-    hero_body = _text(config.get("hero_subtitle"), _public_summary(page, _text(config.get("goal")))) if is_home else _public_summary(page, _text(config.get("goal")))
+    hero_body = _hero_lead(config, spec, page)
     programme = _text(config.get("programme"), "Project / digital experience")
     email = _text(config.get("contact_email"))
     sl = _is_sl(config, spec)
@@ -540,15 +686,19 @@ def _css(config: dict[str, Any]) -> str:
 .site-header{{position:fixed;inset:0 0 auto;z-index:100;border-bottom:1px solid rgba(255,255,255,.12);background:rgba(7,29,24,.82);backdrop-filter:blur(18px)}}.nav{{min-height:82px;display:flex;align-items:center;gap:28px}}.brand{{display:flex;align-items:center;gap:10px;color:#fff;font-weight:850;text-decoration:none;letter-spacing:-.025em}}.brand-mark{{width:32px;height:32px;display:grid;place-items:center;border-radius:10px;background:var(--accent);color:#071d18;font-size:13px;font-weight:950}}.nav-links{{margin-left:auto;display:flex;align-items:center;gap:26px}}.nav-links a{{position:relative;color:#dce9e5;text-decoration:none;font-size:14px;font-weight:650}}.nav-links a::after{{content:"";position:absolute;left:0;right:100%;bottom:-7px;height:2px;background:var(--accent);transition:.25s}}.nav-links a:hover::after,.nav-links a[aria-current="page"]::after{{right:0}}.menu{{display:none;margin-left:auto;width:44px;height:44px;border:1px solid rgba(255,255,255,.18);border-radius:14px;background:transparent}}.menu span{{display:block;width:18px;height:2px;margin:5px auto;background:#fff}}
 .hero{{position:relative;overflow:hidden;background:linear-gradient(135deg,var(--dark) 0%,var(--primary) 68%,var(--dark2) 100%);color:#fff}}.hero::after{{content:"";position:absolute;right:-12vw;top:-18vw;width:45vw;height:45vw;border:1px solid rgba(199,255,74,.18);border-radius:50%;box-shadow:0 0 0 80px rgba(199,255,74,.035),0 0 0 160px rgba(199,255,74,.02)}}.hero-grid{{position:relative;z-index:2;min-height:760px;padding:150px 0 84px;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);align-items:center;gap:72px}}.hero-inner .hero-grid{{min-height:620px}}.hero-copy h1{{max-width:940px;margin:18px 0 26px;font-size:clamp(58px,7.4vw,118px);line-height:.88;letter-spacing:-.075em;font-weight:900;text-wrap:balance;overflow-wrap:anywhere}}.hero-inner .hero-copy h1{{font-size:clamp(54px,6vw,92px)}}.hero-copy p{{max-width:720px;margin:0;color:#c7d7d2;font-size:clamp(18px,1.7vw,24px);line-height:1.5}}.label{{display:inline-flex;align-items:center;gap:9px;font-size:12px;font-weight:850;letter-spacing:.12em;text-transform:uppercase;color:var(--primary)}}.label::before{{content:"";width:22px;height:2px;background:currentColor}}.label-light{{color:var(--accent)}}.hero-actions{{display:flex;align-items:center;gap:24px;margin-top:38px;flex-wrap:wrap}}.button{{display:inline-flex;align-items:center;justify-content:center;gap:14px;min-height:54px;padding:0 22px;border-radius:999px;text-decoration:none;font-weight:800;transition:transform .25s,box-shadow .25s}}.button:hover{{transform:translateY(-3px)}}.button-accent{{background:var(--accent);color:#071d18;box-shadow:0 14px 40px rgba(199,255,74,.12)}}.button span{{font-size:18px}}.text-link{{color:#e6f0ed;text-underline-offset:5px;font-weight:650}}
 .hero-art{{position:relative;min-height:460px}}.visual{{position:relative;min-height:440px;height:100%;overflow:hidden;border-radius:var(--radius);background:linear-gradient(145deg,#f8f5ec 0%,#dce7df 100%);color:#071d18;box-shadow:0 42px 90px rgba(0,0,0,.28);isolation:isolate}}.visual-grid{{position:absolute;inset:0;background-image:linear-gradient(rgba(7,29,24,.08) 1px,transparent 1px),linear-gradient(90deg,rgba(7,29,24,.08) 1px,transparent 1px);background-size:48px 48px;mask-image:linear-gradient(to bottom,#000,transparent)}}.visual-frame{{position:absolute;inset:12%;border:1px solid rgba(7,29,24,.2);border-radius:var(--radius);opacity:0}}.visual-axis{{position:absolute;left:10%;right:10%;top:18%;display:none;gap:9px;align-items:flex-end;height:42%}}.visual-axis i,.visual-bars i{{display:block;background:var(--primary)}}.visual-axis i:nth-child(1){{width:8%;height:42%}}.visual-axis i:nth-child(2){{width:8%;height:78%}}.visual-axis i:nth-child(3){{width:8%;height:100%}}.visual-bars{{position:absolute;inset:15%;display:none;grid-template-columns:repeat(2,1fr);gap:12px}}.visual-bars i{{border-radius:12px;opacity:.82}}.visual-bars i:nth-child(2){{background:var(--accent)}}.visual-bars i:nth-child(3){{background:#fff;border:1px solid rgba(7,29,24,.18)}}.visual-bars i:nth-child(4){{background:color-mix(in srgb,var(--primary) 35%,#fff)}}.visual-orb{{position:absolute;border-radius:50%;filter:blur(.2px)}}.visual-orb-a{{width:240px;height:240px;right:-35px;top:42px;background:var(--accent);box-shadow:0 0 0 26px rgba(199,255,74,.18)}}.visual-orb-b{{width:150px;height:150px;left:54px;bottom:42px;background:var(--primary);opacity:.88}}.visual strong{{position:absolute;left:34px;bottom:34px;z-index:3;max-width:70%;font-size:clamp(30px,3vw,52px);line-height:.95;letter-spacing:-.055em;text-wrap:balance;overflow-wrap:anywhere}}.visual-kicker{{position:absolute;left:34px;top:28px;z-index:3;font-size:13px;font-weight:900}}.visual-chip{{position:absolute;right:24px;top:22px;z-index:4;padding:7px 10px;border:1px solid rgba(7,29,24,.18);border-radius:999px;background:rgba(255,255,255,.7);backdrop-filter:blur(8px);font-size:9px;font-weight:850;letter-spacing:.08em;text-transform:uppercase}}.visual-arrow{{position:absolute;right:30px;bottom:26px;z-index:3;font-size:32px}}.visual-v0 .visual-frame{{opacity:1;inset:9% 10% 26% 10%}}.visual-v0 .visual-orb-a{{width:110px;height:110px;right:12%;top:18%;box-shadow:0 0 0 18px rgba(199,255,74,.14)}}.visual-v0 .visual-orb-b{{display:none}}.visual-v1 .visual-orb-a{{width:290px;height:290px;right:-60px;top:-35px}}.visual-v1 .visual-orb-b{{width:180px;height:180px;left:12%;bottom:10%}}.visual-v1 .visual-frame{{opacity:.5;inset:18% 8% 12% 28%;border-radius:50%}}.visual-v2 .visual-orb{{display:none}}.visual-v2 .visual-grid{{background-size:32px 32px}}.visual-v2 .visual-axis{{display:flex}}.visual-v2 strong{{max-width:55%;bottom:28px}}.visual-v3{{background:var(--accent)}}.visual-v3 .visual-grid,.visual-v3 .visual-orb-b{{display:none}}.visual-v3 .visual-orb-a{{width:62%;height:120%;right:-18%;top:-10%;background:var(--primary);border-radius:0;transform:rotate(16deg);box-shadow:none}}.visual-v3 strong{{font-size:clamp(42px,5vw,78px);max-width:78%;text-transform:uppercase}}.visual-v4 .visual-orb{{border-radius:0;filter:none}}.visual-v4 .visual-orb-a{{width:54%;height:120%;right:-12%;top:-10%;transform:rotate(12deg);box-shadow:none}}.visual-v4 .visual-orb-b{{width:42%;height:110%;left:-14%;bottom:-15%;transform:rotate(-12deg);opacity:.28}}.visual-v4 .visual-frame{{opacity:.55;inset:13%}}.visual-v5 .visual-grid,.visual-v5 .visual-orb{{display:none}}.visual-v5 .visual-bars{{display:grid;transform:rotate(-4deg)}}.visual-v5 .visual-bars i{{box-shadow:0 18px 40px rgba(0,0,0,.12)}}.visual-v6 .visual-orb{{display:none}}.visual-v6 .visual-bars{{display:grid;inset:10%;grid-template-columns:1.4fr .8fr;grid-template-rows:.8fr 1.2fr}}.visual-v6 .visual-bars i{{border-radius:0}}.visual-v6 strong{{left:50%;bottom:30px;max-width:44%}}.visual-v7{{background:#071d18;color:#fff}}.visual-v7 .visual-grid{{opacity:.25}}.visual-v7 .visual-orb-a{{width:180px;height:180px;right:10%;top:18%;box-shadow:0 0 0 1px var(--accent),0 0 0 34px rgba(199,255,74,.07);background:transparent;border:18px solid var(--accent)}}.visual-v7 .visual-orb-b{{width:2px;height:54%;left:24%;bottom:18%;border-radius:0;background:var(--accent)}}.visual-v7 .visual-chip{{color:#fff;background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.16)}}.hero-note{{position:absolute;right:-18px;bottom:-18px;z-index:4;width:190px;padding:18px 20px;border-radius:20px;background:#fff;color:var(--ink);box-shadow:0 22px 50px rgba(0,0,0,.22)}}.hero-note span{{display:block;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.12em}}.hero-note strong{{display:block;margin-top:4px;line-height:1.15}}
-.hero-grid>*,.intro-grid>*,.section-split>*,.section-stack>*,.section-rail>*,.contact-grid>*,.story-grid>*,.footer-grid>*,.gallery-grid>*{{min-width:0}}.brand,.brand span,.nav-links a,.footer-grid a,.section-head h2,.story-card h3,.final-cta h2{{overflow-wrap:anywhere}}.section{{padding:112px 0}}.section:nth-of-type(even):not(.hero):not(.section-ink):not(.metric-band):not(.final-cta){{background:rgba(255,255,255,.42)}}.section-head h2{{max-width:820px;margin:16px 0 0;font-size:clamp(42px,5.4vw,78px);line-height:.98;letter-spacing:-.06em;text-wrap:balance}}.section-head>p{{max-width:620px;color:var(--muted);font-size:18px}}.intro-grid,.section-split{{display:grid;grid-template-columns:minmax(0,.92fr) minmax(0,1.08fr);gap:clamp(60px,9vw,140px);align-items:start}}.section-split-reverse{{grid-template-columns:minmax(0,1.08fr) minmax(0,.92fr)}}.section-split-reverse .section-head{{order:2}}.prose{{max-width:720px;padding-top:10px}}.prose p{{margin:0 0 22px;font-size:clamp(18px,1.6vw,22px);line-height:1.65;color:#42564f}}.prose p:first-child{{font-size:clamp(24px,2.4vw,34px);line-height:1.4;color:var(--ink);letter-spacing:-.025em}}.section-stack{{display:grid;gap:34px}}.section-stack .section-head{{max-width:980px}}.section-stack .prose{{max-width:900px;padding-top:0}}.section-rail{{display:grid;grid-template-columns:minmax(220px,.55fr) minmax(0,1.45fr);gap:clamp(44px,8vw,120px);align-items:start;border-left:3px solid var(--accent);padding-left:clamp(22px,3vw,44px)}}.fact-list{{display:grid;gap:12px;margin:0;padding:0;list-style:none}}.fact-list li{{padding:15px 18px;border-left:3px solid var(--accent);background:rgba(255,255,255,.58);font-size:17px}}.gallery-section{{overflow:hidden}}.gallery-grid{{display:grid;grid-template-columns:1.2fr .8fr 1fr;grid-auto-rows:minmax(240px,1fr);gap:14px;margin-top:48px}}.gallery-tile{{position:relative;min-height:260px;overflow:hidden;border-radius:var(--radius);background:#fff;border:1px solid var(--line)}}.gallery-tile .visual{{height:100%;min-height:260px;border-radius:0;box-shadow:none}}.gallery-tile>span{{position:absolute;left:18px;right:18px;bottom:16px;z-index:6;padding:9px 11px;border-radius:10px;background:rgba(6,25,20,.84);color:#fff;font-size:12px;font-weight:750;backdrop-filter:blur(8px)}}.gallery-tile-0{{grid-row:span 2}}.gallery-tile-3{{grid-column:span 2}}
+.hero-grid>*,.intro-grid>*,.section-split>*,.section-stack>*,.section-rail>*,.contact-grid>*,.story-grid>*,.footer-grid>*,.gallery-grid>*{{min-width:0}}.brand,.brand span,.nav-links a,.footer-grid a,.section-head h2,.story-card h3,.final-cta h2{{overflow-wrap:anywhere}}.section{{padding:112px 0}}.section:nth-of-type(even):not(.hero):not(.section-ink):not(.metric-band):not(.final-cta){{background:rgba(255,255,255,.42)}}.section-head h2{{max-width:820px;margin:16px 0 0;font-size:clamp(42px,5.4vw,78px);line-height:.98;letter-spacing:-.06em;text-wrap:balance}}.section-head>p{{max-width:620px;color:var(--muted);font-size:18px}}.intro-grid,.section-split{{display:grid;grid-template-columns:minmax(0,.92fr) minmax(0,1.08fr);gap:clamp(60px,9vw,140px);align-items:start}}.section-split-reverse{{grid-template-columns:minmax(0,1.08fr) minmax(0,.92fr)}}.section-split-reverse .section-head{{order:2}}.prose{{max-width:720px;padding-top:10px}}.prose p{{margin:0 0 22px;font-size:clamp(18px,1.6vw,22px);line-height:1.65;color:#42564f}}.prose p:first-child{{font-size:clamp(24px,2.4vw,34px);line-height:1.4;color:var(--ink);letter-spacing:-.025em}}.section-stack{{display:grid;gap:34px}}.section-stack .section-head{{max-width:980px}}.section-stack .prose{{max-width:900px;padding-top:0}}.section-rail{{display:grid;grid-template-columns:minmax(220px,.55fr) minmax(0,1.45fr);gap:clamp(44px,8vw,120px);align-items:start;border-left:3px solid var(--accent);padding-left:clamp(22px,3vw,44px)}}.fact-list{{display:grid;gap:12px;margin:0;padding:0;list-style:none}}.fact-list li{{padding:15px 18px;border-left:3px solid var(--accent);background:rgba(255,255,255,.58);font-size:17px}}.program-grid{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:48px}}.program-card{{min-height:210px;padding:28px;border:1px solid var(--line);border-radius:var(--radius);background:var(--paper)}}.program-card>span,.principle-card>span,.process-step>span{{display:block;color:var(--muted);font-size:11px;font-weight:850;letter-spacing:.12em}}.program-card h3{{max-width:18ch;margin:58px 0 0;font-size:clamp(26px,3vw,42px);line-height:1;letter-spacing:-.045em}}
+.process-strip{{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));margin-top:52px;border-top:1px solid var(--line)}}.process-step{{position:relative;min-height:180px;padding:24px 22px 22px 0;border-right:1px solid var(--line)}}.process-step:last-child{{border-right:0}}.process-step strong{{display:block;margin-top:48px;font-size:clamp(19px,2vw,30px);line-height:1.1;letter-spacing:-.035em}}
+.principles-grid{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:48px}}.principle-card{{min-height:220px;padding:26px;border-radius:var(--radius);background:var(--paper);border:1px solid var(--line)}}.principle-card p{{margin:56px 0 0;font-size:clamp(18px,1.7vw,24px);line-height:1.35;color:var(--ink)}}
+.story-editorial-grid{{display:grid;grid-template-columns:minmax(0,.7fr) minmax(0,1.3fr);gap:clamp(60px,10vw,150px);align-items:start}}.story-editorial-copy{{max-width:760px}}.story-editorial-copy p{{margin:0 0 24px;font-size:clamp(20px,2vw,30px);line-height:1.5;color:var(--ink)}}.story-editorial-copy p+ p{{font-size:18px;color:var(--muted)}}
+.gallery-section{{overflow:hidden}}.gallery-grid{{display:grid;grid-template-columns:1.2fr .8fr 1fr;grid-auto-rows:minmax(240px,1fr);gap:14px;margin-top:48px}}.gallery-tile{{position:relative;min-height:260px;overflow:hidden;border-radius:var(--radius);background:#fff;border:1px solid var(--line)}}.gallery-tile .visual{{height:100%;min-height:260px;border-radius:0;box-shadow:none}}.gallery-tile>span{{position:absolute;left:18px;right:18px;bottom:16px;z-index:6;padding:9px 11px;border-radius:10px;background:rgba(6,25,20,.84);color:#fff;font-size:12px;font-weight:750;backdrop-filter:blur(8px)}}.gallery-tile-0{{grid-row:span 2}}.gallery-tile-3{{grid-column:span 2}}
 .journey{{background:#fff}}.steps{{display:grid;grid-template-columns:repeat(4,1fr);margin-top:60px;border-top:1px solid var(--line)}}.step{{position:relative;padding:30px 26px 18px 0;min-height:180px;border-right:1px solid var(--line)}}.step:last-child{{border-right:0}}.step>span{{font-size:12px;color:var(--muted);font-weight:800}}.step h3{{margin:36px 0 0;font-size:clamp(26px,2.5vw,40px);letter-spacing:-.04em}}.step-line{{position:absolute;left:0;top:-2px;width:48%;height:3px;background:var(--accent)}}
 .metric-band{{background:var(--accent);color:#071d18}}.metric-band .label{{color:#071d18}}.metrics{{display:grid;grid-template-columns:repeat(4,1fr);margin-top:54px;border-top:1px solid rgba(7,29,24,.24)}}.metric{{padding:28px 20px 10px 0;border-right:1px solid rgba(7,29,24,.24)}}.metric:last-child{{border-right:0}}.metric strong{{display:block;font-size:clamp(46px,6vw,86px);line-height:1;letter-spacing:-.065em}}.metric span{{display:block;margin-top:10px;font-weight:700}}
 .section-ink{{background:var(--dark);color:#fff}}.section-ink .label{{color:var(--accent)}}.story-grid{{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:54px}}.story-card{{display:flex;min-height:560px;flex-direction:column;border:1px solid rgba(255,255,255,.12);border-radius:var(--radius);overflow:hidden;background:#0b2620;color:#fff;text-decoration:none;transition:transform .3s,border-color .3s}}.story-card:hover{{transform:translateY(-6px);border-color:rgba(199,255,74,.6)}}.story-card .visual{{min-height:270px;height:270px;border-radius:0;box-shadow:none}}.story-card-copy{{padding:26px}}.story-card-copy>span{{color:var(--accent);font-size:11px;text-transform:uppercase;letter-spacing:.12em;font-weight:850}}.story-card h3{{margin:9px 0 12px;font-size:30px;line-height:1;letter-spacing:-.04em}}.story-card p{{margin:0;color:#aebfba}}.story-card b{{display:block;margin-top:auto;padding-top:22px;font-size:13px;color:var(--accent)}}
 .contact-panel{{background:#fff}}.contact-grid{{display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr);gap:80px;align-items:start}}.contact-box{{margin-top:28px;padding:28px;border-radius:var(--radius);background:var(--bg);border:1px solid var(--line)}}.contact-form{{display:grid;grid-template-columns:1fr 1fr;gap:18px;padding:28px;border-radius:var(--radius);background:var(--bg);border:1px solid var(--line)}}.contact-form label{{display:grid;gap:7px;color:var(--muted);font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}}.contact-form input,.contact-form textarea{{width:100%;border:1px solid rgba(16,33,43,.22);border-radius:12px;background:#fff;color:var(--ink);padding:14px 15px;font:inherit;text-transform:none;letter-spacing:0}}.contact-form textarea{{resize:vertical}}.contact-form input:focus,.contact-form textarea:focus{{outline:3px solid color-mix(in srgb,var(--accent) 45%,transparent);border-color:var(--primary)}}.form-wide{{grid-column:1/-1}}.contact-box>span{{display:block;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.12em}}.contact-box>a{{display:block;margin-top:12px;font-size:clamp(26px,3vw,44px);line-height:1.1;letter-spacing:-.045em;font-weight:850;word-break:break-word}}.contact-box p{{color:var(--muted)}}.final-cta{{background:linear-gradient(135deg,var(--primary),var(--dark));color:#fff}}.final-cta .label{{color:var(--accent)}}.final-cta h2{{max-width:900px;margin:18px 0 34px;font-size:clamp(50px,6vw,92px);line-height:.92;letter-spacing:-.065em}}
 .site-footer{{padding:76px 0 28px;background:#061914;color:#d7e5e1}}.footer-grid{{display:grid;grid-template-columns:1.3fr .7fr .7fr;gap:60px;padding-bottom:58px}}.brand-footer{{margin-bottom:20px}}.footer-grid p{{max-width:430px;color:#829993}}.footer-label{{display:block;margin-bottom:16px;color:var(--accent);font-size:11px;text-transform:uppercase;letter-spacing:.14em;font-weight:850}}.footer-nav{{display:grid;gap:8px}}.footer-nav a,.footer-grid a{{color:#d7e5e1;text-decoration:none}}.footer-bottom{{padding-top:22px;border-top:1px solid rgba(255,255,255,.12);display:flex;justify-content:space-between;gap:20px;color:#759089;font-size:12px}}
 .js .reveal{{opacity:0;transform:translateY(18px);transition:opacity .65s ease,transform .65s ease}}.js .reveal.is-visible{{opacity:1;transform:none}}
-@media(max-width:980px){{.hero-grid{{grid-template-columns:1fr;min-height:auto;padding-top:142px}}.hero-art{{min-height:360px}}.hero-note{{right:0;max-width:min(190px,calc(100% - 16px))}}.intro-grid,.section-split,.section-split-reverse,.section-rail,.contact-grid{{grid-template-columns:1fr;gap:42px}}.section-rail{{border-left:0;padding-left:0;border-top:3px solid var(--accent);padding-top:28px}}.gallery-grid{{grid-template-columns:1fr 1fr}}.gallery-tile-0,.gallery-tile-3{{grid-row:auto;grid-column:auto}}.section-split-reverse .section-head{{order:0}}.steps,.metrics{{grid-template-columns:repeat(2,1fr)}}.story-grid{{grid-template-columns:1fr 1fr}}.footer-grid{{grid-template-columns:1fr 1fr}}}}
-@media(max-width:760px){{.gallery-grid,.contact-form{{grid-template-columns:1fr}}.form-wide{{grid-column:auto}}.visual-chip{{right:14px;top:14px;max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}.visual strong{{left:24px;bottom:24px;max-width:74%}}.visual-v6 strong{{left:48%;max-width:48%}}.shell{{width:min(100% - 28px,var(--shell))}}.nav{{min-height:70px}}.menu{{display:block}}.nav-links{{display:none;position:absolute;left:14px;right:14px;top:76px;padding:18px;border-radius:20px;background:#08221c;box-shadow:0 25px 60px rgba(0,0,0,.3);flex-direction:column;align-items:stretch;gap:0}}.nav-links.open{{display:flex}}.nav-links a{{padding:12px}}.hero-grid{{padding:120px 0 62px;gap:42px}}.hero-copy h1{{font-size:clamp(48px,15vw,76px)}}.hero-art,.visual{{min-height:330px}}.hero-note{{right:12px;bottom:-12px}}.section{{padding:78px 0}}.section-head h2{{font-size:clamp(38px,11vw,56px)}}.steps,.metrics,.story-grid,.footer-grid{{grid-template-columns:1fr}}.step,.metric{{border-right:0;border-bottom:1px solid var(--line)}}.story-card{{min-height:0}}.footer-bottom{{flex-direction:column}}}}
+@media(max-width:980px){{.hero-grid{{grid-template-columns:1fr;min-height:auto;padding-top:142px}}.hero-art{{min-height:360px}}.hero-note{{right:0;max-width:min(190px,calc(100% - 16px))}}.intro-grid,.section-split,.section-split-reverse,.section-rail,.contact-grid{{grid-template-columns:1fr;gap:42px}}.section-rail{{border-left:0;padding-left:0;border-top:3px solid var(--accent);padding-top:28px}}.gallery-grid{{grid-template-columns:1fr 1fr}}.program-grid,.principles-grid{{grid-template-columns:1fr 1fr}}.process-strip{{grid-template-columns:repeat(3,1fr)}}.story-editorial-grid{{grid-template-columns:1fr;gap:36px}}.gallery-tile-0,.gallery-tile-3{{grid-row:auto;grid-column:auto}}.section-split-reverse .section-head{{order:0}}.steps,.metrics{{grid-template-columns:repeat(2,1fr)}}.story-grid{{grid-template-columns:1fr 1fr}}.footer-grid{{grid-template-columns:1fr 1fr}}}}
+@media(max-width:760px){{.gallery-grid,.contact-form,.program-grid,.principles-grid{{grid-template-columns:1fr}}.process-strip{{grid-template-columns:1fr}}.process-step{{border-right:0;border-bottom:1px solid var(--line)}}.form-wide{{grid-column:auto}}.visual-chip{{right:14px;top:14px;max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}.visual strong{{left:24px;bottom:24px;max-width:74%}}.visual-v6 strong{{left:48%;max-width:48%}}.shell{{width:min(100% - 28px,var(--shell))}}.nav{{min-height:70px}}.menu{{display:block}}.nav-links{{display:none;position:absolute;left:14px;right:14px;top:76px;padding:18px;border-radius:20px;background:#08221c;box-shadow:0 25px 60px rgba(0,0,0,.3);flex-direction:column;align-items:stretch;gap:0}}.nav-links.open{{display:flex}}.nav-links a{{padding:12px}}.hero-grid{{padding:120px 0 62px;gap:42px}}.hero-copy h1{{font-size:clamp(48px,15vw,76px)}}.hero-art,.visual{{min-height:330px}}.hero-note{{right:12px;bottom:-12px}}.section{{padding:78px 0}}.section-head h2{{font-size:clamp(38px,11vw,56px)}}.steps,.metrics,.story-grid,.footer-grid{{grid-template-columns:1fr}}.step,.metric{{border-right:0;border-bottom:1px solid var(--line)}}.story-card{{min-height:0}}.footer-bottom{{flex-direction:column}}}}
 @media(max-width:980px){{.menu{{display:block}}.nav-links{{display:none;position:absolute;left:24px;right:24px;top:86px;padding:18px;border-radius:20px;background:#08221c;box-shadow:0 25px 60px rgba(0,0,0,.3);flex-direction:column;align-items:stretch;gap:0}}.nav-links.open{{display:flex}}.nav-links a{{padding:12px}}.nav{{position:relative}}}}
 @media(prefers-reduced-motion:reduce){{html{{scroll-behavior:auto}}*{{animation:none!important;transition:none!important}}.js .reveal{{opacity:1;transform:none}}}}'''
 
