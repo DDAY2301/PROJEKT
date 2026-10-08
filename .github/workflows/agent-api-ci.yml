@@ -958,10 +958,16 @@ jobs:
               "slovenščina\n"
               "PROGRAM / VRSTA:\n"
               "Outdoor education studio\n"
+              "ZAHTEVANE STRANI:\n"
+              "Domov | Predstavitev\n"
+              "Programi | Pregled programov\n"
+              "Kontakt | Povpraševanje\n"
           )
           parsed = brief_import._labelled_fields(text)
           fields = brief_import._normalise(parsed, text)
           assert fields['language'] == 'sl', fields['language']
+          assert fields['programme'] == 'Outdoor education studio', fields['programme']
+          assert [p['title'] for p in fields['pages']] == ['Domov','Programi','Kontakt'], fields['pages']
 
           text_en = (
               "PROJECT NAME:\n"
