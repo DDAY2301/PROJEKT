@@ -779,6 +779,94 @@ jobs:
           assert "backgroundImage !== 'none'" in metric_script
           print("Rich-brief uniqueness regression checks passed")
           PY
+      - name: Validate editorial uniqueness production floor
+        run: |
+          python - <<'PY'
+          from api import premium_generation as premium
+          from api import robust_generation as robust
+          from api import quality_originality_v2 as originality
+
+          config = {
+              'name':'Field Test Studio',
+              'organization':'Field Test Studio',
+              'package':'Standard',
+              'programme':'Outdoor education studio',
+              'language':'slovenščina',
+              'goal':'Predstaviti praktične programe in omogočiti jasno izbiro.',
+              'audience':'začetniki, skupine in organizacije',
+              'hero_title':'Znanje za teren.',
+              'hero_subtitle':'Praktično učenje v naravi za ljudi in skupine.',
+              'cta_text':'Poglej programe',
+              'contact_email':'hello@example.test',
+              'brand':{
+                  'primary_color':'#24382D',
+                  'secondary_color':'#7A8B5A',
+                  'background_color':'#F2F0E8',
+                  'text_color':'#18231D',
+              },
+          }
+          program_page = {
+              'slug':'programi','title':'Programi','purpose':'Pomagati obiskovalcu izbrati pravo raven.',
+              'meta_description':'Izberi program glede na izkušnje, skupino in cilj.',
+              'sections':[
+                  {'type':'program-list','heading':'Programi na terenu','body':'Osnovni teren • Vikend v naravi • Napredni teren • Skupinski program'},
+                  {'type':'audience','heading':'Komu so programi namenjeni','body':'Začetnikom, družinam, ekipam in organizacijam.'},
+                  {'type':'decision','heading':'Izberi pravo raven','body':'Odloči se glede na izkušnje, velikost skupine in cilj.'},
+              ],
+          }
+          spec = {
+              'site_name':'Field Test Studio',
+              'pages':[
+                  {'slug':'index','title':'Domov','purpose':'Predstavitev','meta_description':'Praktični outdoor studio.','sections':[
+                      {'type':'intro','heading':'Zakaj teren','body':'Učenje temelji na praktičnih nalogah in dobri presoji.'},
+                      {'type':'highlights','heading':'Kaj je pomembno','body':'Majhne skupine • Praksa • Odgovoren odnos do narave'},
+                      {'type':'audience','heading':'Za koga','body':'Začetniki, skupine in organizacije.'},
+                  ]},
+                  program_page,
+                  {'slug':'pristop','title':'Pristop','purpose':'Razložiti način dela.','meta_description':'Od opazovanja do samostojne uporabe.','sections':[
+                      {'type':'principles','heading':'Kako delamo na terenu','body':'Učimo skozi prakso • Razložimo zakaj • Prilagodimo se terenu'},
+                      {'type':'process','heading':'Od opazovanja do uporabe','body':'Opazuj → Razumi → Poskusi → Ponovi → Uporabi samostojno'},
+                      {'type':'outcome','heading':'Dobra presoja','body':'Cilj ni ekstrem, ampak premišljena samostojnost.'},
+                  ]},
+                  {'slug':'kontakt','title':'Kontakt','purpose':'Kontakt','meta_description':'Pošlji osnovne informacije.','sections':[
+                      {'type':'contact','heading':'Piši nam','body':'Za vprašanja uporabi preverjeni kontaktni email.'},
+                      {'type':'form-fields','heading':'Kaj potrebujemo','body':'Ime • Email • Program • Število oseb • Sporočilo'},
+                      {'type':'next-step','heading':'Naslednji korak','body':'Pošlji osnovne informacije za pripravo odgovora.'},
+                  ]},
+              ],
+          }
+
+          html = premium._render_page(config, spec, program_page, 1)
+          assert 'program-grid' in html
+          assert '<h1>Programi</h1>' in html
+          first_body = program_page['sections'][0]['body']
+          assert html.count(first_body) == 1, 'inner hero duplicated the first section body'
+          assert 'Choose a programme' not in html
+
+          approach = premium._render_page(config, spec, spec['pages'][2], 2)
+          assert 'principles-grid' in approach
+          assert 'process-strip' in approach
+
+          readable = premium._readable_on_dark('#7A8B5A', '#071d18')
+          assert premium._contrast_ratio(readable, '#071d18') >= 4.5
+
+          rich_context = 'Namen:\n' + ('konkretna vsebina terena in programa ' * 12)
+          generic = [
+              {'type':'intro','heading':'Prednosti','body':'A' * 80},
+              {'type':'details','heading':'Konkreten naslov','body':'B' * 80},
+              {'type':'outcome','heading':'Drugi naslov','body':'C' * 80},
+          ]
+          assert robust._page_plan_is_weak(generic, {'slug':'x','title':'X','purpose':'Y'}, rich_context) is True
+
+          source = open('api/robust_generation.py', encoding='utf-8').read()
+          assert 'add("story", "Alpine Field Lab"' not in source
+
+          a = 'Praktično učenje na terenu pomaga skupinam razumeti okolje, uporabljati osnovna orodja in razviti samostojno presojo.'
+          b = 'Skupine skozi praktično učenje na terenu razumejo okolje, uporabljajo osnovna orodja in razvijajo samostojno presojo.'
+          assert originality._copy_similarity(a, b) >= 0.78
+
+          print('Editorial uniqueness production-floor checks passed')
+          PY
       - name: Validate release quality gate
         env:
           APP_SECRET: ci-only-secret
@@ -995,6 +1083,11 @@ jobs:
           grep -q 'visual-qa-v4-bounded-aesthetic' api/vision_review.py
           grep -q 'aesthetic_penalty' tools/production_load_test.py
           grep -q 'benchmark_terminal_' api/autonomous_supervisor.py
+          grep -q 'CROSS_PAGE_NEAR_DUPLICATE_COPY' api/quality_originality_v2.py
+          grep -q 'program-grid' api/premium_generation.py
+          grep -q 'process-strip' api/premium_generation.py
+          grep -q 'accent-readable' api/premium_generation.py
+          ! grep -q 'add("story", "Alpine Field Lab"' api/robust_generation.py
           grep -q '_strip_unsupported_contact_facts' api/enhanced_runtime.py
           grep -q '_apply_deterministic_overflow_guard' api/enhanced_runtime.py
           grep -q 'autoModelConcurrency' start-product.ps1
