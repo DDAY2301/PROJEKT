@@ -517,10 +517,15 @@ def _render_content_sections(config: dict[str, Any], spec: dict[str, Any], page:
         ]
     seen_headings: set[str] = set()
     slug = str(page.get("slug") or "index")
-    if not filtered:
+    if not filtered and _page_kind(page) != "contact":
         contexts = base._extract_page_contexts(config)
         filtered = base._grounded_sections(page, contexts.get(slug, ""), config)
 
+    # The contact form is the canonical contact content. If filtering removed
+    # its placeholder 'contact/form-fields/next-step' sections, do not call
+    # _grounded_sections again: that re-created the same lengthy purpose as
+    # 'next-step' + 'brief', resulting in DUPLICATE_BODY_COPY on contact pages.
+    # Any other real, brief-specific contact sections remain in filtered.
     for idx, section in enumerate(filtered[:4]):
         kind = base._fold_text(section.get("type"))
         if "gallery" in kind:
