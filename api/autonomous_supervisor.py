@@ -659,7 +659,16 @@ def _start_recovery(project_id: str, choice: str, reason_code: str = "") -> bool
                         config["_quality_retry_seed"] = min(
                             3, int(config.get("_quality_retry_seed") or 0) + 1
                         )
-                        if "DESIGN_NEAR_DUPLICATE" in issue_codes:
+                        editorial_retry_codes = {
+                            "DUPLICATE_BODY_COPY",
+                            "REPEATED_SECTION_HEADING",
+                            "CROSS_PAGE_DUPLICATE_COPY",
+                            "CROSS_PAGE_REPEATED_HEADING",
+                            "AI_SLOP_DENSITY",
+                            "GENERIC_MARKETING_PHRASE",
+                            "DESIGN_NEAR_DUPLICATE",
+                        }
+                        if issue_codes & editorial_retry_codes:
                             config["_design_retry_seed"] = min(
                                 3, int(config.get("_design_retry_seed") or 0) + 1
                             )
