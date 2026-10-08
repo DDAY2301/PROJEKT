@@ -887,35 +887,29 @@ jobs:
                   {'slug':'gallery','title':'Gallery','purpose':'Show the field experience.'},
                   {'slug':'contact','title':'Contact','purpose':'Start an enquiry.'},
               ],
-              'custom_requirements': '''[CELOTEN IZVORNI BRIEF]
-2. PROGRAMMES
-Programmes:
-- Foundation Field — For beginners.
-- Weekend Field — Two-day practical format.
-- Advanced Field — For experienced participants.
-
-3. APPROACH
-Key messages:
-- learn through practice
-- explain why methods work
-- adapt to weather and terrain
-Suggested structure:
-Observe → Understand → Try → Repeat → Apply
-
-4. GALLERY
-Suggested motifs:
-- woodland terrain
-- shelter building
-- map navigation
-
-5. CONTACT
-Contact form fields:
-- name
-- email
-- programme
-- group size
-- message
-'''
+              'custom_requirements': (
+                  '[CELOTEN IZVORNI BRIEF]\n'
+                  '2. PROGRAMMES\n'
+                  'Programmes:\n'
+                  '- Foundation Field — For beginners.\n'
+                  '- Weekend Field — Two-day practical format.\n'
+                  '- Advanced Field — For experienced participants.\n\n'
+                  '3. APPROACH\n'
+                  'Key messages:\n'
+                  '- learn through practice\n'
+                  '- explain why methods work\n'
+                  '- adapt to weather and terrain\n'
+                  'Suggested structure:\n'
+                  'Observe → Understand → Try → Repeat → Apply\n\n'
+                  '4. GALLERY\n'
+                  'Suggested motifs:\n'
+                  '- woodland terrain\n'
+                  '- shelter building\n'
+                  '- map navigation\n\n'
+                  '5. CONTACT\n'
+                  'Contact form fields:\n'
+                  '- name\n- email\n- programme\n- group size\n- message\n'
+              )
           }
           contexts = robust._extract_page_contexts(cfg)
           sections = robust._grounded_sections(cfg['pages'][1], contexts['programmes'], cfg)
