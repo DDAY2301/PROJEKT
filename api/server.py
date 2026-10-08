@@ -35,6 +35,7 @@ import api.site_import  # noqa: F401 - safe existing-site ZIP import
 import api.brief_import  # noqa: F401 - TXT/MD/JSON brief auto-fill
 import api.capabilities  # noqa: F401 - observable local runtime capability manifest
 import api.preflight  # noqa: F401 - production readiness checks
+import api.fleet_control  # noqa: F401 - loopback-only Agent Manager fleet commands
 
 app = core.app
 DIST_DIR = Path(__file__).resolve().parent.parent / "dist"
