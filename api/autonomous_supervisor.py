@@ -631,12 +631,45 @@ async def _publish_runner(project_id: str) -> None:
         _active_recovery_tasks.pop(project_id, None)
 
 
-def _start_recovery(project_id: str, choice: str) -> bool:
+def _start_recovery(project_id: str, choice: str, reason_code: str = "") -> bool:
     existing = _active_recovery_tasks.get(project_id)
     if existing and not existing.done():
         return False
 
     if choice == "retry_build":
+        if reason_code == "quality_retry":
+            # A quality retry must be a new attempt, not an identical replay.
+            # Persist a bounded seed that the content planner can see. If the
+            # failure was specifically design similarity, also ask Design
+            # Engine V2 to rotate the stable motif/composition on this retry.
+            try:
+                with core.db() as con:
+                    row = con.execute(
+                        "SELECT config_json,last_audit_json FROM projects WHERE id=?",
+                        (project_id,),
+                    ).fetchone()
+                    if row:
+                        config = _read_json(row["config_json"])
+                        audit = _read_json(row["last_audit_json"])
+                        issue_codes = {
+                            str(item.get("code") or "")
+                            for item in (audit.get("issues") or [])
+                            if isinstance(item, dict)
+                        }
+                        config["_quality_retry_seed"] = min(
+                            3, int(config.get("_quality_retry_seed") or 0) + 1
+                        )
+                        if "DESIGN_NEAR_DUPLICATE" in issue_codes:
+                            config["_design_retry_seed"] = min(
+                                3, int(config.get("_design_retry_seed") or 0) + 1
+                            )
+                        con.execute(
+                            "UPDATE projects SET config_json=?,updated_at=? WHERE id=?",
+                            (json.dumps(config, ensure_ascii=False), core.now_iso(), project_id),
+                        )
+            except Exception:
+                logger.exception("Could not prepare quality retry seed project=%s", project_id)
+
         # The durable production queue is the sole owner of build scheduling.
         # If the job is already queued/running, enqueue_project returns False and
         # the supervisor must not mutate project state or count a recovery.
@@ -697,7 +730,7 @@ async def supervisor_tick() -> dict[str, Any]:
 
             action_taken = False
             if decision.autonomous and decision.choice in {"retry_build", "retry_publish"}:
-                action_taken = _start_recovery(project_id, decision.choice)
+                action_taken = _start_recovery(project_id, decision.choice, decision.reason_code)
                 if action_taken:
                     actions += 1
                     logger.warning(
