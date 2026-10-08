@@ -455,6 +455,37 @@ def _render_story_section(config: dict[str, Any], section: dict[str, Any], spec:
     </div></section>'''
 
 
+def _lead_repeats_editorial_copy(candidate: str, spec: dict[str, Any], page: dict[str, Any], config: dict[str, Any]) -> bool:
+    """Reject hero leads copied verbatim from another page's editorial plan.
+
+    Planning uniqueness only sees section bodies. The renderer independently
+    selects meta_description/purpose for the hero, so a model can repeat the
+    same long description across multiple pages despite a unique section plan.
+    Compare all supplied copy before selecting a lead; do not weaken QA.
+    """
+    key = base._fold_text(candidate)
+    if not key:
+        return True
+    current_slug = str(page.get("slug") or "")
+    # Hero and section prose on the same page should not duplicate either.
+    for section in page.get("sections") or []:
+        if isinstance(section, dict) and key == base._fold_text(section.get("body")):
+            return True
+    home_lead = _text(config.get("hero_subtitle"), _text(config.get("goal")))
+    if current_slug != "index" and key == base._fold_text(home_lead):
+        return True
+    for other in spec.get("pages") or []:
+        if not isinstance(other, dict) or str(other.get("slug") or "") == current_slug:
+            continue
+        for value in (other.get("meta_description"), other.get("purpose")):
+            if key == base._fold_text(value):
+                return True
+        for section in other.get("sections") or []:
+            if isinstance(section, dict) and key == base._fold_text(section.get("body")):
+                return True
+    return False
+
+
 def _hero_lead(config: dict[str, Any], spec: dict[str, Any], page: dict[str, Any]) -> str:
     """Create a page lead that never duplicates the first content paragraph."""
     if str(page.get("slug") or "") == "index":
@@ -490,12 +521,11 @@ def _hero_lead(config: dict[str, Any], spec: dict[str, Any], page: dict[str, Any
     }
 
     sections = [s for s in (page.get("sections") or []) if isinstance(s, dict)]
-    bodies = {base._fold_text(_text(s.get("body"))) for s in sections if _text(s.get("body"))}
     meta = _text(page.get("meta_description"))
     purpose = _text(page.get("purpose"))
     for candidate in (meta, purpose):
         folded = base._fold_text(candidate)
-        if not candidate or folded in bodies:
+        if not candidate or _lead_repeats_editorial_copy(candidate, spec, page, config):
             continue
         if any(folded.startswith(base._fold_text(prefix)) for prefix in (
             "predstaviti ", "razloziti ", "vizualno prikazati ", "preprost ", "mocan prvi vtis",
