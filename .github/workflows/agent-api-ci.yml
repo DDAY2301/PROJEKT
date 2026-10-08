@@ -1137,7 +1137,7 @@ jobs:
       - name: Check ZIP import UI contract
         run: |
           grep -q 'import-v1.js?v=20260926-2' dist/builder.html
-          grep -q 'brief-import-v1.js?v=20261006-1' dist/builder.html
+          grep -q 'brief-import-v1.js?v=20261008-1' dist/builder.html
           grep -q 'workspace-v2.css?v=20260926-2' dist/builder.html
           grep -q 'waitForImport' dist/assets/import-v1.js
           grep -q 'Gateway je vrnil HTML namesto API odgovora' dist/assets/import-v1.js
