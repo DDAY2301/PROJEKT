@@ -90,6 +90,19 @@ def _safe_email(value: Any) -> str | None:
     return value if value and EMAIL_RE.fullmatch(value) else None
 
 
+def _safe_language(value: Any, source_text: str = "") -> str:
+    raw = _fold(str(value or ""))
+    if raw:
+        if raw.startswith("sl") or "sloven" in raw:
+            return "sl"
+        if raw.startswith("en") or "english" in raw or "angles" in raw:
+            return "en"
+    source = _fold(source_text)
+    if re.search(r"\b(domov|kontakt|o nas|programi|pristop|galerija|slovenscina)\b", source):
+        return "sl"
+    return "en"
+
+
 def _safe_font(value: Any) -> str:
     value = _fold(str(value or ""))
     return value if value in FONT_STYLES else DEFAULT_BRAND["font_style"]
@@ -249,7 +262,7 @@ def _normalise(raw: dict[str, Any], source_text: str) -> dict[str, Any]:
         "name": _text(raw.get("name"), 120),
         "organization": _text(raw.get("organization"), 120),
         "programme": _text(raw.get("programme"), 180),
-        "language": _text(raw.get("language"), 80) or ("sl" if re.search(r"\b(domov|kontakt|o nas|programi|pristop|galerija)\b", source_text.lower()) else "en"),
+        "language": _safe_language(raw.get("language"), source_text),
         "audience": _text(raw.get("audience"), 500),
         "goal": goal,
         "tone": _text(raw.get("tone"), 300) or "professional and human",
