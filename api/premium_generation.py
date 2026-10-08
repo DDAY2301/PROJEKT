@@ -45,6 +45,88 @@ def _text(value: Any, fallback: str = "") -> str:
     return raw
 
 
+
+def _is_sl(config: dict[str, Any], spec: dict[str, Any] | None = None) -> bool:
+    language = _text(config.get("language")).lower()
+    if language.startswith("sl") or "sloven" in language:
+        return True
+    pages = (spec or {}).get("pages") or config.get("pages") or []
+    titles = " ".join(str(p.get("title") or "") for p in pages if isinstance(p, dict)).lower()
+    return any(token in titles for token in ("domov", "o nas", "kontakt", "programi", "pristop", "galerija"))
+
+
+_UI = {
+    "sl": {
+        "skip": "Preskoči na vsebino",
+        "menu": "Odpri navigacijo",
+        "primary_nav": "Glavna navigacija",
+        "discover": "Poglej vsebino ↓",
+        "explore": "Povezane vsebine",
+        "open": "Odpri stran ↗",
+        "next": "Naslednji korak",
+        "navigate": "Navigacija",
+        "contact": "Kontakt",
+        "project": "Projekt",
+        "footer_note": "Responsive · dostopno · hitro",
+        "crosslinks": ("Poglej še druge vsebine.", "Nadaljuj raziskovanje.", "Še iz projekta."),
+    },
+    "en": {
+        "skip": "Skip to content",
+        "menu": "Open navigation menu",
+        "primary_nav": "Primary navigation",
+        "discover": "Discover more ↓",
+        "explore": "Related pages",
+        "open": "Open page ↗",
+        "next": "Next step",
+        "navigate": "Navigate",
+        "contact": "Contact",
+        "project": "Project",
+        "footer_note": "Responsive · accessible · lightweight",
+        "crosslinks": ("Explore more.", "Continue the story.", "More from the project."),
+    },
+}
+
+
+def _ui(config: dict[str, Any], key: str, spec: dict[str, Any] | None = None) -> Any:
+    return _UI["sl" if _is_sl(config, spec) else "en"][key]
+
+
+def _brand_mark(site_name: str) -> str:
+    words = re.findall(r"[A-Za-zÀ-ž0-9]+", site_name)
+    if len(words) >= 2:
+        return "".join(word[0] for word in words[:2]).upper()
+    if words:
+        clean = re.sub(r"[^A-Za-zÀ-ž0-9]", "", words[0])
+        return clean[:2].upper()
+    return "PV"
+
+
+def _page_kind(page: dict[str, Any]) -> str:
+    text = _text(page.get("slug")) + " " + _text(page.get("title"))
+    low = base._fold_text(text)
+    if any(x in low for x in ("kontakt", "contact", "stik")):
+        return "contact"
+    if any(x in low for x in ("galer", "gallery")):
+        return "gallery"
+    if any(x in low for x in ("program", "service", "storitev", "ponud")):
+        return "programs"
+    if any(x in low for x in ("pristop", "approach", "process", "metod")):
+        return "approach"
+    if any(x in low for x in ("o nas", "about", "onas")):
+        return "about"
+    return "home" if str(page.get("slug") or "") == "index" else "content"
+
+
+def _find_page_href(spec: dict[str, Any], tokens: tuple[str, ...], fallback: str = "index.html") -> str:
+    for page in spec.get("pages") or []:
+        if not isinstance(page, dict):
+            continue
+        hay = base._fold_text(f"{page.get('slug','')} {page.get('title','')}")
+        if any(base._fold_text(token) in hay for token in tokens):
+            return _href(str(page.get("slug") or "index"))
+    return fallback
+
+
 def _sentences(value: Any, limit: int = 3) -> list[str]:
     raw = _text(value)
     if not raw:
@@ -124,49 +206,107 @@ def _render_visual(label: str, index: int = 0, spec: dict[str, Any] | None = Non
     </div>'''
 
 
-def _render_crosslinks(spec: dict[str, Any], current_slug: str) -> str:
+def _render_crosslinks(config: dict[str, Any], spec: dict[str, Any], current_slug: str) -> str:
+    current_page = next((p for p in (spec.get("pages") or []) if str(p.get("slug") or "") == current_slug), {})
+    if _page_kind(current_page) == "contact":
+        return ""
+
+    candidates = [
+        p for p in (spec.get("pages") or [])
+        if isinstance(p, dict) and str(p.get("slug") or "index") != current_slug
+    ]
+    if not candidates:
+        return ""
+
+    # Deterministic rotation makes different pages discover different neighbours.
+    seed = int(hashlib.sha256(current_slug.encode("utf-8")).hexdigest()[:8], 16)
+    if candidates:
+        offset = seed % len(candidates)
+        candidates = candidates[offset:] + candidates[:offset]
+
     cards = []
-    for idx, p in enumerate(spec.get("pages") or []):
+    for idx, p in enumerate(candidates[:3]):
         slug = str(p.get("slug") or "index")
-        if slug == current_slug:
-            continue
-        title = _e(p.get("title") or "Explore")
-        purpose = _e(_text(p.get("purpose"), "Discover this part of the project."))
+        title = _e(p.get("title") or "Page")
+        purpose = _e(_text(p.get("purpose"), ""))
         cards.append(
             f'''<a class="story-card reveal" href="{_e(_href(slug), quote=True)}">
-              {_render_visual(str(p.get("title") or "Explore"), idx, spec)}
-              <div class="story-card-copy"><span>Explore</span><h3>{title}</h3><p>{purpose}</p><b>Open page ↗</b></div>
+              {_render_visual(str(p.get("title") or "Page"), idx + seed % 5, spec)}
+              <div class="story-card-copy"><span>{_e(_ui(config, "explore", spec))}</span><h3>{title}</h3><p>{purpose}</p><b>{_e(_ui(config, "open", spec))}</b></div>
             </a>'''
         )
-        if len(cards) == 3:
-            break
-    if not cards:
-        return ""
-    return f'''<section class="section section-ink"><div class="shell">
-      <div class="section-head reveal"><span class="label">Explore</span><h2>More of the story.</h2></div>
+    headings = _ui(config, "crosslinks", spec)
+    heading = headings[seed % len(headings)]
+    return f'''<section class="section section-ink related-section"><div class="shell">
+      <div class="section-head reveal"><span class="label">{_e(_ui(config, "explore", spec))}</span><h2>{_e(heading)}</h2></div>
       <div class="story-grid">{''.join(cards)}</div>
     </div></section>'''
 
+def _render_gallery_section(section: dict[str, Any], page: dict[str, Any], spec: dict[str, Any]) -> str:
+    heading = _text(section.get("heading"), page.get("title") or "Gallery")
+    body = _text(section.get("body"))
+    items = [x.strip(" ·-•") for x in re.split(r"\s*[•|]\s*", body) if x.strip()]
+    if len(items) < 3:
+        items = [x.strip() for x in _sentences(body, 6) if x.strip()]
+    if not items:
+        items = [heading]
+    tiles = []
+    for idx, item in enumerate(items[:6]):
+        tiles.append(
+            f'''<div class="gallery-tile gallery-tile-{idx % 4} reveal">
+              {_render_visual(item[:34], idx + 2, spec)}
+              <span>{_e(item[:90])}</span>
+            </div>'''
+        )
+    return f'''<section class="section gallery-section"><div class="shell">
+      <div class="section-head reveal"><span class="label">{_e(section.get('type') or 'Gallery')}</span><h2>{_e(heading)}</h2></div>
+      <div class="gallery-grid">{''.join(tiles)}</div>
+    </div></section>'''
 
-def _render_content_sections(page: dict[str, Any]) -> str:
+
+def _render_content_sections(config: dict[str, Any], spec: dict[str, Any], page: dict[str, Any]) -> str:
     out: list[str] = []
     sections = [s for s in (page.get("sections") or []) if isinstance(s, dict)]
     filtered = [s for s in sections if str(s.get("type") or "").lower() not in {"hero", "cta"}]
     seen_headings: set[str] = set()
+    slug = str(page.get("slug") or "index")
+
     for idx, section in enumerate(filtered[:4]):
+        kind = base._fold_text(section.get("type"))
+        if "gallery" in kind:
+            out.append(_render_gallery_section(section, page, spec))
+            continue
+
         raw_heading = _text(section.get("heading"), page.get("title") or "Overview")
-        normalized = re.sub(r"\s+", " ", raw_heading).strip().lower()
+        normalized = base._fold_text(raw_heading)
         if normalized in seen_headings:
-            qualifier = _text(section.get("type"), f"Part {idx + 1}").replace("_", " ").strip().title()
-            raw_heading = f"{raw_heading} — {qualifier}"
-            normalized = raw_heading.lower()
+            # Do not expose mechanical "— Text" suffixes. A duplicate heading is
+            # better represented by the section's purpose.
+            qualifier = _text(section.get("type"), f"Part {idx + 1}").replace("_", " ").strip()
+            raw_heading = qualifier.title() if qualifier else f"{page.get('title')} {idx + 1}"
+            normalized = base._fold_text(raw_heading)
         seen_headings.add(normalized)
+
         heading = _e(raw_heading)
         body = _text(section.get("body"), page.get("purpose") or "")
-        paras = _sentences(body, 4) or [body]
-        body_html = "".join(f"<p>{_e(p)}</p>" for p in paras if p)
-        variant = "section-split" if idx % 2 == 0 else "section-split section-split-reverse"
-        out.append(f'''<section class="section"><div class="shell {variant}">
+        # Bulleted brief facts stay visually scannable instead of becoming one
+        # repeated marketing paragraph.
+        bullets = [x.strip() for x in re.split(r"\s*•\s*", body) if x.strip()]
+        if len(bullets) >= 3:
+            body_html = "<ul class=\"fact-list\">" + "".join(f"<li>{_e(x)}</li>" for x in bullets[:8]) + "</ul>"
+        else:
+            paras = _sentences(body, 4) or [body]
+            body_html = "".join(f"<p>{_e(p)}</p>" for p in paras if p)
+
+        layout_seed = int(hashlib.sha256(f"{slug}|{raw_heading}|{idx}".encode("utf-8")).hexdigest()[:4], 16)
+        variants = (
+            "section-split",
+            "section-split section-split-reverse",
+            "section-stack",
+            "section-rail",
+        )
+        variant = variants[layout_seed % len(variants)]
+        out.append(f'''<section class="section content-section content-{idx + 1}"><div class="shell {variant}">
           <div class="section-head reveal"><span class="label">{_e(section.get('type') or 'Overview')}</span><h2>{heading}</h2></div>
           <div class="prose reveal">{body_html}</div>
         </div></section>''')
@@ -211,15 +351,37 @@ def _render_journey(config: dict[str, Any]) -> str:
     </div></section>'''
 
 
-def _render_contact(config: dict[str, Any]) -> str:
+def _render_contact(config: dict[str, Any], spec: dict[str, Any], page: dict[str, Any]) -> str:
     email = _text(config.get("contact_email"))
-    if not email:
-        return ""
+    sl = _is_sl(config, spec)
+    title = "Pošlji povpraševanje." if sl else "Start a conversation."
+    copy = (
+        "Povej nam, kateri program te zanima, okvirno velikost skupine in kaj želiš doseči."
+        if sl else
+        "Tell us which programme you are interested in, the approximate group size and what you want to achieve."
+    )
+    email_html = (
+        f'<a href="mailto:{_e(email, quote=True)}">{_e(email)}</a>'
+        if email else
+        f'<span>{"Uporabi spodnji obrazec." if sl else "Use the form below."}</span>'
+    )
+    fields = (
+        ("Ime", "Email", "Program", "Število oseb", "Sporočilo")
+        if sl else
+        ("Name", "Email", "Programme", "Group size", "Message")
+    )
+    action = f'mailto:{_e(email, quote=True)}' if email else "#"
     return f'''<section class="section contact-panel"><div class="shell contact-grid">
-      <div class="section-head reveal"><span class="label">Contact</span><h2>Start a conversation.</h2><p>Tell us what you are working on and what kind of collaboration you have in mind.</p></div>
-      <div class="contact-box reveal"><span>Email</span><a href="mailto:{_e(email, quote=True)}">{_e(email)}</a><p>We will use your message only to respond to your enquiry.</p></div>
+      <div class="section-head reveal"><span class="label">{_e(_ui(config, "contact", spec))}</span><h2>{_e(title)}</h2><p>{_e(copy)}</p><div class="contact-box">{email_html}</div></div>
+      <form class="contact-form reveal" action="{action}" method="post" enctype="text/plain">
+        <label>{_e(fields[0])}<input name="name" autocomplete="name" required></label>
+        <label>{_e(fields[1])}<input name="email" type="email" autocomplete="email" required></label>
+        <label>{_e(fields[2])}<input name="programme"></label>
+        <label>{_e(fields[3])}<input name="group_size" inputmode="numeric"></label>
+        <label class="form-wide">{_e(fields[4])}<textarea name="message" rows="5" required></textarea></label>
+        <button class="button button-accent form-wide" type="submit">{_e(config.get("cta_text") or ("Pošlji povpraševanje" if sl else "Send enquiry"))}<span>↗</span></button>
+      </form>
     </div></section>'''
-
 
 def _contact_href(spec: dict[str, Any]) -> str:
     pages = [p for p in (spec.get("pages") or []) if isinstance(p, dict)]
@@ -238,13 +400,19 @@ def _contact_href(spec: dict[str, Any]) -> str:
     return "index.html"
 
 
-def _render_cta(config: dict[str, Any], spec: dict[str, Any]) -> str:
-    label = _e(_text(config.get("cta_text"), "Contact us"))
+def _render_cta(config: dict[str, Any], spec: dict[str, Any], page: dict[str, Any]) -> str:
+    if _page_kind(page) == "contact":
+        return ""
+    label = _text(config.get("cta_text"), "Kontaktirajte nas" if _is_sl(config, spec) else "Contact us")
+    page_title = _text(page.get("title"), "")
+    if _is_sl(config, spec):
+        heading = f"Želiš narediti naslednji korak po strani »{page_title}«?" if page_title else "Želiš narediti naslednji korak?"
+    else:
+        heading = f"Ready for the next step after {page_title}?" if page_title else "Ready for the next step?"
     return f'''<section class="section final-cta"><div class="shell reveal">
-      <span class="label">Next step</span><h2>Turn intention into something people can join.</h2>
-      <a class="button button-accent" href="{_e(_contact_href(spec), quote=True)}">{label}<span>↗</span></a>
+      <span class="label">{_e(_ui(config, "next", spec))}</span><h2>{_e(heading)}</h2>
+      <a class="button button-accent" href="{_e(_contact_href(spec), quote=True)}">{_e(label)}<span>↗</span></a>
     </div></section>'''
-
 
 def _render_page(config: dict[str, Any], spec: dict[str, Any], page: dict[str, Any], index: int) -> str:
     slug = str(page.get("slug") or "index")
