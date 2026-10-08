@@ -510,6 +510,11 @@ def _render_content_sections(config: dict[str, Any], spec: dict[str, Any], page:
     out: list[str] = []
     sections = [s for s in (page.get("sections") or []) if isinstance(s, dict)]
     filtered = [s for s in sections if str(s.get("type") or "").lower() not in {"hero", "cta"}]
+    if _page_kind(page) == "contact":
+        filtered = [
+            s for s in filtered
+            if base._fold_text(s.get("type")) not in {"contact", "form fields", "next step"}
+        ]
     seen_headings: set[str] = set()
     slug = str(page.get("slug") or "index")
     if not filtered:
@@ -614,6 +619,81 @@ def _render_journey(config: dict[str, Any]) -> str:
     </div></section>'''
 
 
+def _contact_field_spec(label: str, index: int) -> dict[str, str]:
+    folded = base._fold_text(label)
+    name = re.sub(r"[^a-z0-9_]+", "_", folded.replace(" ", "_")).strip("_") or f"field_{index}"
+    field_type = "text"
+    autocomplete = ""
+    textarea = False
+
+    if "email" in folded or "e mail" in folded:
+        field_type = "email"
+        autocomplete = "email"
+        name = "email"
+    elif any(token in folded for token in ("ime", "name")) and not any(token in folded for token in ("podjet", "company", "organiz")):
+        autocomplete = "name"
+        name = "name"
+    elif any(token in folded for token in ("telefon", "phone", "mobile", "gsm")):
+        field_type = "tel"
+        autocomplete = "tel"
+        name = "phone"
+    elif any(token in folded for token in ("stevilo", "number", "group size", "oseb", "participants")):
+        field_type = "number"
+        name = "group_size"
+    elif any(token in folded for token in ("datum", "date")):
+        field_type = "date"
+        name = "date"
+    elif any(token in folded for token in ("sporoc", "message", "opis", "description", "details", "opombe", "notes")):
+        textarea = True
+        name = "message"
+
+    return {
+        "label": label,
+        "name": name,
+        "type": field_type,
+        "autocomplete": autocomplete,
+        "textarea": "1" if textarea else "",
+    }
+
+
+def _requested_contact_fields(config: dict[str, Any], spec: dict[str, Any], page: dict[str, Any]) -> list[dict[str, str]]:
+    sl = _is_sl(config, spec)
+    raw_items: list[str] = []
+    for section in (page.get("sections") or []):
+        if not isinstance(section, dict):
+            continue
+        kind = base._fold_text(section.get("type"))
+        heading = base._fold_text(section.get("heading"))
+        if kind in {"form fields", "form", "enquiry fields", "contact fields"} or any(
+            token in heading for token in ("potrebujemo", "obrazec", "form fields", "contact fields")
+        ):
+            raw_items.extend(_structured_items(section.get("body"), 10))
+
+    if not raw_items:
+        raw_items = (
+            ["Ime", "Email", "Program", "Število oseb", "Sporočilo"]
+            if sl else
+            ["Name", "Email", "Programme", "Group size", "Message"]
+        )
+
+    unique: list[str] = []
+    for item in raw_items:
+        label = re.sub(r"\s+[–—:-]\s+.*$", "", _text(item)).strip()
+        if label and base._fold_text(label) not in {base._fold_text(x) for x in unique}:
+            unique.append(label)
+    return [_contact_field_spec(label, index) for index, label in enumerate(unique[:10], 1)]
+
+
+def _render_contact_field(field: dict[str, str], *, wide: bool = False) -> str:
+    label = _e(field["label"])
+    name = _e(field["name"], quote=True)
+    klass = ' class="form-wide"' if wide or field.get("textarea") else ""
+    if field.get("textarea"):
+        return f'<label{klass}>{label}<textarea name="{name}" rows="5" required></textarea></label>'
+    autocomplete = f' autocomplete="{_e(field["autocomplete"], quote=True)}"' if field.get("autocomplete") else ""
+    return f'<label{klass}>{label}<input name="{name}" type="{_e(field["type"], quote=True)}"{autocomplete} required></label>'
+
+
 def _render_contact(config: dict[str, Any], spec: dict[str, Any], page: dict[str, Any]) -> str:
     email = _text(config.get("contact_email"))
     sl = _is_sl(config, spec)
@@ -628,20 +708,16 @@ def _render_contact(config: dict[str, Any], spec: dict[str, Any], page: dict[str
         if email else
         f'<span>{"Uporabi spodnji obrazec." if sl else "Use the form below."}</span>'
     )
-    fields = (
-        ("Ime", "Email", "Program", "Število oseb", "Sporočilo")
-        if sl else
-        ("Name", "Email", "Programme", "Group size", "Message")
+    requested_fields = _requested_contact_fields(config, spec, page)
+    rendered_fields = "".join(
+        _render_contact_field(field, wide=(index == len(requested_fields) - 1 and field.get("textarea") == "1"))
+        for index, field in enumerate(requested_fields)
     )
     action = f'mailto:{_e(email, quote=True)}' if email else "#"
     return f'''<section class="section contact-panel"><div class="shell contact-grid">
       <div class="section-head reveal"><span class="label">{_e(_ui(config, "contact", spec))}</span><h2>{_e(title)}</h2><p>{_e(copy)}</p><div class="contact-box">{email_html}</div></div>
       <form class="contact-form reveal" action="{action}" method="post" enctype="text/plain">
-        <label>{_e(fields[0])}<input name="name" autocomplete="name" required></label>
-        <label>{_e(fields[1])}<input name="email" type="email" autocomplete="email" required></label>
-        <label>{_e(fields[2])}<input name="programme"></label>
-        <label>{_e(fields[3])}<input name="group_size" inputmode="numeric"></label>
-        <label class="form-wide">{_e(fields[4])}<textarea name="message" rows="5" required></textarea></label>
+        {rendered_fields}
         <button class="button button-accent form-wide" type="submit">{_e(config.get("cta_text") or ("Pošlji povpraševanje" if sl else "Send enquiry"))}<span>↗</span></button>
       </form>
     </div></section>'''
