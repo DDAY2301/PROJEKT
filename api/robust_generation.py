@@ -313,16 +313,17 @@ def _grounded_sections(page: dict[str, str], context: str, config: dict[str, Any
         if heading and body and all(_fold_text(x.get("heading")) != _fold_text(heading) for x in out):
             out.append({"type": kind, "heading": heading[:160], "body": body[:900]})
 
-    if "program" in slug:
-        items = items_any("Programi", "Programs", "Programmes", "Services")
+    if any(token in slug for token in ("program", "service", "storitev", "tecaj", "course", "paket", "package")):
+        items = items_any("Programi", "Programs", "Programmes", "Services", "Storitve", "Tečaji", "Courses")
         if items:
-            add("program-list", tr("Programi na terenu", "Programmes in the field"), " • ".join(items[:4]))
+            heading = tr("Programi na terenu", "Programmes in the field") if "program" in slug or "tecaj" in slug else tr(f"{title}: ponudba", f"{title}: options")
+            add("program-list", heading, " • ".join(items[:6]))
         audience = str(config.get("audience") or "")
         if audience:
-            add("audience", tr("Komu so programi namenjeni", "Who the programmes are for"), audience)
-        add("decision", tr("Izberi raven, ki ti ustreza", "Choose the right level"), purpose or tr("Program izberi glede na izkušnje, skupino in cilj.", "Choose according to experience, group and goal."))
+            add("audience", tr(f"Komu je namenjeno: {title}", f"Who {title} serves"), audience)
+        add("decision", tr(f"Kako izbrati: {title}", f"How to choose {title}"), purpose or tr("Izberi glede na potrebe, izkušnje in cilj.", "Choose according to needs, experience and goal."))
 
-    elif "galer" in slug:
+    elif "galer" in slug or "gallery" in slug:
         motifs = items_any("Predlagani motivi", "Suggested motifs", "Suggested imagery", "Visual motifs")
         if motifs:
             add("gallery", tr("Teren, delo in detajli", "Fieldwork and details"), " • ".join(motifs[:8]))
@@ -347,7 +348,7 @@ def _grounded_sections(page: dict[str, str], context: str, config: dict[str, Any
         add("principles", tr("Kaj je v središču našega dela", "What guides the work"), purpose or str(config.get("goal") or ""))
         add("trust", tr("Samo preverljive informacije", "Only verifiable information"), tr("Predstavljamo samo preverljive informacije iz briefa, brez izmišljenih certifikatov, nagrad ali partnerjev.", "We present only verifiable information from the brief, without invented certificates, awards or partners."))
 
-    elif "pristop" in slug or "approach" in slug:
+    elif "pristop" in slug or "approach" in slug or "process" in slug:
         messages = items_any("Ključna sporočila", "Key messages", "Key points")
         if messages:
             add("principles", tr("Kako delamo na terenu", "How we work in the field"), " • ".join(messages[:5]))
@@ -368,9 +369,9 @@ def _grounded_sections(page: dict[str, str], context: str, config: dict[str, Any
                 add("goal", tr("Kaj želimo omogočiti", "What this should enable"), goal)
             audience = str(config.get("audience") or "")
             has_program_page = any(
-                "program" in _fold_text(p.get("slug")) or
-                "service" in _fold_text(p.get("slug")) or
-                "storitev" in _fold_text(p.get("slug"))
+                any(x in _fold_text(p.get("slug")) for x in (
+                    "program", "service", "storitev", "tecaj", "course", "paket", "package"
+                ))
                 for p in _configured_pages(config)
             )
             if audience and not has_program_page:
