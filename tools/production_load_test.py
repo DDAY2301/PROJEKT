@@ -80,6 +80,7 @@ class Result:
     repairs: int = 0
     originality_score: float | None = None
     nearest_similarity: float | None = None
+    brief_coverage_score: float | None = None
     motif: str = ""
     composition: str = ""
     quality_gate_passed: bool | None = None
@@ -267,6 +268,8 @@ def hydrate(r: Result, project: dict[str,Any], db: Path, submitted: datetime, at
     originality=audit.get("originality") if isinstance(audit.get("originality"),dict) else {}
     r.originality_score=originality.get("score")
     r.nearest_similarity=originality.get("nearest_similarity")
+    coverage=audit.get("brief_coverage") if isinstance(audit.get("brief_coverage"),dict) else {}
+    r.brief_coverage_score=coverage.get("score")
     r.motif=str(originality.get("motif") or "")
     r.composition=str(originality.get("composition") or "")
     r.quality_gate_passed=audit.get("quality_gate_passed") if "quality_gate_passed" in audit else None
@@ -290,6 +293,7 @@ def summary(results: list[Result], started: datetime, finished: datetime, model:
     aesthetic_scores=[float(r.aesthetic_score) for r in results if r.aesthetic_score is not None]
     aesthetic_penalties=[float(r.aesthetic_penalty) for r in results if r.aesthetic_penalty is not None]
     sims=[float(r.nearest_similarity) for r in results if r.nearest_similarity is not None]
+    coverages=[float(r.brief_coverage_score) for r in results if r.brief_coverage_score is not None]
     quality=[r for r in results if (r.visual_score or 0)>=90 and r.critical==0 and r.high==0]
     return {
         "started_at":iso(started),"finished_at":iso(finished),"elapsed_s":round(elapsed,2),"projects":len(results),
@@ -322,6 +326,7 @@ def summary(results: list[Result], started: datetime, finished: datetime, model:
         "avg_repairs":round(statistics.mean([r.repairs for r in results]),3) if results else 0,
         "qa_failure_rate":round(sum((r.critical+r.high)>0 for r in results)/max(1,len(results)),4),
         "originality":{"avg_nearest_similarity":round(statistics.mean(sims),4) if sims else None,"max_nearest_similarity":round(max(sims),4) if sims else None,"near_duplicates":sum(x>=.93 for x in sims),"warnings":sum(.82<=x<.93 for x in sims)},
+        "brief_coverage":{"avg":round(statistics.mean(coverages),4) if coverages else None,"min":round(min(coverages),4) if coverages else None,"below_full":sum(x<1.0 for x in coverages)},
         "motifs":dict(Counter(r.motif for r in results if r.motif)),
         "compositions":dict(Counter(r.composition for r in results if r.composition)),
         "model":model,
@@ -359,14 +364,16 @@ def write_reports(folder: Path, results: list[Result], stats: dict[str,Any]):
         f"- Aesthetic penalty avg / max: {stats['visual']['aesthetic_penalty_avg']} / {stats['visual']['aesthetic_penalty_max']}",
         f"- Max nearest similarity: {stats['originality']['max_nearest_similarity']}",
         f"- Near duplicates: {stats['originality']['near_duplicates']}",
+        f"- Brief coverage avg / min: {stats['brief_coverage']['avg']} / {stats['brief_coverage']['min']}",
+        f"- Brief coverage below 100%: {stats['brief_coverage']['below_full']}",
         f"- Motifs: {json.dumps(stats['motifs'],ensure_ascii=False)}",
         f"- Compositions: {json.dumps(stats['compositions'],ensure_ascii=False)}","",
         "## Per project","",
-        "| # | Project | Status | Total s | Queue s | Exec s | Release | Browser | Browser advisory | Aesthetic | Penalty | Repairs | Motif | Composition | Similarity | Repo ready | Live |",
-        "|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---:|---|---|",
+        "| # | Project | Status | Total s | Queue s | Exec s | Release | Browser | Browser advisory | Aesthetic | Penalty | Repairs | Motif | Composition | Similarity | Brief | Repo ready | Live |",
+        "|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---:|---:|---|---|",
     ]
     for r in results:
-        lines.append(f"| {r.index} | {r.name} | {r.status} | {r.total_s or ''} | {r.queue_wait_s if r.queue_wait_s is not None else ''} | {r.execution_s if r.execution_s is not None else ''} | {r.visual_score if r.visual_score is not None else ''} | {r.deterministic_score if r.deterministic_score is not None else ''} | {r.browser_advisory_score if r.browser_advisory_score is not None else ''} | {r.aesthetic_score if r.aesthetic_score is not None else ''} | {r.aesthetic_penalty if r.aesthetic_penalty is not None else ''} | {r.repairs} | {r.motif} | {r.composition} | {r.nearest_similarity if r.nearest_similarity is not None else ''} | {'yes' if r.repository_ready else 'no'} | {'yes' if r.public_live else 'no'} |")
+        lines.append(f"| {r.index} | {r.name} | {r.status} | {r.total_s or ''} | {r.queue_wait_s if r.queue_wait_s is not None else ''} | {r.execution_s if r.execution_s is not None else ''} | {r.visual_score if r.visual_score is not None else ''} | {r.deterministic_score if r.deterministic_score is not None else ''} | {r.browser_advisory_score if r.browser_advisory_score is not None else ''} | {r.aesthetic_score if r.aesthetic_score is not None else ''} | {r.aesthetic_penalty if r.aesthetic_penalty is not None else ''} | {r.repairs} | {r.motif} | {r.composition} | {r.nearest_similarity if r.nearest_similarity is not None else ''} | {r.brief_coverage_score if r.brief_coverage_score is not None else ''} | {'yes' if r.repository_ready else 'no'} | {'yes' if r.public_live else 'no'} |")
     (folder/"REPORT.md").write_text("\n".join(lines)+"\n",encoding="utf-8")
 
 def main() -> int:
@@ -460,8 +467,8 @@ def main() -> int:
         print(f"throughput={stats['throughput_sites_per_hour']} sites/hour")
         print(f"quality_pass_90={stats['quality_pass_rate']*100:.1f}% build_ready={stats['build_ready_rate']*100:.1f}% delivery_ready={stats['delivery_ready_rate']*100:.1f}% public_live={stats['deployment_success_rate']*100:.1f}%")
         print(f"qa_failure={stats['qa_failure_rate']*100:.1f}% repairs={stats['repair_rate']*100:.1f}%")
-        print(f"visual_avg_min={stats['visual']['avg']}/{stats['visual']['min']} browser_avg_min={stats['visual']['deterministic_avg']}/{stats['visual']['deterministic_min']} browser_advisory_avg_min={stats['visual']['browser_advisory_avg']}/{stats['visual']['browser_advisory_min']} aesthetic_avg_min={stats['visual']['aesthetic_avg']}/{stats['visual']['aesthetic_min']} max_similarity={stats['originality']['max_nearest_similarity']}")
-        hard_fail=stats["failed"]>0 or stats["quality_pass_rate"]<.95 or stats["qa_failure_rate"]>.05 or stats["originality"]["near_duplicates"]>0
+        print(f"visual_avg_min={stats['visual']['avg']}/{stats['visual']['min']} browser_avg_min={stats['visual']['deterministic_avg']}/{stats['visual']['deterministic_min']} browser_advisory_avg_min={stats['visual']['browser_advisory_avg']}/{stats['visual']['browser_advisory_min']} aesthetic_avg_min={stats['visual']['aesthetic_avg']}/{stats['visual']['aesthetic_min']} max_similarity={stats['originality']['max_nearest_similarity']} brief_avg_min={stats['brief_coverage']['avg']}/{stats['brief_coverage']['min']}")
+        hard_fail=stats["failed"]>0 or stats["quality_pass_rate"]<.95 or stats["qa_failure_rate"]>.05 or stats["originality"]["near_duplicates"]>0 or (stats["brief_coverage"]["min"] is not None and stats["brief_coverage"]["min"]<1.0)
         return 2 if hard_fail else 0
     finally:
         api.close()
