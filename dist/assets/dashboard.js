@@ -71,6 +71,11 @@
     const paymentText = payment?.status === 'paid' ? `Plačano ${money(payment.amount_total,payment.currency)}` : payment ? 'Plačilo v teku' : 'Brez plačila';
     const qa = p.visual_qa;
     const qaText = qa?.available ? `${qa.score ?? '—'}/100` : 'Ni izveden';
+    const coverage = p.brief_coverage;
+    const coveragePct = typeof coverage?.score === 'number' ? Math.round(coverage.score * 100) : null;
+    const coverageText = coveragePct === null ? '—' : `${coveragePct}%`;
+    const originality = p.originality;
+    const similarityPct = typeof originality?.nearest_similarity === 'number' ? Math.round(originality.nearest_similarity * 100) : null;
     const live = p.public_live && p.public_url;
     const domain = p.domain?.domain || '';
     const workspace = apiLink(`builder.html?project=${encodeURIComponent(p.id)}`);
@@ -80,6 +85,7 @@
         <div class="metric"><span>Status</span><strong><i class="badge ${badgeClass(p.status)}">${esc(statusLabel(p.status))}</i></strong></div>
         <div class="metric"><span>Plačilo</span><strong>${esc(paymentText)}</strong></div>
         <div class="metric"><span>Visual QA</span><strong>${esc(qaText)}</strong></div>
+        <div class="metric"><span>Brief</span><strong>${esc(coverageText)}</strong></div>
         <div class="project-actions">
           ${live ? `<a class="button" href="${esc(p.public_url)}" target="_blank" rel="noopener">Odpri stran ↗</a>` : ''}
           ${!p.archived ? `<a class="button light" href="${esc(workspace)}">Workspace</a>` : ''}
@@ -90,6 +96,7 @@
       </div>
       <div class="details" id="details-${esc(p.id)}">
         <section class="panel"><h4>Vizualna kakovost</h4><div class="qa-score"><b>${esc(qa?.score ?? '—')}</b><p>${qa?.available ? `${esc(qa.pages_checked || 0)} strani · ${esc(qa.render_count || 0)} renderjev · desktop + tablet + mobile${p.severe_issue_count ? ` · ${esc(p.severe_issue_count)} pomembnih težav` : ' · brez pomembnih težav'}` : 'Visual QA se izvede med naslednjo izdelavo z nameščenim Chromiumom.'}</p></div></section>
+        <section class="panel"><h4>Ujemanje z briefom</h4><div class="qa-score"><b>${coveragePct === null ? '—' : coveragePct}</b><p>${coveragePct === null ? 'Pokritost briefa bo izmerjena pri naslednjem buildu.' : `${coveragePct}% konkretnih poimenovanih zahtev iz briefa je prisotnih na končnih straneh${similarityPct === null ? '' : ` · najbližja podobnost z drugim designom ${similarityPct}%`}.`}</p></div></section>
         <section class="panel"><h4>Domena</h4><div class="domain-row"><input value="${esc(domain)}" data-domain-input="${esc(p.id)}" placeholder="www.mojprojekt.si"><button class="button" type="button" data-domain-save="${esc(p.id)}">Shrani</button></div><div class="project-meta">${domain ? `Shranjena domena: ${esc(domain)} · status ${esc(p.domain.status)}` : 'Domena še ni nastavljena. DNS povezava se preveri posebej.'}</div></section>
         <section class="panel"><h4>Spremeni objavljeno stran</h4><div class="revision-row"><textarea data-revision-input="${esc(p.id)}" placeholder="Npr. Zamenjaj hero naslov in naredi galerijo bolj editorial."></textarea><button class="button" type="button" data-revise="${esc(p.id)}">Izvedi</button></div><div class="revisions" id="revisions-${esc(p.id)}"><div class="revision"><span>${esc(p.revision_count)} dosedanjih revizij</span></div></div></section>
         <section class="panel"><h4>Predaja in koda</h4><div class="project-actions" style="justify-content:flex-start"><button class="button" type="button" data-source="${esc(p.id)}">Prenesi source ZIP</button>${p.repo_name ? `<a class="button light" href="https://github.com/DDAY2301/${esc(p.repo_name)}" target="_blank" rel="noopener">GitHub ↗</a>` : ''}${p.public_url ? `<a class="button light" href="${esc(p.public_url)}" target="_blank" rel="noopener">Live URL ↗</a>` : ''}</div><div class="project-meta">Repo: ${esc(p.repo_name || 'še ni ustvarjen')}</div></section>
