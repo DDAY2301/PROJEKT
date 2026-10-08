@@ -41,7 +41,7 @@ MOTIFS: dict[str, dict[str, Any]] = {
         "keywords": ("outdoor", "nature", "survival", "forest", "adventure", "camp", "environment"),
         "font": 'Inter,Arial,sans-serif', "display": 'Inter,Arial,sans-serif',
         "radius": "18px", "shell": "1280px", "tracking": "-.065em",
-        "css": """.hero{background:linear-gradient(145deg,#071b12,var(--primary) 66%,#142015)}.hero-grid{grid-template-columns:minmax(0,.9fr) minmax(420px,1.1fr)}.visual{transform:rotate(1.2deg);background:linear-gradient(155deg,#d9d1ae,#879b75)}.visual-grid{background-size:72px 72px}.section:nth-of-type(even){background:#eef0e7!important}.story-card{background:#10251b}.final-cta{background:linear-gradient(120deg,#10251b,var(--primary))}""",
+        "css": """.hero{background-color:#071b12;background-image:linear-gradient(145deg,#071b12,var(--primary) 66%,#142015)}.hero-grid{grid-template-columns:minmax(0,.9fr) minmax(420px,1.1fr)}.visual{transform:rotate(1.2deg);background-color:#d9d1ae;background-image:linear-gradient(155deg,#d9d1ae,#879b75)}.visual-grid{background-size:72px 72px}.section:nth-of-type(even){background:#eef0e7!important}.story-card{background:#10251b}.final-cta{background-color:#10251b;background-image:linear-gradient(120deg,#10251b,var(--primary))}""",
     },
     "corporate_grid": {
         "keywords": ("corporate", "finance", "legal", "b2b", "industry", "company"),
