@@ -954,13 +954,34 @@ Return the COMPLETE corrected file only. Preserve the design and content unrelat
         try:
             candidate = core.strip_fence(await _generate(prompt, "You are a senior debugging engineer. Return only the corrected file.", num_predict=5000))
             if path.endswith(".html"):
-                candidate = re.sub(r"^\\s*(?:html|HTML)\\s*(?=<!doctype)", "", candidate, count=1)
+                # A model response containing the opening HTML shell is not
+                # necessarily a complete document. Preserve complete generated
+                # sites and navigation when applying a repair.
+                candidate = re.sub(r"^\\s*(?:html)\\s*(?=<!doctype)", "", candidate, count=1, flags=re.I)
                 low = candidate.lower()
-                required = ("<!doctype html", "<html", "<head", "<body", "<main", "<title", 'name="viewport"', 'name="description"', "assets/site.css")
+                required = (
+                    "<!doctype html", "<html", "</html>", "<head", "</head>",
+                    "<body", "</body>", "<main", "</main>", "<title",
+                    'name="viewport"', 'name="description"', "assets/site.css",
+                    "<header", "</header>", "<nav", "</nav>",
+                    "<footer", "</footer>",
+                )
                 if any(token not in low for token in required):
                     continue
+                if not re.match(r"^\\s*<!doctype html\\b", candidate, re.I):
+                    continue
+                if any(
+                    len(re.findall(rf"<{tag}\\b", candidate, re.I)) !=
+                    len(re.findall(rf"</{tag}\\s*>", candidate, re.I))
+                    for tag in ("html", "head", "body", "main", "header", "footer", "nav", "section")
+                ):
+                    continue
+                if len(re.findall(r"<nav\\b", candidate, re.I)) < len(re.findall(r"<nav\\b", content, re.I)):
+                    continue
+                if 'id="navLinks"' in content and 'id="navLinks"' not in candidate:
+                    continue
             if path.endswith(".css"):
-                candidate = re.sub(r"^\\s*(?:css|CSS)\\s*(?=[:.@#a-zA-Z*])", "", candidate, count=1)
+                candidate = re.sub(r"^\s*(?:css)\s*(?=[:.@#a-zA-Z*])", "", candidate, count=1, flags=re.I)
                 if "{" not in candidate or "}" not in candidate:
                     continue
             if len(candidate) >= max(200, int(len(content) * 0.70)):
