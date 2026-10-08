@@ -171,29 +171,47 @@ def _fallback_pages(text: str) -> list[dict[str, str]]:
 
 
 def _labelled_fields(text: str) -> dict[str, Any]:
+    """Parse both inline labels and common two-line LABEL:\nvalue briefs."""
     result: dict[str, Any] = {}
     page_lines: list[str] = []
     in_pages = False
+    pending_key: str | None = None
+
     for raw_line in text.splitlines():
         line = raw_line.strip()
         if not line:
             if in_pages and page_lines:
                 in_pages = False
             continue
+
         match = re.match(r"^([^:=]{2,80})\s*[:=]\s*(.*)$", line)
         if match:
             key = _ALIAS_LOOKUP.get(_fold(match.group(1)))
             value = match.group(2).strip()
+            pending_key = None
             in_pages = key == "pages"
+
             if key == "pages":
                 if value:
                     page_lines.extend([p.strip() for p in re.split(r"[;]+", value) if p.strip()])
                 continue
+
             if key:
-                result[key] = value
+                if value:
+                    result[key] = value
+                else:
+                    # Many human-authored briefs put the value on the next line.
+                    pending_key = key
                 continue
+
+        if pending_key:
+            result[pending_key] = line
+            pending_key = None
+            continue
+
         if in_pages and line:
             page_lines.append(line)
+
     if page_lines:
         result["pages"] = page_lines
     return result
