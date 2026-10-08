@@ -517,7 +517,7 @@ def _render_content_sections(config: dict[str, Any], spec: dict[str, Any], page:
         if "gallery" in kind:
             out.append(_render_gallery_section(config, section, page, spec))
             continue
-        if kind in {"program-list", "programs", "services", "service-list"}:
+        if kind in {"program list", "programs", "services", "service list"}:
             rendered = _render_program_section(config, section, spec)
             if rendered:
                 out.append(rendered)
@@ -527,7 +527,7 @@ def _render_content_sections(config: dict[str, Any], spec: dict[str, Any], page:
             if rendered:
                 out.append(rendered)
                 continue
-        if kind in {"principles", "key-points", "highlights", "audience"}:
+        if kind in {"principles", "key points", "highlights", "audience"}:
             rendered = _render_principles_section(config, section, spec)
             if rendered:
                 out.append(rendered)
