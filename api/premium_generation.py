@@ -511,9 +511,17 @@ def _render_content_sections(config: dict[str, Any], spec: dict[str, Any], page:
     sections = [s for s in (page.get("sections") or []) if isinstance(s, dict)]
     filtered = [s for s in sections if str(s.get("type") or "").lower() not in {"hero", "cta"}]
     if _page_kind(page) == "contact":
+        # The dedicated contact form handles its purpose and form-field copy.
+        # A synthetic 'brief' section whose body is exactly the page purpose
+        # adds no content and can reintroduce duplicate paragraphs.
+        purpose_key = base._fold_text(page.get("purpose"))
         filtered = [
             s for s in filtered
             if base._fold_text(s.get("type")) not in {"contact", "form fields", "next step"}
+            and not (
+                base._fold_text(s.get("type")) == "brief"
+                and base._fold_text(s.get("body")) == purpose_key
+            )
         ]
     seen_headings: set[str] = set()
     slug = str(page.get("slug") or "index")
