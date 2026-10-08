@@ -230,7 +230,7 @@ def _labelled_fields(text: str) -> dict[str, Any]:
     return result
 
 
-def _normalise(raw: dict[str, Any], source_text: str) -> dict[str, Any]:
+# Backward-compatible alias used by CI and older integrations.\n_parse_labels = _labelled_fields\n\n\ndef _normalise(raw: dict[str, Any], source_text: str) -> dict[str, Any]:
     raw = dict(raw or {})
     nested = raw.get("fields")
     if isinstance(nested, dict):
