@@ -325,9 +325,16 @@ def _grounded_sections(page: dict[str, str], context: str, config: dict[str, Any
 
     elif "galer" in slug or "gallery" in slug:
         motifs = items_any("Predlagani motivi", "Suggested motifs", "Suggested imagery", "Visual motifs")
-        if motifs:
-            add("gallery", tr("Teren, delo in detajli", "Fieldwork and details"), " • ".join(motifs[:8]))
         direction = str(config.get("image_direction") or "")
+        if not motifs and direction:
+            # A simple sales brief may provide visual direction rather than
+            # a labelled list of gallery motifs. Use only supplied concepts.
+            motifs = [
+                part.strip() for part in re.split(r"[,;|•]+", direction)
+                if part.strip()
+            ][:8]
+        if motifs:
+            add("gallery", f"{title}: " + tr("vizualni poudarki", "visual study"), " • ".join(motifs[:8]))
         if direction:
             add("visual-direction", tr("Vizualni občutek", "Visual direction"), direction)
         add("gallery-note", tr("Brez generičnih podob", "No generic imagery"), tr("Ko ni dejanskih fotografij, uporabimo oblikovane vizualne placeholderje in ne izmišljamo dogodkov ali oseb.", "When real photographs are unavailable, use designed visual placeholders without inventing events or people."))
