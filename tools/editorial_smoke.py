@@ -92,7 +92,54 @@ def run() -> int:
         failed += 1
         print("FAIL: insufficient pages for shared-hero regression")
 
-    print(f"EDITORIAL PREFLIGHT: {11 - failed}/11 passed")
+    # Forest Run regression: a local planning model can reuse one long
+    # sentence inside two *different* multi-sentence section bodies, and also
+    # reuse the homepage hero inside a course-page paragraph. Both cases used
+    # to escape whole-body duplicate checks but failed rendered cross-page QA.
+    config = payload(expand(10)[1])
+    shared_hero = (
+        "A practical outdoor education programme that introduces field methods "
+        "through guided exploration and clear preparation for each new setting."
+    )
+    shared_detail = (
+        "Every field exercise starts with careful observation of the terrain "
+        "and gives participants an opportunity to explain what they have learned."
+    )
+    config["hero_subtitle"] = shared_hero
+    spec = robust._fallback_spec(config)
+    home = next(p for p in spec["pages"] if p["slug"] == "index")
+    courses = next(p for p in spec["pages"] if p["slug"] == "tecaji")
+    home["sections"] = [
+        {"type": "intro", "heading": "About Forest Run",
+         "body": home["purpose"]},
+        {"type": "method", "heading": "Practical field experience",
+         "body": shared_detail + " Each outdoor visit also has a clear learning purpose."},
+        {"type": "audience", "heading": "Visitors and participants",
+         "body": "The programme addresses people who want to explore outdoor skills through practical experience."},
+    ]
+    courses["sections"] = [
+        {"type": "intro", "heading": "How the courses work",
+         "body": shared_hero + " Lessons are organized by the subjects named on this page."},
+        {"type": "format", "heading": "From observation to practice",
+         "body": shared_detail + " Each course also introduces a different practical topic."},
+        {"type": "decision", "heading": "Choosing a course",
+         "body": courses["purpose"]},
+    ]
+    contexts = robust._extract_page_contexts(config)
+    spec["pages"] = robust._enforce_plan_uniqueness(spec["pages"], config, contexts)
+    files = {
+        ("index.html" if p["slug"] == "index" else f"{p['slug']}.html"):
+            premium._render_page(config, spec, p, i)
+        for i, p in enumerate(spec["pages"])
+    }
+    leftovers = [i for i in quality._cross_page_copy_issues(files)
+                 if i["code"] in BLOCKERS]
+    if leftovers or shared_hero in files["tecaji.html"] or shared_detail in files["tecaji.html"]:
+        failed += 1
+        print("FAIL: Forest Run partial-paragraph duplication across index.html and tecaji.html")
+    else:
+        print("PASS: Forest Run homepage/course long-paragraph overlap")
+    print(f"EDITORIAL PREFLIGHT: {12 - failed}/12 passed")
     return 1 if failed else 0
 
 
