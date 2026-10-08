@@ -918,6 +918,41 @@ jobs:
               assert len(files) >= 4, config['name']
           print('Ten-brief cross-page editorial and document-shell regression passed')
           PY
+      - name: Regression - incomplete model repair must not replace valid HTML
+        env:
+          APP_SECRET: ci-only-secret
+        run: |
+          python - <<'PY'
+          import asyncio
+          from api import robust_generation as robust
+
+          original = (
+              '<!doctype html><html lang="en"><head><title>Sample</title>'
+              '<meta name="viewport" content="width=device-width,initial-scale=1">'
+              '<meta name="description" content="Sample">'
+              '<link href="assets/site.css" rel="stylesheet"></head>'
+              '<body><header><nav id="navLinks"><a href="index.html">Home</a></nav></header>'
+              '<main><section><h1>Sample</h1><p>Original grounded copy.</p></section></main>'
+              '<footer>Footer</footer></body></html>'
+          )
+          # Simulate a model response with a convincing doctype and metadata,
+          # but lost closing tags and mobile navigation.
+          broken = original.replace('</nav>', '').replace('</html>', '')
+          async def fake_generate(*args, **kwargs):
+              return broken
+          old_generate = robust._generate
+          try:
+              robust._generate = fake_generate
+              result = asyncio.run(robust.fix_files(
+                  {'index.html': original},
+                  [{'severity': 'high', 'code': 'VISUAL_NAV_MISSING', 'file': 'index.html'}],
+                  {},
+              ))
+              assert result['index.html'] == original, 'Incomplete repair corrupted HTML'
+          finally:
+              robust._generate = old_generate
+          print('Incomplete model HTML repair correctly rejected')
+          PY
       - name: Validate bilingual rich brief grounding
         run: |
           python - <<'PY'
