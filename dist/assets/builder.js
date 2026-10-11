@@ -31,6 +31,8 @@ function isAllowedApi(value) {
 
 const suggestedApi = cleanApi(params.get('api'));
 function initialApi() {
+  // Never authenticate from a disposable public tunnel host.
+  if (isDisposableTunnel(location.origin)) return '';
   if (['localhost', '127.0.0.1'].includes(location.hostname)) {
     return location.origin;
   }
@@ -639,6 +641,23 @@ $('newBuild')?.addEventListener('click', () => {
   status('Pripravljen za nov projekt.');
   window.scrollTo({top:0, behavior:'smooth'});
 });
+
+// Chrome may warn about malicious or recycled temporary tunnel domains.
+// Disable all credential submission on these origins. Do not bypass Safe Browsing.
+if (isDisposableTunnel(location.origin)) {
+  ['email', 'password', 'login', 'register', 'createProject'].forEach(id => {
+    const element = $(id);
+    if (element) element.disabled = true;
+  });
+  const panel = $('status');
+  if (panel) {
+    const safeLink = document.createElement('a');
+    safeLink.href = 'https://dday2301.github.io/PROJEKT/builder.html';
+    safeLink.textContent = 'Odpri Builder na uradnem GitHub Pages naslovu';
+    safeLink.style.cssText = 'display:block;margin-top:12px;color:#d9ff65;font-weight:800';
+    panel.parentElement?.appendChild(safeLink);
+  }
+}
 
 installMediaUi();
 installCheckoutHint();
