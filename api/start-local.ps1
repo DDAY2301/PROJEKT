@@ -51,16 +51,19 @@ try {
 # V7 RAM-aware defaults. Respect explicit user overrides, and avoid
 # overcommitting Ollama inference, Chromium and project workers on 8 GB PCs.
 $lowMemoryProfile = $systemRamGB -gt 0 -and $systemRamGB -le 12
+# Balanced 16 GB hosts can still page heavily when Ollama, Chromium and
+# several builders load together. Prefer stability; benchmarks may override.
+$stableMemoryProfile = $systemRamGB -eq 0 -or $systemRamGB -le 20
 $autoModelConcurrency = if ($systemRamGB -ge 24) { "2" } else { "1" }
-$autoWorkers = if ($lowMemoryProfile) { "1" } else { "4" }
-$autoVisualConcurrency = if ($lowMemoryProfile) { "1" } else { "2" }
-$autoLoadedModels = if ($lowMemoryProfile) { "1" } else { "2" }
+$autoWorkers = if ($stableMemoryProfile) { "1" } else { "4" }
+$autoVisualConcurrency = if ($stableMemoryProfile) { "1" } else { "2" }
+$autoLoadedModels = if ($stableMemoryProfile) { "1" } else { "2" }
 if (-not $env:MODEL_CONCURRENCY) { $env:MODEL_CONCURRENCY = $autoModelConcurrency }
 if (-not $env:PRODUCTION_WORKERS) { $env:PRODUCTION_WORKERS = $autoWorkers }
 if (-not $env:VISUAL_QA_CONCURRENCY) { $env:VISUAL_QA_CONCURRENCY = $autoVisualConcurrency }
 if (-not $env:OLLAMA_EXPERT_KEEP_ALIVE) { $env:OLLAMA_EXPERT_KEEP_ALIVE = "10s" }
 if (-not $env:OLLAMA_FAST_KEEP_ALIVE) { $env:OLLAMA_FAST_KEEP_ALIVE = "10m" }
-if (-not $env:OLLAMA_VISION_KEEP_ALIVE) { $env:OLLAMA_VISION_KEEP_ALIVE = if ($lowMemoryProfile) { "15s" } else { "10m" } }
+if (-not $env:OLLAMA_VISION_KEEP_ALIVE) { $env:OLLAMA_VISION_KEEP_ALIVE = if ($stableMemoryProfile) { "15s" } else { "10m" } }
 if (-not $env:OLLAMA_NUM_PARALLEL) { $env:OLLAMA_NUM_PARALLEL = $env:MODEL_CONCURRENCY }
 if (-not $env:OLLAMA_MAX_LOADED_MODELS) { $env:OLLAMA_MAX_LOADED_MODELS = $autoLoadedModels }
 if (-not $env:OLLAMA_FLASH_ATTENTION) { $env:OLLAMA_FLASH_ATTENTION = "1" }
@@ -138,13 +141,15 @@ Write-Host "[4/9] Checking port $Port..."
 $listener = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($listener) {
   $old = Get-Process -Id $listener.OwningProcess -ErrorAction SilentlyContinue
-  if ($old -and $old.ProcessName -match 'python|uvicorn') {
-    Write-Host "Stopping previous local agent process $($old.Id)..."
-    Stop-Process -Id $old.Id -Force
-    Start-Sleep -Seconds 1
-  } elseif ($old) {
-    throw "Port $Port is already used by $($old.ProcessName) (PID $($old.Id))."
+  $details = Get-CimInstance Win32_Process -Filter "ProcessId=$($listener.OwningProcess)" -ErrorAction SilentlyContinue
+  $isOurApi = $old -and $old.ProcessName -match 'python|uvicorn' -and
+    $details -and $details.CommandLine -match '(?i)(uvicorn\s+api\.server:app|api[\\/]server\.py)'
+  if (-not $isOurApi) {
+    throw "Port $Port is owned by an unrelated process. Refusing to stop PID $($listener.OwningProcess)."
   }
+  Write-Host "Stopping previous Project Visibility API process $($old.Id)..."
+  Stop-Process -Id $old.Id -Force
+  Start-Sleep -Seconds 1
 }
 
 Write-Host "[5/9] Preparing isolated Python environment..."

@@ -25,6 +25,7 @@ import httpx
 
 import api.main as core
 import api.model_router as model_router
+import api.design_prompt_v3 as design_prompt_v3
 
 
 async def _generate(
@@ -658,6 +659,7 @@ async def design_site(config: dict[str, Any]) -> dict[str, Any]:
 Plan a polished production website from this compact customer brief.
 The package allows at most {page_budget} pages. Respect the requested pages and their purposes.
 CUSTOMER={json.dumps(compact_brief, ensure_ascii=False)}
+DESIGN_DIRECTION={design_prompt_v3.design_direction(config)}
 Return JSON with keys site_name, seo_description, pages.
 Each page must have title, meta_description and exactly 3-4 CONTENT sections.
 Do not include hero or final CTA in pages.sections; the renderer adds those.
@@ -669,6 +671,9 @@ If quality_retry_seed is greater than 0, the previous attempt failed an original
 Keep each body concise but specific (roughly 1-3 useful sentences, max ~650 characters).
 Avoid filler and generic headings such as "Benefits", "Details", "Features", "Prednosti" or "Značilnosti" unless the brief explicitly uses them with concrete content.
 Never invent awards, partners, funding claims, addresses, statistics or verified impact.
+Plan an industry-appropriate visual and editorial rhythm: photo role, typography hierarchy,
+non-repetitive section density, distinct page purpose and meaningful calls to action.
+The existing deterministic renderer owns CSS; do not generate imaginary image assets.
 """
     try:
         plan_tokens = min(2800, max(1250, 850 + page_budget * 160))

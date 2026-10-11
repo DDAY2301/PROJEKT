@@ -60,9 +60,10 @@ def check_ram_profile() -> None:
     for name in ("start-product.ps1", "api/start-local.ps1"):
         source = (ROOT / name).read_text(encoding="utf-8")
         assert '$lowMemoryProfile = $systemRamGB -gt 0 -and $systemRamGB -le 12' in source
-        assert '$autoWorkers = if ($lowMemoryProfile) { "1" } else { "4" }' in source
-        assert '$autoVisualConcurrency = if ($lowMemoryProfile) { "1" } else { "2" }' in source
-        assert '$autoLoadedModels = if ($lowMemoryProfile) { "1" } else { "2" }' in source
+        assert '$stableMemoryProfile = $systemRamGB -eq 0 -or $systemRamGB -le 20' in source
+        assert '$autoWorkers = if ($stableMemoryProfile) { "1" } else { "4" }' in source
+        assert '$autoVisualConcurrency = if ($stableMemoryProfile) { "1" } else { "2" }' in source
+        assert '$autoLoadedModels = if ($stableMemoryProfile) { "1" } else { "2" }' in source
         assert 'if (-not $env:PRODUCTION_WORKERS)' in source
         assert 'if (-not $env:MODEL_CONCURRENCY)' in source
         assert 'if (-not $env:PV_AGENT_V7_ENABLED)' in source

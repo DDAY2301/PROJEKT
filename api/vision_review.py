@@ -18,6 +18,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+import api.design_prompt_v3 as design_prompt_v3
+
 import httpx
 from PIL import Image, ImageDraw
 
@@ -132,6 +134,7 @@ async def _review_page(client: httpx.AsyncClient, page_file: str, jpeg: bytes, c
     prompt = f"""You are a strict senior art director reviewing a finished paid website.
 The attached image is a QA montage of the SAME page: desktop top, mobile top, and a compact desktop full-page overview.
 Project context: {json.dumps(context, ensure_ascii=False)}
+Art direction: {design_prompt_v3.design_direction(config)}
 
 Judge only what is visibly supported by the screenshot. Do not invent missing content or facts.
 Review:

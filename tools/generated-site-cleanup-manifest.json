@@ -1,0 +1,31 @@
+{
+  "owner": "DDAY2301",
+  "purpose": "Exact cleanup allowlist of generated website test repositories observed 2026-10-11. Protect all other repositories.",
+  "protected": [
+    "blog-lab",
+    "PROJEKT"
+  ],
+  "generated_repositories": [
+    "generated-site-nova-impact-lab",
+    "generated-site-centurion",
+    "generated-site-predstavitev-projekta",
+    "generated-site-novo",
+    "generated-site-dan-grmu-a",
+    "generated-site-urban-leaf-lab-import-bdda5740",
+    "generated-site-urban-leaf-lab-import-44927dd9",
+    "generated-site-urban-leaf-lab-import-d46edb4f",
+    "generated-site-urban-leaf-lab-import-2059bfb1",
+    "generated-site-maison-luma",
+    "generated-site-northline-legal",
+    "generated-site-forest-run",
+    "generated-site-vector-works",
+    "generated-site-dalija-clean",
+    "generated-site-relay-cloud",
+    "generated-site-casa-alto",
+    "generated-site-apex-detail",
+    "generated-site-atelier-grain",
+    "generated-site-common-ground",
+    "generated-site-atelier-grain-fac1a3d4",
+    "generated-site-alpine-field-lab-28cb81c9"
+  ]
+}

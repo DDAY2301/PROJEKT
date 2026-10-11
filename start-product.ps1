@@ -68,16 +68,19 @@ try {
 # V7 RAM-aware defaults. Respect explicit user overrides, and avoid
 # overcommitting Ollama inference, Chromium and project workers on 8 GB PCs.
 $lowMemoryProfile = $systemRamGB -gt 0 -and $systemRamGB -le 12
+# Balanced 16 GB hosts can still page heavily when Ollama, Chromium and
+# several builders load together. Prefer stability; benchmarks may override.
+$stableMemoryProfile = $systemRamGB -eq 0 -or $systemRamGB -le 20
 $autoModelConcurrency = if ($systemRamGB -ge 24) { "2" } else { "1" }
-$autoWorkers = if ($lowMemoryProfile) { "1" } else { "4" }
-$autoVisualConcurrency = if ($lowMemoryProfile) { "1" } else { "2" }
-$autoLoadedModels = if ($lowMemoryProfile) { "1" } else { "2" }
+$autoWorkers = if ($stableMemoryProfile) { "1" } else { "4" }
+$autoVisualConcurrency = if ($stableMemoryProfile) { "1" } else { "2" }
+$autoLoadedModels = if ($stableMemoryProfile) { "1" } else { "2" }
 if (-not $env:MODEL_CONCURRENCY) { $env:MODEL_CONCURRENCY = $autoModelConcurrency }
 if (-not $env:PRODUCTION_WORKERS) { $env:PRODUCTION_WORKERS = $autoWorkers }
 if (-not $env:VISUAL_QA_CONCURRENCY) { $env:VISUAL_QA_CONCURRENCY = $autoVisualConcurrency }
 if (-not $env:OLLAMA_EXPERT_KEEP_ALIVE) { $env:OLLAMA_EXPERT_KEEP_ALIVE = "10s" }
 if (-not $env:OLLAMA_FAST_KEEP_ALIVE) { $env:OLLAMA_FAST_KEEP_ALIVE = "10m" }
-if (-not $env:OLLAMA_VISION_KEEP_ALIVE) { $env:OLLAMA_VISION_KEEP_ALIVE = if ($lowMemoryProfile) { "15s" } else { "10m" } }
+if (-not $env:OLLAMA_VISION_KEEP_ALIVE) { $env:OLLAMA_VISION_KEEP_ALIVE = if ($stableMemoryProfile) { "15s" } else { "10m" } }
 if (-not $env:OLLAMA_NUM_PARALLEL) { $env:OLLAMA_NUM_PARALLEL = $env:MODEL_CONCURRENCY }
 if (-not $env:OLLAMA_MAX_LOADED_MODELS) { $env:OLLAMA_MAX_LOADED_MODELS = $autoLoadedModels }
 if (-not $env:OLLAMA_FLASH_ATTENTION) { $env:OLLAMA_FLASH_ATTENTION = "1" }
@@ -136,8 +139,18 @@ try {
   $gh = Invoke-RestMethod -Uri "https://api.github.com/user" -Headers $headers -Method Get -TimeoutSec 15
   Write-Host "GitHub: CONNECTED as $($gh.login)" -ForegroundColor Green
 } catch {
+  $statusCode = 0
+  if ($_.Exception.Response) {
+    $statusCode = [int]$_.Exception.Response.StatusCode
+  }
   $env:GITHUB_TOKEN = $null
-  throw "GitHub token validation failed. Create a new token with repository write/administration access."
+  if ($statusCode -eq 401) {
+    throw "GitHub HTTP 401: token is expired, revoked, malformed or incorrect. Create a fresh fine-grained PAT."
+  }
+  if ($statusCode -eq 403) {
+    throw "GitHub HTTP 403: token lacks permission, is restricted or was rate-limited. Review GitHub token access."
+  }
+  throw "GitHub token validation failed (HTTP $statusCode). Check GitHub availability and network access."
 }
 
 Write-Host "[4/6] Starting/checking website service..."
@@ -146,15 +159,17 @@ try { $health = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/health" -Method G
 if ($health -and $health.ok) {
   $listener = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
   if ($listener) {
-    try {
-      $old = Get-Process -Id $listener.OwningProcess -ErrorAction Stop
-      if ($old.ProcessName -match 'python|uvicorn') {
-        Write-Host "Restarting existing local agent PID $($old.Id) to load the current runtime..." -ForegroundColor Yellow
-        Stop-Process -Id $old.Id -Force
-        Start-Sleep -Seconds 1
-        $health = $null
-      }
-    } catch {}
+    $old = Get-Process -Id $listener.OwningProcess -ErrorAction SilentlyContinue
+    $details = Get-CimInstance Win32_Process -Filter "ProcessId=$($listener.OwningProcess)" -ErrorAction SilentlyContinue
+    $isOurApi = $old -and $old.ProcessName -match 'python|uvicorn' -and
+      $details -and $details.CommandLine -match '(?i)(uvicorn\s+api\.server:app|api[\\/]server\.py)'
+    if (-not $isOurApi) {
+      throw "Port $Port belongs to another process. Refusing to stop unrelated service PID $($listener.OwningProcess)."
+    }
+    Write-Host "Restarting Project Visibility API PID $($old.Id) to load updated code..." -ForegroundColor Yellow
+    Stop-Process -Id $old.Id -Force
+    Start-Sleep -Seconds 1
+    $health = $null
   }
 }
 

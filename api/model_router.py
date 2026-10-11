@@ -145,7 +145,11 @@ def _ollama_models(tier: str = "auto", *, prompt: str = "", system: str = "", nu
     fallback = _fallback_models()
     if tier == "expert" and expert:
         return _dedupe(expert + fast + fallback)
-    return _dedupe(fast + fallback + expert)
+    # A fast website build must not silently load a huge 35B expert model
+    # after a 7B timeout on a shared 8/16 GB Windows workstation. Operators
+    # can opt in when a measured, sufficiently provisioned host is available.
+    allow_expert_fallback = os.getenv("PV_EXPERT_FALLBACK_ON_FAST", "0").strip().lower() in {"1", "true", "yes", "on"}
+    return _dedupe(fast + fallback + (expert if allow_expert_fallback else []))
 
 
 def _openai_models() -> list[str]:

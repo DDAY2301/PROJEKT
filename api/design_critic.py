@@ -14,6 +14,7 @@ from typing import Any
 
 import api.main as core
 import api.model_router as model_router
+import api.design_prompt_v3 as design_prompt_v3
 import api.robust_generation as robust_generation
 
 _base_design_site = core.design_site
@@ -89,6 +90,7 @@ async def design_site_with_critic(config: dict[str, Any]) -> dict[str, Any]:
 Review this website plan as a strict senior design director.
 CUSTOMER={json.dumps(compact_config, ensure_ascii=False)}
 CURRENT_PLAN={json.dumps(spec, ensure_ascii=False)}
+ART_DIRECTION={design_prompt_v3.design_direction(config)}
 
 Return strict JSON:
 {{
@@ -104,7 +106,8 @@ Rules:
 - do not change page slugs, page titles or customer facts
 - never invent partners, awards, funding, statistics, addresses or contact facts
 - improve section hierarchy, content rhythm, CTA clarity and mobile-readiness
-- avoid generic repetitive section patterns
+- avoid generic repetitive section patterns; strengthen industry-relevant visual storytelling
+- check image placement, section density, content-to-image rhythm and CTA visibility
 - use the customer's own supplied facts only
 - if the current plan is already strong, keep its sections substantially intact
 """
