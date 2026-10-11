@@ -114,3 +114,65 @@ Do not treat passing CI, a staged build, or public Project Visibility shell
 as proof that generated customer websites were deployed.
 
 Statuses: VERIFIED DONE / IMPLEMENTED BUT UNVERIFIED / FAILED / BLOCKED.
+
+
+## V9 adaptive memory headroom (2026-10-11)
+
+The observed Windows host reported 15.73 GB total / 5.29 GB free,
+66.4% used, Project Visibility API ~112 MB working set, Ollama runtime
+~63 MB working set and **no loaded Ollama model**. Many Chrome processes
+were present, but their existence alone does not indicate browser QA
+leaks. GitHub CI cannot measure the user's actual workstation.
+
+**Implemented:**
+- `api/resource_guard.py` uses Windows GlobalMemoryStatusEx (or Linux
+  MemAvailable) for a read-only free RAM measurement.
+- Existing `api/production_queue.py` now defers **claiming new**
+  persisted jobs when available memory drops below configured reserve.
+  Existing active work is never interrupted. The queue exposes
+  `resource_admission` through its authenticated status endpoint.
+- `PV_RESOURCE_GUARD_ENABLED=1` (default); set `0` for rollback.
+- `PV_MIN_FREE_RAM_MB=1536` (default on >12 GB physical RAM),
+  `768` on smaller machines. These are starting reserves, not an
+  empirically proven optimum; override after measuring real load.
+- On <=20 GB machines, Ollama coder `keep_alive` is 90 seconds by
+  default instead of 10 minutes; the visual model keeps its existing
+  short 15-second residency. Model concurrency, number of queue
+  workers, and visual concurrency remain one by default on this host.
+- The host inspection script now reports groups and top consumers by
+  private committed MB; it hides command lines and is strictly
+  read-only. Run `.\\tools\\inspect-agent-host.ps1 -Detailed` for
+  a more complete report.
+
+**Important constraints:**
+- `OLLAMA_MAX_LOADED_MODELS` and `OLLAMA_NUM_PARALLEL` are **server
+  configuration** variables. Settings in the API launcher do not
+  change an Ollama server already running on port 11434. Plan a
+  controlled Ollama restart *after active work finishes* if needed;
+  verify using `ollama ps`. Do not force-kill a shared Ollama process.
+- Memory guard is an admission controller, not a hard RAM quota and
+  does not guarantee a 7B model will fit in RAM.
+- Closing or pausing unneeded tabs or enabling Chrome Memory Saver
+  is a manual, reversible browser action. Do not kill arbitrary Chrome
+  processes, disable Windows security, or delete Windows paging.
+- V9 defaults prioritize stable operation; lower resource usage and
+  quality parity must be verified through a controlled loaded-model
+  benchmark, not inferred from startup numbers alone.
+
+**After code update and safe restart:**
+
+```powershell
+cd 'C:\\Users\\dangr\\PROJEKT'
+git status --short
+git pull --ff-only origin main
+.\\tools\\inspect-agent-host.ps1
+.\\.venv\\Scripts\\python.exe tools\\v9_resource_smoke.py
+Invoke-RestMethod http://127.0.0.1:8000/health
+```
+
+If the API is already running, its process must be restarted to load
+these imports and worker settings. `start-product.ps1` requires a valid
+GitHub PAT and Cloudflare for the full remote product; local-only
+testing can use `api/start-local.ps1 -SkipGitHub`. Run the real 10-site
+load test with a **separate DB_PATH** only after health and resource
+admission are verified. Do not recreate 21 test GitHub repositories.

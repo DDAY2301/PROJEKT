@@ -62,11 +62,13 @@ if (-not $env:MODEL_CONCURRENCY) { $env:MODEL_CONCURRENCY = $autoModelConcurrenc
 if (-not $env:PRODUCTION_WORKERS) { $env:PRODUCTION_WORKERS = $autoWorkers }
 if (-not $env:VISUAL_QA_CONCURRENCY) { $env:VISUAL_QA_CONCURRENCY = $autoVisualConcurrency }
 if (-not $env:OLLAMA_EXPERT_KEEP_ALIVE) { $env:OLLAMA_EXPERT_KEEP_ALIVE = "10s" }
-if (-not $env:OLLAMA_FAST_KEEP_ALIVE) { $env:OLLAMA_FAST_KEEP_ALIVE = "10m" }
+if (-not $env:OLLAMA_FAST_KEEP_ALIVE) { $env:OLLAMA_FAST_KEEP_ALIVE = if ($stableMemoryProfile) { "90s" } else { "10m" } }
 if (-not $env:OLLAMA_VISION_KEEP_ALIVE) { $env:OLLAMA_VISION_KEEP_ALIVE = if ($stableMemoryProfile) { "15s" } else { "10m" } }
 if (-not $env:OLLAMA_NUM_PARALLEL) { $env:OLLAMA_NUM_PARALLEL = $env:MODEL_CONCURRENCY }
 if (-not $env:OLLAMA_MAX_LOADED_MODELS) { $env:OLLAMA_MAX_LOADED_MODELS = $autoLoadedModels }
 if (-not $env:OLLAMA_FLASH_ATTENTION) { $env:OLLAMA_FLASH_ATTENTION = "1" }
+if (-not $env:PV_RESOURCE_GUARD_ENABLED) { $env:PV_RESOURCE_GUARD_ENABLED = "1" }
+if (-not $env:PV_MIN_FREE_RAM_MB) { $env:PV_MIN_FREE_RAM_MB = if ($lowMemoryProfile) { "768" } else { "1536" } }
 if (-not $env:PV_AGENT_V7_ENABLED) { $env:PV_AGENT_V7_ENABLED = "1" }
 
 Write-Host "[2/9] Checking local Ollama API..."
