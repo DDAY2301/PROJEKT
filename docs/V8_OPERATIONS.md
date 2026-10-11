@@ -456,3 +456,66 @@ private repo or insufficient fine-grained PAT access.
 Do not assume a green API health check proves the preview repository
 exists or that the new project completed its build. Never reset,
 re-create or delete customer projects automatically based on polling.
+
+
+## V14 — status flicker, duplicate startup and noisy Windows logs
+
+The user provided a short Builder screen recording. The readiness card
+remained at 100% while the **build pipeline rapidly alternated** between
+brief/payment, all done, and waiting states. The prior Uvicorn log was
+dominated by successful `GET /projects/<old-project-id>` requests.
+
+**Verified source-level causes:**
+- `dist/builder.html` already loaded `payment-flow-v2.js` directly, but
+  `media-fix.js` injected a second copy because its dynamic-script
+  sentinel never recognized the static script tag. Both instances
+  attached event handlers and resumed independent project watchers.
+- `workspace-upgrades.js` could restore an old project through the
+  legacy `updatePipeline`, marking the **first** stage as "plačilo" for
+  `payment_pending`. That disagreed with the current release flow.
+- Legacy `builder.js` contained a payment-before-build pathway and its
+  own stage renderer. The V14 controller now disables those legacy
+  paths whenever it is loaded.
+- `payment-flow-v2.js` could select an arbitrary unfinished historic
+  project if no active ID existed. This may show old payment states
+  while the user composes a new site.
+- `agent-console-v1.js` reloaded four agent/preflight endpoints on
+  every API availability signal mutation, even for routine health
+  checks. This inflated the local access log.
+
+**Fixes:**
+1. Static Builder loads exactly one cache-busted payment controller;
+   media fallback **never** dynamically loads it. The controller has
+   an idempotent `window.PV_PAYMENT_FLOW_V2_LOADED` guard.
+2. The V12/V14 payment-flow controller owns build-stage rendering.
+   Legacy editor restoration can add editor/preview actions only for
+   the selected project and does not rewrite stage or process log.
+3. `Nov projekt` invalidates only this tab's watcher, clears the old
+   selected ID and URL query, and restores an empty editor; it does
+   not terminate a server worker or delete a generated repo.
+4. Project-detail API responses arriving from superseded watchers
+   cannot repaint the current project; unexpected stale preview
+   bootstrap responses are also ignored.
+5. Agent-console health mutations are debounced and diagnostic
+   requests throttled to about two minutes unless the connection
+   identity changes or the operator explicitly presses Refresh.
+6. The **100% badge** is labelled "Pripravljenost briefa": it means
+   input completeness, **not** finished generation or release QA.
+
+**Verification / safe activation:**
+Run `node tools/v14_ui_consistency.test.js` after pulling main. It
+executes `payment-flow-v2.js` twice in a mocked browser and proves
+that only one build and one New Project listener are attached, as well
+as checking no media-injected controller and no legacy project stage
+overwriting. Existing payment and preview smoke tests remain in CI.
+
+Wait for any active build before restarting the local API; although
+these changes are mainly UI-only, restarting mid-build is avoidable.
+Do not delete customer projects, clear SQLite databases, force a
+Stripe charge, or lower release QA scores to fix a flickering UI.
+
+The browser may still generate HTTP GET traffic from **other open
+tabs**. Close extra old Builder tabs and use one tab during QA testing.
+Once verified, inspect the actual project's private preview, recent
+QA issues, build state and GitHub delivery separately. Passing frontend
+CI is not proof that a customer website is finished or live.
