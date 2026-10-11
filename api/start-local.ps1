@@ -48,18 +48,23 @@ try {
   $systemRamGB = [math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 1)
 } catch {}
 
-# Two concurrent 7B generations help only when there is enough memory headroom.
-# On ~16 GB machines one lane is faster because it avoids memory pressure.
+# V7 RAM-aware defaults. Respect explicit user overrides, and avoid
+# overcommitting Ollama inference, Chromium and project workers on 8 GB PCs.
+$lowMemoryProfile = $systemRamGB -gt 0 -and $systemRamGB -le 12
 $autoModelConcurrency = if ($systemRamGB -ge 24) { "2" } else { "1" }
+$autoWorkers = if ($lowMemoryProfile) { "1" } else { "4" }
+$autoVisualConcurrency = if ($lowMemoryProfile) { "1" } else { "2" }
+$autoLoadedModels = if ($lowMemoryProfile) { "1" } else { "2" }
 if (-not $env:MODEL_CONCURRENCY) { $env:MODEL_CONCURRENCY = $autoModelConcurrency }
-if (-not $env:PRODUCTION_WORKERS) { $env:PRODUCTION_WORKERS = "4" }
-if (-not $env:VISUAL_QA_CONCURRENCY) { $env:VISUAL_QA_CONCURRENCY = "2" }
-$env:OLLAMA_EXPERT_KEEP_ALIVE = "10s"
-$env:OLLAMA_FAST_KEEP_ALIVE = "10m"
-$env:OLLAMA_VISION_KEEP_ALIVE = "10m"
+if (-not $env:PRODUCTION_WORKERS) { $env:PRODUCTION_WORKERS = $autoWorkers }
+if (-not $env:VISUAL_QA_CONCURRENCY) { $env:VISUAL_QA_CONCURRENCY = $autoVisualConcurrency }
+if (-not $env:OLLAMA_EXPERT_KEEP_ALIVE) { $env:OLLAMA_EXPERT_KEEP_ALIVE = "10s" }
+if (-not $env:OLLAMA_FAST_KEEP_ALIVE) { $env:OLLAMA_FAST_KEEP_ALIVE = "10m" }
+if (-not $env:OLLAMA_VISION_KEEP_ALIVE) { $env:OLLAMA_VISION_KEEP_ALIVE = if ($lowMemoryProfile) { "15s" } else { "10m" } }
 if (-not $env:OLLAMA_NUM_PARALLEL) { $env:OLLAMA_NUM_PARALLEL = $env:MODEL_CONCURRENCY }
-if (-not $env:OLLAMA_MAX_LOADED_MODELS) { $env:OLLAMA_MAX_LOADED_MODELS = "2" }
+if (-not $env:OLLAMA_MAX_LOADED_MODELS) { $env:OLLAMA_MAX_LOADED_MODELS = $autoLoadedModels }
 if (-not $env:OLLAMA_FLASH_ATTENTION) { $env:OLLAMA_FLASH_ATTENTION = "1" }
+if (-not $env:PV_AGENT_V7_ENABLED) { $env:PV_AGENT_V7_ENABLED = "1" }
 
 Write-Host "[2/9] Checking local Ollama API..."
 try {
