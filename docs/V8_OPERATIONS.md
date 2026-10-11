@@ -354,3 +354,46 @@ Originality, editorial QA and visual release gates remain unchanged.
 - An actual publication is marked verified **only** after the
   intended test repository and public URL are inspected.
 - Test job and site throughput are measured separately from GitHub CI.
+
+
+## V12 — Payment must never outrun the latest quality gate
+
+Reported Alpine Field Lab screen: code generated, nine render checks,
+Visual QA 64/100, twenty findings, `payment_pending`. This score is
+below the backend minimum release floor of 90 (configurable only upward).
+The UI also displayed a generic 'Testni način' banner while a saved
+project remained in an earlier Stripe payment state.
+
+**Safe interpretation:** The page is **not verified publish-ready**.
+`payment_pending` means a Stripe Checkout session was opened, not that
+Stripe marked the purchase paid or the site was deployed. An old
+payment state does not prove the latest quality audit passed.
+
+V12 adds three release protections:
+
+1. `POST /billing/checkout` re-evaluates the latest stored visual QA,
+   severe issues and release threshold **on the server** before creating
+   any Stripe session. If missing/low QA, return HTTP 409; no new charge.
+2. If a previous Stripe checkout does complete despite a subsequently
+   failing QA audit, record the confirmed payment accurately, **hold
+   the website in needs_review** and do not dispatch public delivery.
+   The operator must repair the site and resolve billing fairly;
+   never erase a real payment or quietly re-charge.
+3. The served Builder explicitly includes `payment-flow-v2.js` and
+   displays any failing QA status **before** payment instructions.
+   A generic no-Stripe banner no longer promises free publication
+   of saved projects. Checkout return URL is not treated as
+   independent confirmation of a payment.
+
+Neither opening a private preview nor creating a repository means
+the release quality gate is passed. The existing Stripe billing
+entitlements, visual thresholds, original QA checks and payment
+fulfilment obligations remain in place.
+
+**Operator-side follow-up:** Do not enter payment for a 64/100 build.
+Use the authenticated project details and last_audit issues to
+identify the blocking visual problems. After a fix and complete
+re-review, re-test the same project (without losing customer media
+or an already paid transaction). Re-run `tools/v12_payment_qa_smoke.py`
+locally after pulling; restart the running API only when no
+production job is in progress.
