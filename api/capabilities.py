@@ -39,6 +39,8 @@ async def agent_capabilities(user_id: str = Depends(core.current_user)):
             "fallback_models": model_router._fallback_models(),
             "model_mode": os.getenv("LOCAL_LLM_MODE", "auto"),
             "model_routing": model_router._routing_mode(),
+            "agent_policy_version": model_router.AGENT_POLICY_VERSION,
+            "agent_policy_enabled": model_router.v7_policy_enabled(),
             "openai_compatible_local": bool(os.getenv("OPENAI_COMPAT_BASE_URL", "").strip()),
         },
         "features": {

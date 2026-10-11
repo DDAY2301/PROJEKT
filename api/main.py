@@ -360,7 +360,13 @@ async def startup():
 
 @app.get("/health")
 async def health():
-    return {"ok": True, "model": OLLAMA_MODEL, "github_configured": bool(GITHUB_TOKEN)}
+    v7_active = os.getenv("PV_AGENT_V7_ENABLED", "1").strip().lower() not in {"0", "false", "no", "off"}
+    return {
+        "ok": True,
+        "model": OLLAMA_MODEL,
+        "github_configured": bool(GITHUB_TOKEN),
+        "agent_policy": "V7" if v7_active else "disabled",
+    }
 
 
 @app.post("/auth/register")
