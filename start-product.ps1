@@ -1,6 +1,8 @@
 param(
   [string]$Model = "qwen2.5-coder:7b",
-  [int]$Port = 8000
+  [int]$Port = 8000,
+  [switch]$LocalOnly,
+  [string]$PublicApiUrl = $env:PV_PUBLIC_API_URL
 )
 
 $ErrorActionPreference = "Stop"
@@ -51,6 +53,14 @@ if (Get-Command git -ErrorAction SilentlyContinue) {
   }
 } else {
   Write-Host "[1/6] Git is not on PATH - continuing with local files."
+}
+
+# Local-only mode is safe for diagnostics. It does not require a GitHub PAT,
+# public DNS or a random trycloudflare.com URL; no customer repos are published.
+if ($LocalOnly) {
+  Write-Host "LOCAL MODE: no public tunnel or GitHub publishing" -ForegroundColor Cyan
+  & (Join-Path $repoRoot 'api\start-local.ps1') -SkipGitHub -Model $Model -Port $Port
+  return
 }
 
 $env:DESIGN_CRITIC_MODE = "adaptive"
@@ -212,111 +222,55 @@ if ($health -and $health.ok) {
   if ($health.model) { Write-Host "Production model: $($health.model)" -ForegroundColor Green }
 }
 
-Write-Host "[5/6] Starting verified Cloudflare Quick Tunnel..."
-$cloudflared = $null
-$cmd = Get-Command cloudflared -ErrorAction SilentlyContinue
-if ($cmd) { $cloudflared = $cmd.Source }
-if (-not $cloudflared) {
-  $candidate = Get-ChildItem "$env:USERPROFILE\Downloads\cloudflared*.exe" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-  if ($candidate) { $cloudflared = $candidate.FullName }
+Write-Host "[5/6] Selecting a stable, safe connection..." -ForegroundColor Cyan
+
+# Product URLs must not expose logins via random/disposable tunnels.
+# An operator-managed Cloudflare named tunnel (or another stable HTTPS API
+# hostname) is required for remote access. Default stays on loopback.
+$publicApi = [string]$PublicApiUrl
+$publicApi = $publicApi.Trim().TrimEnd('/')
+$localBuilder = "http://127.0.0.1:$Port/builder.html"
+$localHealth = Wait-Url "http://127.0.0.1:$Port/health" 10
+if (-not $localHealth -or -not $localHealth.ok) {
+  throw "API is offline at http://127.0.0.1:$Port. Check the start-local PowerShell window before opening the builder."
 }
-if (-not $cloudflared) { throw "cloudflared was not found. Install it or place cloudflared-windows-amd64.exe in Downloads." }
-
-$dataDir = Join-Path $repoRoot "api\data"
-New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
-
-# Remove stale Quick Tunnel processes created for this local service. A Quick
-# Tunnel hostname is disposable, so reusing an old process/URL is unsafe.
-try {
-  Get-CimInstance Win32_Process -Filter "Name='cloudflared.exe'" -ErrorAction SilentlyContinue |
-    Where-Object { $_.CommandLine -match "tunnel" -and $_.CommandLine -match "127\.0\.0\.1:$Port" } |
-    ForEach-Object {
-      Write-Host "Stopping stale tunnel PID $($_.ProcessId)..." -ForegroundColor DarkYellow
-      Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
-    }
-} catch {}
-Start-Sleep -Seconds 1
-
-$tunnelUrl = $null
-$cfProcess = $null
-for ($tunnelAttempt = 1; $tunnelAttempt -le 3 -and -not $tunnelUrl; $tunnelAttempt++) {
-  Write-Host "Cloudflare tunnel attempt $tunnelAttempt/3..."
-  $cfOut = Join-Path $dataDir "cloudflared-$tunnelAttempt.out.log"
-  $cfErr = Join-Path $dataDir "cloudflared-$tunnelAttempt.err.log"
-  Remove-Item $cfOut,$cfErr -Force -ErrorAction SilentlyContinue
-
-  $cfProcess = Start-Process -FilePath $cloudflared `
-    -ArgumentList @('tunnel','--no-autoupdate','--url',"http://127.0.0.1:$Port") `
-    -RedirectStandardOutput $cfOut -RedirectStandardError $cfErr -PassThru
-
-  $candidateUrl = $null
-  $urlDeadline = (Get-Date).AddSeconds(45)
-  while ((Get-Date) -lt $urlDeadline -and -not $candidateUrl) {
-    $raw = ''
-    if (Test-Path $cfOut) { $raw += (Get-Content $cfOut -Raw -ErrorAction SilentlyContinue) }
-    if (Test-Path $cfErr) { $raw += "`n" + (Get-Content $cfErr -Raw -ErrorAction SilentlyContinue) }
-    $match = [regex]::Match($raw, 'https://[a-z0-9-]+\.trycloudflare\.com', 'IgnoreCase')
-    if ($match.Success) { $candidateUrl = $match.Value }
-    if (-not $candidateUrl) { Start-Sleep -Seconds 1 }
-  }
-
-  if (-not $candidateUrl) {
-    Write-Warning "No public URL was received on attempt $tunnelAttempt."
-    if ($cfProcess -and -not $cfProcess.HasExited) { Stop-Process -Id $cfProcess.Id -Force -ErrorAction SilentlyContinue }
-    continue
-  }
-
-  Write-Host "Candidate URL: $candidateUrl" -ForegroundColor DarkCyan
-  $candidateHealth = Wait-Url "$candidateUrl/health" 75
-  if ($candidateHealth -and $candidateHealth.ok) {
-    $tunnelUrl = $candidateUrl
-    Set-Content -LiteralPath (Join-Path $dataDir 'active-tunnel.txt') -Value $tunnelUrl
-    Set-Content -LiteralPath (Join-Path $dataDir 'cloudflared.pid') -Value $cfProcess.Id
-    Write-Host "Cloudflare: ONLINE / $tunnelUrl" -ForegroundColor Green
-    break
-  }
-
-  Write-Warning "Tunnel $candidateUrl never became healthy; discarding it."
-  if ($cfProcess -and -not $cfProcess.HasExited) { Stop-Process -Id $cfProcess.Id -Force -ErrorAction SilentlyContinue }
-  Start-Sleep -Seconds 2
+if (-not $publicApi) {
+  Write-Warning 'No permanent HTTPS API hostname is configured. Public access is disabled to avoid unsafe temporary Quick Tunnel URLs.'
+  Write-Host "LOCAL BUILDER: $localBuilder" -ForegroundColor Green
+  Write-Host "LOCAL HEALTH:  http://127.0.0.1:$Port/health" -ForegroundColor Cyan
+  Write-Host "For remote access, configure a stable named tunnel and launch with -PublicApiUrl https://api.your-domain.example."
+  Start-Process $localBuilder
+  return
 }
-
-if (-not $tunnelUrl) {
-  throw "Could not establish a verified Cloudflare tunnel after 3 attempts. Local service remains available at http://127.0.0.1:$Port."
-}
-
-Write-Host "[6/6] Selecting public product URL..."
-$encodedApi = [Uri]::EscapeDataString($tunnelUrl)
-$githubLanding = "https://dday2301.github.io/PROJEKT/"
-$githubRuntime = "https://dday2301.github.io/PROJEKT/runtime.html?api=$encodedApi"
-$tunnelLanding = "$tunnelUrl/"
-$builderCacheBust = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
-$tunnelBuilder = "$tunnelUrl/builder.html?api=$encodedApi&pv=$builderCacheBust"
-$publicLanding = $githubLanding
-$publicBuilder = $githubRuntime
-$frontendSource = "GitHub Pages handoff -> verified HTTPS runtime"
 
 try {
-  $cacheBust = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-  $probeUrl = "$githubRuntime&pv=$cacheBust"
-  $probe = Invoke-WebRequest -Uri $probeUrl -UseBasicParsing -Method Get -TimeoutSec 15
-  if ($probe.StatusCode -lt 200 -or $probe.StatusCode -ge 400) { throw "GitHub Pages returned HTTP $($probe.StatusCode)" }
-  Write-Host "Frontend handoff: GitHub Pages ONLINE" -ForegroundColor Green
+  $uri = [Uri]$publicApi
 } catch {
-  $frontendSource = "Cloudflare verified same-origin runtime"
-  $publicLanding = $tunnelLanding
-  $publicBuilder = $tunnelBuilder
-  Write-Warning "GitHub Pages handoff is not ready. Opening the verified Cloudflare builder directly."
-  Write-Host "Frontend: Cloudflare same-origin ONLINE" -ForegroundColor Green
+  throw 'PublicApiUrl must be a valid HTTPS URL for your own stable domain.'
+}
+if ($uri.Scheme -ne 'https' -or
+    -not $uri.IsAbsoluteUri -or
+    $uri.UserInfo -or
+    $uri.Query -or
+    $uri.Fragment -or
+    $uri.AbsolutePath -ne '/' -or
+    $uri.Host -match '(?i)(^|\.)trycloudflare\.com$') {
+  throw 'Refusing temporary or unsafe public API URL. Configure a stable HTTPS hostname on a named tunnel instead.'
 }
 
-Write-Host ""
-Write-Host "PUBLIC LANDING: $publicLanding" -ForegroundColor Cyan
-Write-Host "PUBLIC BUILDER: $publicBuilder" -ForegroundColor Cyan
-Write-Host "FRONTEND SOURCE: $frontendSource" -ForegroundColor Cyan
-Write-Host "PUBLIC SERVICE HEALTH: $tunnelUrl/health" -ForegroundColor Cyan
-Write-Host "LOCAL HEALTH: http://127.0.0.1:$Port/health" -ForegroundColor Cyan
-Write-Host "TUNNEL PID: $($cfProcess.Id)" -ForegroundColor Cyan
-Write-Host ""
-Write-Host "The launcher opens only a verified live URL. If this Quick Tunnel later expires, run start-product.ps1 again to obtain a new verified URL." -ForegroundColor Yellow
-Start-Process $publicBuilder
+Write-Host "[6/6] Checking stable remote API before opening the frontend..."
+$remoteHealth = Wait-Url "$publicApi/health" 15
+if (-not $remoteHealth -or -not $remoteHealth.ok -or
+    $remoteHealth.product -ne 'project_visibility') {
+  throw "Stable remote API did not identify itself as Project Visibility: $publicApi. No public builder was opened."
+}
+if (-not $remoteHealth.github_configured) {
+  throw 'Stable remote API is responding but GitHub publishing is not configured.'
+}
+$encodedApi = [Uri]::EscapeDataString($publicApi)
+$stableBuilder = "https://dday2301.github.io/PROJEKT/builder.html?api=$encodedApi"
+Write-Host "STABLE FRONTEND: $stableBuilder" -ForegroundColor Green
+Write-Host "STABLE API:      $publicApi" -ForegroundColor Cyan
+Write-Host "LOCAL BUILDER:   $localBuilder" -ForegroundColor Cyan
+Write-Host 'Never accept browser Dangerous warnings or enter credentials on untrusted tunnel URLs.' -ForegroundColor Yellow
+Start-Process $stableBuilder
