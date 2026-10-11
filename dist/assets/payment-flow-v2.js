@@ -1,4 +1,8 @@
 (() => {
+  // Exactly one controller per Builder tab. Media fallback used to load the
+  // same script twice, creating conflicting watchers and false stage resets.
+  if (window.PV_PAYMENT_FLOW_V2_LOADED) return;
+  window.PV_PAYMENT_FLOW_V2_LOADED = true;
   const button = document.getElementById('generate');
   if (!button) return;
 
@@ -29,6 +33,12 @@
   let watcherVersion = 0;
   let observedProjectStatus = '';
   let observedQualityApproved = false;
+  let lastStatusSignature = '';
+  const writeProcessLog = message => {
+    if (lastStatusSignature === message) return;
+    lastStatusSignature = message;
+    status(message);
+  };
 
   function rememberActive(id) {
     if (!id) return;
@@ -251,6 +261,7 @@
   }
 
   async function watchPostbuild(id) {
+    if (!id) return;
     rememberActive(id);
     if(typeof window.pvInstallImageStudioLink==='function')window.pvInstallImageStudioLink(id);
     const myVersion = ++watcherVersion;
@@ -266,6 +277,7 @@
       }
       try {
         const project = await request(`/projects/${id}`);
+        if (myVersion !== watcherVersion || activeProjectId !== id) return;
         window.pvSyncProjectActions?.(project);
         const {lines, issues} = projectStatusText(project, id);
         const qaApproved = clientQualityPassed(project.last_audit || {});
@@ -340,7 +352,7 @@
           return;
         }
 
-        status(lines.join('\n'));
+        writeProcessLog(lines.join('\n'));
       } catch (e) {
         status(`PREVERJANJE PROJEKTA NI USPELO\n${e.message}\n\nProjekt ostaja shranjen. Po ponovnem nalaganju se bo spremljanje nadaljevalo.`);
         setBuildButtonBusy(false);
@@ -409,7 +421,9 @@
   async function resumeExistingProject() {
     if (!token) return;
     try {
-      let id = localStorage.getItem(ACTIVE_KEY) || '';
+      const selected = new URLSearchParams(location.search).get('project');
+      // An explicitly selected project wins over an old remembered build.
+      let id = selected || localStorage.getItem(ACTIVE_KEY) || '';
       let project = null;
 
       if (id) {
@@ -435,11 +449,17 @@
         }
       }
 
-      if (!id || !project || !ACTIVE_STATUSES.has(project.status)) return;
+      if (!id || !project) return;
+      if (!ACTIVE_STATUSES.has(project.status)) {
+        // A completed/failed project is viewable in Dashboard but must
+        // never lock a fresh Builder tab or start a phantom build watcher.
+        clearActive(id);
+        return;
+      }
 
       status(`OBNAVLJAM SPREMLJANJE\nProjekt: ${id}\nTrenutno stanje: ${localLabels[project.status] || project.status}`);
       window.pvSyncProjectActions?.(project);
-      updatePostbuildPipeline(project.status);
+      updatePostbuildPipeline(project.status, clientQualityPassed(project.last_audit || {}));
       watchPostbuild(id);
     } catch (e) {
       // Health/status UI remains usable even if recovery fails. The user can
@@ -447,6 +467,19 @@
       console.warn('Could not resume active project', e);
     }
   }
+
+  // Changing to a fresh brief cancels ONLY this tab's UI watcher; it never
+  // cancels the server-side build or deletes the customer's project.
+  document.getElementById('newBuild')?.addEventListener('click', () => {
+    ++watcherVersion;
+    clearActive();
+    lastStatusSignature = '';
+    observedProjectStatus = '';
+    observedQualityApproved = false;
+    clearPayButton();
+    setBuildButtonBusy(false);
+    window.updateCheckoutHint();
+  }, true);
 
   button.addEventListener('click', event => {
     event.preventDefault();
