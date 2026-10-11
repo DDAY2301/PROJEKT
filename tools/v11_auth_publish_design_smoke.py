@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sqlite3
 import sys
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import patch
 
@@ -20,9 +22,28 @@ from api import main as core
 from api import design_prompt_v3 as design
 
 
+@contextmanager
+def _test_db():
+    """Make transaction semantics explicit AND close handles before temp cleanup.
+
+    sqlite3.Connection.__exit__ commits/rolls back but does not close() the
+    connection. Windows refuses to unlink an open SQLite file (WinError 32).
+    This wrapper is for the test only: no production schema or DB is modified.
+    """
+    con = sqlite3.connect(core.DB_PATH)
+    con.row_factory = sqlite3.Row
+    try:
+        with con:
+            yield con
+    finally:
+        con.close()
+
+
 async def check_auth() -> None:
     # Never touch the operator's app-secret file, users or production SQLite DB.
-    with tempfile.TemporaryDirectory(prefix="pv-v11-auth-") as temp:
+    # Patch the DB accessor so every test-only connection is closed promptly.
+    with patch.object(core, "db", _test_db):
+      with tempfile.TemporaryDirectory(prefix="pv-v11-auth-") as temp:
         isolated = Path(temp) / "temporary_auth.db"
         with patch.object(core, "DB_PATH", isolated):
             core.init_db()
