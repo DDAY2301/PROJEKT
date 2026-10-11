@@ -1,6 +1,10 @@
 (() => {
+  // Exactly one controller per Builder tab. Media fallback used to load the
+  // same script twice, creating conflicting watchers and false stage resets.
+  if (window.PV_PAYMENT_FLOW_V2_LOADED) return;
   const button = document.getElementById('generate');
   if (!button) return;
+  window.PV_PAYMENT_FLOW_V2_LOADED = true;
 
   const ACTIVE_KEY = 'pv_active_project_v2';
   const ACTIVE_STATUSES = new Set([
@@ -29,6 +33,12 @@
   let watcherVersion = 0;
   let observedProjectStatus = '';
   let observedQualityApproved = false;
+  let lastStatusSignature = '';
+  const writeProcessLog = message => {
+    if (lastStatusSignature === message) return;
+    lastStatusSignature = message;
+    status(message);
+  };
 
   function rememberActive(id) {
     if (!id) return;
@@ -251,6 +261,7 @@
   }
 
   async function watchPostbuild(id) {
+    if (!id) return;
     rememberActive(id);
     if(typeof window.pvInstallImageStudioLink==='function')window.pvInstallImageStudioLink(id);
     const myVersion = ++watcherVersion;
@@ -266,6 +277,7 @@
       }
       try {
         const project = await request(`/projects/${id}`);
+        if (myVersion !== watcherVersion || activeProjectId !== id) return;
         window.pvSyncProjectActions?.(project);
         const {lines, issues} = projectStatusText(project, id);
         const qaApproved = clientQualityPassed(project.last_audit || {});
@@ -340,7 +352,7 @@
           return;
         }
 
-        status(lines.join('\n'));
+        writeProcessLog(lines.join('\n'));
       } catch (e) {
         status(`PREVERJANJE PROJEKTA NI USPELO\n${e.message}\n\nProjekt ostaja shranjen. Po ponovnem nalaganju se bo spremljanje nadaljevalo.`);
         setBuildButtonBusy(false);
@@ -409,7 +421,9 @@
   async function resumeExistingProject() {
     if (!token) return;
     try {
-      let id = localStorage.getItem(ACTIVE_KEY) || '';
+      const selected = new URLSearchParams(location.search).get('project');
+      // An explicitly selected project wins over an old remembered build.
+      let id = selected || localStorage.getItem(ACTIVE_KEY) || '';
       let project = null;
 
       if (id) {
@@ -421,25 +435,21 @@
         }
       }
 
-      // Migration path from the older frontend: find the newest unfinished
-      // project even if its id was never written to localStorage.
-      if (!id) {
-        const projects = await request('/projects');
-        const candidate = Array.isArray(projects)
-          ? projects.find(item => ACTIVE_STATUSES.has(item.status))
-          : null;
-        if (candidate) {
-          id = candidate.id;
-          project = candidate;
-          rememberActive(id);
-        }
+      // Do not automatically select an unrelated legacy project merely
+      // because it has an old payment_pending state. The user can open it
+      // explicitly via My Projects. Automatic selection caused stale QA/payment
+      // statuses to appear while composing a different website.
+      if (!id || !project) return;
+      if (!ACTIVE_STATUSES.has(project.status)) {
+        // A completed/failed project is viewable in Dashboard but must
+        // never lock a fresh Builder tab or start a phantom build watcher.
+        clearActive(id);
+        return;
       }
-
-      if (!id || !project || !ACTIVE_STATUSES.has(project.status)) return;
 
       status(`OBNAVLJAM SPREMLJANJE\nProjekt: ${id}\nTrenutno stanje: ${localLabels[project.status] || project.status}`);
       window.pvSyncProjectActions?.(project);
-      updatePostbuildPipeline(project.status);
+      updatePostbuildPipeline(project.status, clientQualityPassed(project.last_audit || {}));
       watchPostbuild(id);
     } catch (e) {
       // Health/status UI remains usable even if recovery fails. The user can
@@ -447,6 +457,26 @@
       console.warn('Could not resume active project', e);
     }
   }
+
+  // Changing to a fresh brief cancels ONLY this tab's UI watcher; it never
+  // cancels the server-side build or deletes the customer's project.
+  document.getElementById('newBuild')?.addEventListener('click', () => {
+    ++watcherVersion;
+    clearActive();
+    lastStatusSignature = '';
+    observedProjectStatus = '';
+    observedQualityApproved = false;
+    clearPayButton();
+    setBuildButtonBusy(false);
+    window.updateCheckoutHint();
+    // Remove the previously selected project from this browser tab's URL.
+    // Do not clear any project or payment from the server.
+    const currentUrl = new URL(location.href);
+    for (const key of ['project', 'project_id', 'payment', 'session_id']) {
+      currentUrl.searchParams.delete(key);
+    }
+    history.replaceState({}, '', currentUrl.pathname + currentUrl.search + currentUrl.hash);
+  }, true);
 
   button.addEventListener('click', event => {
     event.preventDefault();

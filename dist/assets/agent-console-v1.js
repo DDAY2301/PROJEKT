@@ -1,5 +1,20 @@
 (() => {
   const $ = id => document.getElementById(id);
+  let inflight = false;
+  let lastLoadedSignature = '';
+  let lastLoadedAt = 0;
+  let refreshTimer = null;
+  function scheduleRefresh() {
+    if (refreshTimer) clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(() => {
+      refreshTimer = null;
+      if (document.visibilityState === 'hidden') return;
+      const signature = apiBase() + ':' + Boolean(authToken());
+      // A transient "Preverjam" -> "Online" signal or ordinary status poll
+      // must not trigger four expensive agent/preflight API calls again.
+      if (signature !== lastLoadedSignature || Date.now() - lastLoadedAt > 120000) load();
+    }, 350);
+  }
 
   function apiBase() {
     try {
@@ -40,10 +55,10 @@
       <div class="agent-console-head"><div><h3>Local Agent Engine</h3><p>Modeli, runtime in odprtokodne zmogljivosti, ki so dejansko aktivne na tem računalniku.</p></div><button class="agent-refresh" id="pvAgentRefresh" type="button">Osveži</button></div>
       <div id="pvAgentBody"><div class="agent-error">Prijavi se in poveži API za pregled.</div></div>`;
     const readiness=$('projectReadiness'); readiness?.after(card) || side.prepend(card);
-    $('pvAgentRefresh').addEventListener('click',load);
-    const auth=$('authState'); if(auth)new MutationObserver(()=>setTimeout(load,80)).observe(auth,{childList:true,attributes:true,subtree:true});
-    const api=$('apiState'); if(api)new MutationObserver(()=>setTimeout(load,80)).observe(api,{childList:true,attributes:true,subtree:true});
-    setTimeout(load,500);
+    $('pvAgentRefresh').addEventListener('click', () => load(true));
+    const auth=$('authState'); if(auth)new MutationObserver(scheduleRefresh).observe(auth,{childList:true,subtree:true});
+    const api=$('apiState'); if(api)new MutationObserver(scheduleRefresh).observe(api,{childList:true,subtree:true});
+    setTimeout(() => load(true),500);
   }
   function runtimeState(value){
     if(typeof value==='boolean') return {active:value,label:value?'ON':'OFF'};
@@ -55,8 +70,14 @@
     if(typeof value==='string') return {active:value.trim().length>0,label:value.trim()||'OFF'};
     return {active:false,label:'OFF'};
   }
-  async function load(){
-    const body=$('pvAgentBody');if(!body)return;
+  async function load(force = false){
+    const body=$('pvAgentBody');
+    if(!body || inflight) return;
+    const signature = apiBase() + ':' + Boolean(authToken());
+    if(!force && signature === lastLoadedSignature && Date.now() - lastLoadedAt < 120000) return;
+    inflight = true;
+    lastLoadedSignature = signature;
+    lastLoadedAt = Date.now();
     body.innerHTML='<div class="agent-error">Preverjam lokalni agent …</div>';
     try{
       const [caps,models,supervisor,preflight]=await Promise.all([get('/agent/capabilities'),get('/agent/models'),get('/agent/supervisor'),get('/agent/preflight')]);
@@ -81,7 +102,8 @@
         <div class="agent-features">${enabled.map(([name])=>name.replaceAll('_',' ')).join(' · ')}</div>
         <div class="agent-features">supervisor: ${Object.entries(supervisor.decision_counts||{}).map(([k,v])=>`${k} ${v}`).join(' · ')||'no decisions yet'} · model ${supervisor.runtime?.model_online?'online':'offline'} · disk ${supervisor.runtime?.disk_free_gb??'—'} GB</div>
         <div class="agent-features">${preflight.blockers?.length ? 'BLOCKERS: '+preflight.blockers.join(' · ') : 'preflight OK'}${preflight.warnings?.length ? ' · warnings: '+preflight.warnings.join(' · ') : ''}</div>`;
-    }catch(err){body.innerHTML=`<div class="agent-error">${String(err.message||err)}</div>`;}
+    }catch(err){body.textContent = String(err.message || err);}
+    finally{inflight = false;}
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install);else install();
 })();

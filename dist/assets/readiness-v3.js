@@ -136,7 +136,7 @@
     card.setAttribute('aria-live','polite');
     card.innerHTML = `
       <div class="readiness-head">
-        <div><h3>Pripravljenost projekta</h3><p>Pred izdelavo preverim povezavo, račun in ključne podatke briefa.</p></div>
+        <div><h3>Pripravljenost briefa</h3><p>100 % pomeni, da so podatki za začetek izpolnjeni. Ne pomeni, da je bila stran izdelana ali objavljena.</p></div>
         <div class="readiness-score" id="readinessScore" style="--score:0deg"><b id="readinessScoreText">0%</b></div>
       </div>
       <div class="readiness-list" id="readinessList"></div>

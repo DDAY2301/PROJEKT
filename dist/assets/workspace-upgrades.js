@@ -196,11 +196,25 @@
   window.pvInstallImageStudioLink=installImageStudioLink;
 
   async function restoreProjectHandoff() {
-    const id=new URLSearchParams(location.search).get('project'); if(!id||!token||!API)return;
-    try{
-      const p=await request(`/projects/${id}`); activeProjectId=id; updatePipeline(p.status); installImageStudioLink(id); if(p.repo_name){setResultLinks(p.repo_name);document.getElementById('resultActions')?.classList.add('visible');}
-      const qa=p.last_audit?.visual_qa; status(`PROJEKT ODPRT V WORKSPACE\n${p.name}\nStatus: ${p.status}\nVisual QA: ${qa?.score??'—'}${qa?.render_count?` / ${qa.render_count} renderjev`:''}\n${p.repo_name?`Repo: ${p.repo_name}`:''}`);
-    }catch(err){status(`PROJEKTA NI BILO MOGOČE ODPRETI\n${err.message}`);}
+    const id = new URLSearchParams(location.search).get('project');
+    if (!id || !token || !API) return;
+    // Only one controller (payment-flow-v2) may change the build pipeline,
+    // status log and active project. This module only adds its editor link.
+    try {
+      const p = await request(`/projects/${encodeURIComponent(id)}`);
+      const current = activeProjectId || localStorage.getItem('pv_active_project_v2');
+      if (current && current !== id) return;
+      if (p.repo_name) {
+        installImageStudioLink(id);
+        window.pvSyncProjectActions?.(p);
+      }
+      // Never show a public Pages link just because a private repo exists.
+      if (p.status === 'ready' && p.last_audit?.public_live && p.repo_name) {
+        setResultLinks(p.repo_name);
+      }
+    } catch (err) {
+      console.warn('Project editor link restore failed:', err.message);
+    }
   }
 
   if(typeof stageIndex==='object')stageIndex.visual_qa=3;
