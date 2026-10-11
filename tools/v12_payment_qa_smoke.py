@@ -104,7 +104,7 @@ async def checks() -> None:
 def frontend_contract() -> None:
     html = (ROOT / "dist/builder.html").read_text(encoding="utf-8")
     script = (ROOT / "dist/assets/payment-flow-v2.js").read_text(encoding="utf-8")
-    assert 'assets/payment-flow-v2.js?v=20261011-v12' in html
+    assert 'assets/payment-flow-v2.js?v=20261011-v14' in html
     assert html.index("assets/builder.js?") < html.index("assets/payment-flow-v2.js?")
     assert "score >= 90" in script
     assert "QUALITY GATE" in script
