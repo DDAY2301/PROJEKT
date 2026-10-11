@@ -29,12 +29,12 @@
   const openBuilder = document.getElementById('retry');
   const params = new URLSearchParams(location.search);
   const supplied = String(params.get('api') || '').trim();
-  const temporary = /(^|\\.)trycloudflare\\.com(?::\\d+)?(?:\\/|$)/i.test(supplied);
+  const temporary = supplied.toLowerCase().includes('.trycloudflare.com');
   state.dataset.checkedAt = String(Date.now());
   state.classList.add('bad');
   state.textContent = temporary
-    ? 'Začasni Cloudflare Quick Tunnel ni varen stalen naslov. Na njem ne vpisuj gesel ali tokenov.\\n\\nOdpri Builder na uradnem GitHub Pages naslovu ter uporabi lokalni API ali svoj stalen HTTPS API.'
-    : 'Samodejne preusmeritve na zunanje API-domene so iz varnostnih razlogov izklopljene.\\n\\nBuilder je na uradnem GitHub Pages naslovu. API poveži ročno v nastavitvah.';
+    ? 'Začasni Cloudflare Quick Tunnel ni varen stalen naslov. Na njem ne vpisuj gesel ali tokenov. Odpri Builder na uradnem GitHub Pages naslovu ter uporabi lokalni API ali svoj stalen HTTPS API.'
+    : 'Samodejne preusmeritve na zunanje API-domene so iz varnostnih razlogov izklopljene. Builder je na uradnem GitHub Pages naslovu. API poveži ročno v nastavitvah.';
   openBuilder.style.display = 'inline-flex';
   openBuilder.textContent = 'Odpri varen Builder';
   openBuilder.addEventListener('click', () => {
