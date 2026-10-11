@@ -27,6 +27,8 @@
   let checkoutStarted = false;
   let launchInProgress = false;
   let watcherVersion = 0;
+  let observedProjectStatus = '';
+  let observedQualityApproved = false;
 
   function rememberActive(id) {
     if (!id) return;
@@ -61,17 +63,21 @@
     if (!hint || !packageEl) return;
     const name = packageEl.value;
     const pkg = billingConfig.packages?.[name] || {};
-    if (pkg.configured && typeof pkg.unit_amount === 'number') {
+    if (observedProjectStatus === 'payment_pending' || observedProjectStatus === 'ready_for_payment') {
+      hint.textContent = observedQualityApproved
+        ? 'Ta projekt čaka na potrditev Stripe plačila. Javna objava sledi samo po plačilu in potrjenem zaključnem QA.'
+        : 'POZOR: Zadnji QA ne izpolnjuje pogojev za objavo. Ne zaključuj plačila, dokler agent ne popravi strani in preverjanje ne uspe.';
+    } else if (pkg.configured && typeof pkg.unit_amount === 'number') {
       hint.innerHTML = `<strong>Najprej izdelamo in preverimo stran.</strong> Po končanem buildu in Visual QA plačaš ${money(pkg.unit_amount, pkg.currency)}. Šele nato se že izdelana stran javno objavi.`;
     } else if (billingConfig.enabled) {
       hint.innerHTML = `<strong>Paket ${name} še nima aktivnega plačila.</strong> Stran se lahko izdela, javna objava pa sledi po urejeni ceni.`;
     } else {
-      hint.innerHTML = '<strong>Testni način:</strong> izdelava in objava lahko tečeta brez plačila.';
+      hint.textContent = 'Stripe trenutno ni konfiguriran. To samo po sebi ne pomeni, da je že shranjene projekte mogoče objaviti brez plačila ali zaključnega QA.';
     }
   };
   setTimeout(() => window.updateCheckoutHint(), 0);
 
-  function updatePostbuildPipeline(projectStatus) {
+  function updatePostbuildPipeline(projectStatus, qualityApproved = true) {
     const pipes = Array.from(document.querySelectorAll('.pipe'));
     if (!pipes.length) return;
 
@@ -97,6 +103,22 @@
         el.classList.add('done');
         const state = el.querySelector('em');
         if (state) state.textContent = 'končano';
+      });
+      return;
+    }
+
+    if ((projectStatus === 'ready_for_payment' || projectStatus === 'payment_pending') && !qualityApproved) {
+      pipes.forEach((el, i) => {
+        const state = el.querySelector('em');
+        if (i < 3) {
+          el.classList.add('done');
+          if (state) state.textContent = 'končano';
+        } else if (i === 3) {
+          el.classList.add('running');
+          if (state) state.textContent = 'QA ni prestal';
+        } else if (state) {
+          state.textContent = i === 5 ? 'blokirano' : 'pregled';
+        }
       });
       return;
     }
@@ -161,7 +183,11 @@
     if (checkoutStarted) return;
     checkoutStarted = true;
     try {
-      status('STRAN JE IZDELANA IN PREVERJENA\nOdpiram varno Stripe plačilo. Po uspešnem plačilu gre ista stran takoj v javno objavo ...');
+      const current = await request(`/projects/${projectId}`);
+      if (!clientQualityPassed(current.last_audit || {})) {
+        throw new Error('Plačilo je blokirano: zadnji Visual QA ali kritične napake ne izpolnjujejo kakovostnih zahtev.');
+      }
+      status('ZAKLJUČNI QA PREVERJEN\nOdpiram Stripe Checkout; objava sledi šele po potrjenem plačilu.');
       const checkout = await request('/billing/checkout', {
         method:'POST',
         body:JSON.stringify({project_id:projectId})
@@ -207,7 +233,7 @@
     const visual = audit?.visual_qa || {};
     const score = Number(visual.score);
     if (audit?.payment_blocked === true || audit?.quality_gate_passed === false) return false;
-    return !severe && visual.available === true && visual.passed === true && Number.isFinite(score) && score >= 80;
+    return !severe && visual.available === true && visual.passed === true && Number.isFinite(score) && score >= 90;
   }
 
   function projectStatusText(project, id) {
@@ -235,7 +261,11 @@
       try {
         const project = await request(`/projects/${id}`);
         const {lines, issues} = projectStatusText(project, id);
-        updatePostbuildPipeline(project.status);
+        const qaApproved = clientQualityPassed(project.last_audit || {});
+        updatePostbuildPipeline(project.status, qaApproved);
+        observedProjectStatus = project.status;
+        observedQualityApproved = qaApproved;
+        window.updateCheckoutHint();
 
         if (project.status === 'ready_for_payment') {
           if (!clientQualityPassed(project.last_audit || {})) {
@@ -243,7 +273,7 @@
             lines.push(
               '',
               'QUALITY GATE JE BLOKIRAL PLAČILO.',
-              'Projekt ima še pomembne QA napake ali Visual QA ni dosegel najmanj 80/100.',
+              'Projekt ima še pomembne QA napake ali Visual QA ni dosegel najmanj 90/100.',
               'Agent mora najprej popraviti stran in ponovno izvesti pregled.'
             );
             if (issues.length) lines.push('', ...issues.slice(0,6).map(x => `• ${x.message}`));
@@ -261,7 +291,18 @@
         }
 
         if (project.status === 'payment_pending') {
-          lines.push('', 'Stripe Checkout čaka na zaključek plačila.');
+          if (!qaApproved) {
+            clearPayButton();
+            lines.push('', 'POZOR: ZADNJI QUALITY GATE NI USPEL.',
+              'Zadnji Visual QA je pod produkcijskim pragom 90/100 ali vsebuje kritične napake.',
+              'Ne zaključuj plačila. Če je bilo že opravljeno, projekt potrebuje pregled in odpravo težav pred objavo.');
+            if (issues.length) lines.push('', ...issues.slice(0,6).map(x => `• ${x.message}`));
+            status(lines.join('\n'));
+            setBuildButtonBusy(false);
+            if (typeof loadRecentProjects === 'function') loadRecentProjects();
+            return;
+          }
+          lines.push('', 'Stripe Checkout čaka na dejansko potrditev plačila. Projekt še ni javno objavljen.');
         }
         if (project.status === 'repository_ready') {
           lines.push('', 'Končna koda je pripravljena. Zaključujem delivery korak.');
@@ -408,7 +449,7 @@
   if (params.get('payment') === 'success' && params.get('project_id')) {
     rememberActive(params.get('project_id'));
     setTimeout(() => {
-      status('PLAČILO POTRJENO\nSpletna stran je že izdelana. Zdaj jo objavljam v živo ...');
+      status('Vrnitev s Stripe Checkout. Plačilo še preverjam pri strežniku; javna objava ni potrjena.');
       watchPostbuild(params.get('project_id'));
     }, 1800);
   } else {
