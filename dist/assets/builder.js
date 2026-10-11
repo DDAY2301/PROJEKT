@@ -306,6 +306,43 @@ $('logout')?.addEventListener('click', () => {
   status('Prijavna seja je zaključena.');
 });
 
+// Preflight is on-demand: no repeated GitHub API calls or heavy QA work.
+function installPublishingCheck() {
+  const panel = document.querySelector('.system-card .connection');
+  if (!panel || $('checkPublishing')) return;
+  const button = document.createElement('button');
+  button.id = 'checkPublishing';
+  button.type = 'button';
+  button.className = 'button small secondary';
+  button.textContent = 'Preveri prijavo in objavo';
+  button.style.marginTop = '.65rem';
+  panel.appendChild(button);
+  button.addEventListener('click', async () => {
+    if (!API) {
+      status('API ni povezan. Najprej zaženi lokalni Project Visibility.');
+      return;
+    }
+    if (!await verifyExistingSession()) {
+      status('Za preverjanje objave se prijavi v račun trenutne lokalne baze.');
+      return;
+    }
+    button.disabled = true;
+    try {
+      status('Preverjam GitHub dostop, model, bazo in produkcijske workerje ...');
+      const report = await request('/agent/preflight');
+      const blockers = (report.blockers || []).map(x => '- ' + x).join('\n');
+      const warnings = (report.warnings || []).map(x => '- ' + x).join('\n');
+      status(report.ready
+        ? 'PRODUKCIJSKI PREGLED: READY\nGitHub povezava, model in workerji so prešli osnovne kontrole. Končno objavo je treba preveriti na ločenem testnem repozitoriju.' + (warnings ? '\n\nOpozorila:\n' + warnings : '')
+        : 'PRODUKCIJSKI PREGLED: BLOCKED\n' + blockers + (warnings ? '\n\nOpozorila:\n' + warnings : ''));
+    } catch (error) {
+      status('Preverjanje objave ni uspelo: ' + error.message);
+    } finally {
+      button.disabled = false;
+    }
+  });
+}
+
 const packageLimits = {Start:3, Standard:6, Premium:12};
 
 function selectPackage(name) {
@@ -699,6 +736,7 @@ if (isDisposableTunnel(location.origin)) {
 
 installMediaUi();
 installCheckoutHint();
+installPublishingCheck();
 selectPackage($('package')?.value || 'Start');
 updateAuthUi();
 syncPreview();
