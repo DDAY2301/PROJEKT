@@ -129,14 +129,9 @@
     logoInput.addEventListener('change', e => { fallbackAdd(e.target.files, 'logo'); e.target.value = ''; });
   }
 
-  function loadPostbuildPaymentFlow() {
-    if (document.querySelector('script[data-pv-payment-flow]')) return;
-    const script = document.createElement('script');
-    script.src = 'assets/payment-flow-v2.js?v=20260914-1';
-    script.defer = true;
-    script.dataset.pvPaymentFlow = '1';
-    document.body.appendChild(script);
-  }
+  // The Builder includes payment-flow-v2.js explicitly and exactly once.
+  // Loading a second copy here caused competing project watchers and status
+  // flicker. Media fallback must never create a second workflow controller.
 
   function bind() {
     // workspace-upgrades.js normally creates the full drag/drop editor first.
@@ -164,7 +159,6 @@
     });
 
     syncMediaPreview();
-    loadPostbuildPaymentFlow();
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind);
