@@ -16,10 +16,17 @@ if (Get-Command git -ErrorAction SilentlyContinue) {
   Push-Location $repoRoot
   try {
     git fetch origin main | Out-Host
+    if ($LASTEXITCODE -ne 0) {
+      throw "Load test refused: could not fetch origin/main. Check Git connectivity before benchmarking."
+    }
+    $trackedChanges = @(git status --porcelain --untracked-files=no)
+    if ($LASTEXITCODE -ne 0 -or $trackedChanges.Count -gt 0) {
+      throw "Load test refused: tracked source files have uncommitted changes or Git status failed. Review git status and commit/stash changes before benchmarking."
+    }
     $localHead = (git rev-parse HEAD 2>$null).Trim()
     $remoteHead = (git rev-parse origin/main 2>$null).Trim()
     if ($localHead -and $remoteHead -and $localHead -ne $remoteHead) {
-      throw "Load test refused: local HEAD $($localHead.Substring(0,8)) is not origin/main $($remoteHead.Substring(0,8)). Run: git reset --hard origin/main ; .\start-product.ps1"
+      throw "Load test refused: local HEAD $($localHead.Substring(0,8)) differs from origin/main $($remoteHead.Substring(0,8)). Review git status, then use git pull --ff-only origin main when safe. Do not discard local work."
     }
     Write-Host "Source revision: $($localHead.Substring(0,8)) / origin-main verified" -ForegroundColor DarkGray
   } finally {

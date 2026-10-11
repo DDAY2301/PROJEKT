@@ -563,7 +563,17 @@ jobs:
               exit 1
             }
           }
-          Write-Host "PowerShell startup syntax checks passed"
+          $benchmark = Get-Content "run-production-load-test.ps1" -Raw
+          if ($benchmark.Contains("reset --hard")) {
+            throw "Production benchmark must never recommend a destructive Git reset"
+          }
+          if (-not $benchmark.Contains("git status --porcelain --untracked-files=no")) {
+            throw "Production benchmark must reject uncommitted tracked source changes"
+          }
+          if (-not $benchmark.Contains("git pull --ff-only origin main")) {
+            throw "Production benchmark must provide a non-destructive sync instruction"
+          }
+          Write-Host "PowerShell startup and safe load-test preflight checks passed"
       - name: Validate first-pass success optimizations
         run: |
           python - <<'PY'
