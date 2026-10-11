@@ -121,8 +121,14 @@ $experts = @(
     Select-Object -Unique
 )
 # Large expert model inference can evict the 7B model and cause Windows
-# paging. Only opt in on a <=20 GB host after a measured capacity test.
-if ($stableMemoryProfile -and $env:PV_ENABLE_LARGE_EXPERT_MODELS -notmatch '^(?i:1|true|yes|on)
+# paging. Explicit opt-in required on <=20 GB machines.
+if ($stableMemoryProfile -and $env:PV_ENABLE_LARGE_EXPERT_MODELS -notmatch '^(?i:1|true|yes|on)$') {
+  if ($experts.Count -gt 0) {
+    Write-Warning 'Large expert auto-routing disabled on <=20 GB host. Set PV_ENABLE_LARGE_EXPERT_MODELS=1 only after a capacity test.'
+  }
+  $experts = @()
+}
+if ($experts.Count -gt 0) {
   $env:OLLAMA_EXPERT_MODELS = ($experts -join ',')
   Write-Host "Expert router: ACTIVE / $($experts -join ' + ')" -ForegroundColor Green
   Write-Host "Routing: 7B fast path -> expert model only for difficult coding/repair work" -ForegroundColor DarkCyan
