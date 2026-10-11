@@ -41,6 +41,30 @@ Use `start-product.ps1` for the complete local product flow. Quick Tunnel URLs a
 
 See `PRODUCT_NO1_ROADMAP.md` for product targets and remaining production gates.
 
+## V7 agent runtime policy and 8 GB efficiency profile
+
+The existing AI model router injects a compact quality-and-safety policy into
+every routed text generation call (`api/model_router.py`). The full repository
+agent operating prompt lives in [AGENTS.md](AGENTS.md). No extra worker,
+duplicate agent or model is introduced. Enable by default; opt out with
+`PV_AGENT_V7_ENABLED=0` (this affects prompt injection only).
+
+On Windows machines with 12 GB RAM or less, both launchers default to one
+production worker, one model generation lane, one visual QA lane and one loaded
+Ollama model, unless environment overrides are explicitly provided.
+These settings are conservative starting points, **not benchmarked gains**.
+
+The live local API reports `"agent_policy": "V7"` at `/health` once restarted
+with the updated code. GitHub Pages deploying the public frontend does **not**
+restart the Windows-hosted backend or prove generated-site delivery.
+
+After reviewing local edits, update with `git pull --ff-only origin main`, then
+restart `start-product.ps1` for the full product or
+`api/start-local.ps1 -SkipGitHub` for isolated local-only tests.
+Verify: `Invoke-RestMethod http://127.0.0.1:8000/health`.
+The standalone regression is `python tools/v7_policy_smoke.py`.
+
+
 
 ## Local AI backends
 
