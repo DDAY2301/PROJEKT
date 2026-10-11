@@ -556,7 +556,9 @@ jobs:
             "start-product.ps1",
             "api/start-local.ps1",
             "run-production-load-test.ps1",
-            "install-expert-model.ps1"
+            "install-expert-model.ps1",
+            "tools/cleanup-generated-github.ps1",
+            "tools/inspect-agent-host.ps1"
           )
           foreach ($file in $files) {
             $tokens = $null
