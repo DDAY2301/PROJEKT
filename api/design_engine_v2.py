@@ -232,12 +232,26 @@ def _ensure_history() -> None:
 
 
 def _site_key(config: dict[str, Any]) -> str:
-    raw = "|".join(str(config.get(k) or "").strip().lower() for k in ("organization", "name"))
+    # Actual generated projects carry _project_id, so identical brand names
+    # across customers never share design history or a frozen template.
+    project_id = str(config.get("_project_id") or config.get("project_id") or "").strip()
+    if project_id:
+        raw = "project|" + project_id
+    else:
+        # For external/offline callers without a UUID, include the current
+        # brief's purpose to avoid collisions between distinct websites.
+        raw = "|".join(str(config.get(k) or "").strip().lower() for k in
+                       ("organization", "name", "goal", "programme"))
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
 
 
 def _brief_text(config: dict[str, Any]) -> str:
-    return json.dumps(config, ensure_ascii=False, sort_keys=True).lower()
+    # Match only the current project's textual design brief, never previous
+    # assets/history or private runtime secrets.
+    allowed = ("organization", "name", "goal", "programme", "audience",
+               "tone", "image_direction", "custom_requirements")
+    return json.dumps({key: config.get(key) for key in allowed if key in config},
+                      ensure_ascii=False, sort_keys=True).lower()[:9000]
 
 
 def _candidate_score(name: str, profile: dict[str, Any], text: str) -> int:
@@ -268,17 +282,21 @@ def _select_motif(config: dict[str, Any]) -> tuple[str, str]:
         ).fetchall()
 
     usage = Counter(str(row["motif"]) for row in rows)
+    requested = str(config.get("template_id") or config.get("design_template_id") or "").strip().upper()
+    explicit = next((motif for tid, _, motif in STUDIO_TEMPLATES if tid == requested), "")
     text = _brief_text(config)
     scored = {name: _candidate_score(name, profile, text) for name, profile in MOTIFS.items()}
     best_score = max(scored.values(), default=0)
-    if best_score:
+    if explicit:
+        pool = [explicit]
+    elif best_score:
         ranked = sorted(scored, key=lambda name: (-scored[name], name))
-        relevant = [name for name in ranked if scored[name] >= max(1, best_score - 4)]
-        pool = relevant[:4]
-        if len(pool) < 3:
-            pool = ranked[:3]
+        # Quality-first industry relevance. Rotation may vary between
+        # comparably suitable templates, not arbitrarily choose an
+        # inappropriate zero-score template to improve usage statistics.
+        pool = [name for name in ranked if scored[name] >= max(1, best_score - 4)][:5]
     else:
-        pool = list(MOTIFS)
+        pool = [name for _, _, name in STUDIO_TEMPLATES]
     if retry_seed and existing_motif in pool and len(pool) > 1:
         pool = [name for name in pool if name != existing_motif]
 
@@ -350,14 +368,54 @@ def _stamp_html(source: str, motif: str, composition: str) -> str:
     )
 
 
-async def design_site(config: dict[str, Any]) -> dict[str, Any]:
-    spec = await _BASE_DESIGN_SITE(config)
-    motif, composition = _select_motif(config)
-    spec["design_system"] = {
+def _design_seed(config: dict[str, Any], motif: str, composition: str) -> str:
+    return hashlib.sha256(
+        (_site_key(config) + "|" + motif + "|" + composition).encode("utf-8")
+    ).hexdigest()[:16]
+
+
+def _studio_fingerprint(motif: str, composition: str) -> dict[str, str]:
+    tid, name = STUDIO_BY_MOTIF.get(motif, ("LEGACY", "Local Service"))
+    profile = MOTIFS[motif]
+    return {
+        "template_id": tid,
+        "design_direction": name,
+        "hero_type": composition,
+        "grid_system": f"{motif}/{composition}",
+        "typography_pairing": profile["display"] + " / " + profile["font"],
+        "section_structure": composition,
+        "image_treatment": motif,
+        "component_style": profile["radius"],
+        "interaction_style": "keyboard-accessible, reduced-motion",
+    }
+
+
+def _studio_design_system(config: dict[str, Any], motif: str, composition: str) -> dict[str, Any]:
+    tid, name = STUDIO_BY_MOTIF.get(motif, ("LEGACY", "Local Service"))
+    return {
         "version": ENGINE_VERSION,
+        "studio_version": "studio-24-v1",
+        "template_id": tid,
+        "template_name": name,
+        "design_seed": _design_seed(config, motif, composition),
         "motif": motif,
         "composition": composition,
+        "selection_reason": "industry-matched, controlled rotation",
+        "fingerprint": _studio_fingerprint(motif, composition),
     }
+
+
+async def design_site(config: dict[str, Any]) -> dict[str, Any]:
+    motif, composition = _select_motif(config)
+    template_id, template_name = STUDIO_BY_MOTIF.get(motif, ("LEGACY", "Local Service"))
+    # The same selected direction is used for model planning AND the final
+    # premium/CSS renderer. Do not have a second random template picker.
+    scoped = dict(config)
+    scoped["_design_template_id"] = template_id
+    scoped["_design_template_name"] = template_name
+    scoped["_design_composition"] = composition
+    spec = await _BASE_DESIGN_SITE(scoped)
+    spec["design_system"] = _studio_design_system(config, motif, composition)
     return spec
 
 
@@ -367,7 +425,7 @@ async def build_files(config: dict[str, Any], spec: dict[str, Any]) -> dict[str,
     composition = str(design.get("composition") or "")
     if motif not in MOTIFS or composition not in COMPOSITIONS:
         motif, composition = _select_motif(config)
-        spec["design_system"] = {"version": ENGINE_VERSION, "motif": motif, "composition": composition}
+        spec["design_system"] = _studio_design_system(config, motif, composition)
 
     files = await _BASE_BUILD_FILES(config, spec)
     css = str(files.get("assets/site.css") or "")
@@ -382,6 +440,11 @@ async def build_files(config: dict[str, Any], spec: dict[str, Any]) -> dict[str,
             "motif": motif,
             "composition": composition,
             "site_key": _site_key(config),
+            "template_id": design.get("template_id") or STUDIO_BY_MOTIF.get(motif, ("LEGACY", ""))[0],
+            "template_name": design.get("template_name") or STUDIO_BY_MOTIF.get(motif, ("", motif))[1],
+            "design_seed": design.get("design_seed") or _design_seed(config, motif, composition),
+            "fingerprint": _studio_fingerprint(motif, composition),
+            "customer_data_isolation": "project-scoped",
         },
         ensure_ascii=False,
         indent=2,
@@ -404,6 +467,8 @@ def motif_summary() -> dict[str, Any]:
     return {
         "engine": ENGINE_VERSION,
         "motifs": sorted(MOTIFS),
+        "templates": [{"id": tid, "name": label, "motif": motif}
+                      for tid, label, motif in STUDIO_TEMPLATES],
         "compositions": list(COMPOSITIONS),
         "usage": {str(row["motif"]): int(row["n"]) for row in rows},
     }
