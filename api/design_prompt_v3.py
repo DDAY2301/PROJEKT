@@ -67,7 +67,7 @@ def design_direction(config: dict[str, Any]) -> str:
         "Honour supplied colours, language, brand and actual photos. "
         "Build a distinct hierarchy for each page; mobile-first, accessible contrast, "
         "visible keyboard focus, meaningful CTAs and appropriate image crops. "
-        "No generic SaaS cards, fake proof, image URLs without assets, repeated copy "
+        "No generic SaaS cards, fake reviews/claims, broken image URLs, repeated copy "
         "or decorative noise. Every claim must follow the brief."
     )
 
