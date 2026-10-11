@@ -34,7 +34,9 @@ def configured_worker_count() -> int:
     if value:
         return max(1, min(12, int(value)))
     snapshot = resource_guard.memory_snapshot()
-    return 1 if snapshot and snapshot.total_mb <= 12 * 1024 else 4
+    # Match start-product.ps1 and api/start-local.ps1: <=20 GiB uses
+    # one worker until a workload-specific benchmark justifies more.
+    return 1 if snapshot and snapshot.total_mb <= 20 * 1024 else 4
 
 
 WORKER_COUNT = configured_worker_count()
