@@ -113,7 +113,7 @@ jobs:
           for unsafe in (
               '/index.html', '//server/share/index.html', 'C:/index.html',
               'assets/../index.html', 'assets//app.js', 'assets/CON.txt',
-              'assets/NUL.css', 'assets/bad:name.js', 'assets/file .js',
+              'assets/NUL.css', 'assets/bad:name.js', 'assets/file. ',
               'assets/control\x00.js',
           ):
               try:
