@@ -121,20 +121,14 @@ $expertModels = @(
     } |
     Select-Object -Unique
 )
-# Large expert model inference can evict the 7B model and cause Windows
-# paging. Explicit opt-in required on <=20 GB machines.
-if ($stableMemoryProfile -and $env:PV_ENABLE_LARGE_EXPERT_MODELS -notmatch '^(?i:1|true|yes|on)$') {
-  if ($expertModels.Count -gt 0) {
-    Write-Warning 'Large expert auto-routing disabled on <=20 GB host. Set PV_ENABLE_LARGE_EXPERT_MODELS=1 only after a capacity test.'
-  }
-  $expertModels = @()
-}
-$env:OLLAMA_EXPERT_MODELS = ($expertModels -join ',')
+# Large expert model inference can evict the 7B model and page Windows RAM.
+# Use a 7B-only default on <=20 GB unless the operator explicitly opts in.
+if ($stableMemoryProfile -and $env:PV_ENABLE_LARGE_EXPERT_MODELS -notmatch '^(?i:1|true|yes|on)
 if ($expertModels.Count -gt 0) {
   Write-Host "Expert models: $env:OLLAMA_EXPERT_MODELS" -ForegroundColor Green
   Write-Host "Adaptive routing: fast model for websites, expert only for hard repo/coding work" -ForegroundColor DarkCyan
 } else {
-  Write-Host "Expert models: inactive on this profile; primary 7B model remains active." -ForegroundColor DarkGray
+  Write-Host "Expert models: none installed. Run .\install-expert-model.ps1 from repo root." -ForegroundColor DarkGray
 }
 
 Write-Host "[3/9] Preparing local vision reviewer..."
@@ -295,7 +289,7 @@ Write-Host "Press Ctrl+C to stop."
 if ($LASTEXITCODE -ne 0) { throw "API process exited with code $LASTEXITCODE." }
 ) {
   if ($expertModels.Count -gt 0) {
-    Write-Warning "Expert model auto-routing disabled on <=20 GB RAM; use PV_ENABLE_LARGE_EXPERT_MODELS=1 to opt in."
+    Write-Warning 'Expert auto-routing is disabled on <=20 GB RAM; set PV_ENABLE_LARGE_EXPERT_MODELS=1 to opt in after testing.'
   }
   $expertModels = @()
 }
