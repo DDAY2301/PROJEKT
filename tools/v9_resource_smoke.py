@@ -57,6 +57,8 @@ def verify_launchers_and_audit() -> None:
         assert '$env:PV_MIN_FREE_RAM_MB = if ($lowMemoryProfile) { "768" } else { "1536" }' in source
         assert 'OLLAMA_FAST_KEEP_ALIVE = if ($stableMemoryProfile) { "90s" } else { "10m" }' in source
         assert 'PRODUCTION_WORKERS' in source
+        assert 'PV_ENABLE_LARGE_EXPERT_MODELS' in source
+        assert "Large expert model inference can evict the 7B model" in source
     audit = (ROOT / "tools/inspect-agent-host.ps1").read_text(encoding="utf-8")
     assert "Stop-Process" not in audit
     assert "CommandLine is examined" in audit
