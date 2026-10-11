@@ -372,7 +372,8 @@ async def health():
         async with httpx.AsyncClient(timeout=httpx.Timeout(2.0, connect=1.0)) as client:
             response = await client.get(f"{OLLAMA_BASE_URL}/api/tags")
             response.raise_for_status()
-            models = response.json().get("models") or []
+            payload = response.json()
+            models = (payload.get("models") or []) if isinstance(payload, dict) else []
             ollama_online = True
             model_installed = any(
                 str(item.get("name") or item.get("model") or "") == OLLAMA_MODEL
