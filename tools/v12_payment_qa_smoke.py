@@ -110,7 +110,6 @@ def frontend_contract() -> None:
     assert "QUALITY GATE" in script
     assert "Ne zaključuj plačila" in script
     assert "observedQualityApproved" in script
-    assert "Če" not in "payment_pending"  # Ensure this script only checks actual code text.
     assert "Plačilo še preverjam" in script
 
 
