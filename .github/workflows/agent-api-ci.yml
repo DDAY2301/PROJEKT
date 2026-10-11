@@ -126,6 +126,13 @@ jobs:
           python tools/v13_preview_poller_smoke.py
           node --check dist/assets/preview-email-ui.js
           node --check dist/assets/payment-flow-v2.js
+      - name: Validate V14 single project controller and stable build stages
+        run: |
+          node --check dist/assets/payment-flow-v2.js
+          node --check dist/assets/media-fix.js
+          node --check dist/assets/workspace-upgrades.js
+          node --check dist/assets/preview-email-ui.js
+          node tools/v14_ui_consistency.test.js
       - name: Validate media placement rules
         run: |
           python - <<'PY'
