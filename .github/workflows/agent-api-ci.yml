@@ -1,6 +1,7 @@
 name: Agent API CI
 
 on:
+  workflow_dispatch:
   push:
     branches: [main, feature/autonomous-website-agent-api, feature/product-console-v2]
   pull_request:
