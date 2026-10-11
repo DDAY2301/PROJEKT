@@ -149,15 +149,17 @@ try { $health = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/health" -Method G
 if ($health -and $health.ok) {
   $listener = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
   if ($listener) {
-    try {
-      $old = Get-Process -Id $listener.OwningProcess -ErrorAction Stop
-      if ($old.ProcessName -match 'python|uvicorn') {
-        Write-Host "Restarting existing local agent PID $($old.Id) to load the current runtime..." -ForegroundColor Yellow
-        Stop-Process -Id $old.Id -Force
-        Start-Sleep -Seconds 1
-        $health = $null
-      }
-    } catch {}
+    $old = Get-Process -Id $listener.OwningProcess -ErrorAction SilentlyContinue
+    $details = Get-CimInstance Win32_Process -Filter "ProcessId=$($listener.OwningProcess)" -ErrorAction SilentlyContinue
+    $isOurApi = $old -and $old.ProcessName -match 'python|uvicorn' -and
+      $details -and $details.CommandLine -match '(?i)(uvicorn\s+api\.server:app|api[\\/]server\.py)'
+    if (-not $isOurApi) {
+      throw "Port $Port belongs to another process. Refusing to stop unrelated service PID $($listener.OwningProcess)."
+    }
+    Write-Host "Restarting Project Visibility API PID $($old.Id) to load updated code..." -ForegroundColor Yellow
+    Stop-Process -Id $old.Id -Force
+    Start-Sleep -Seconds 1
+    $health = $null
   }
 }
 
