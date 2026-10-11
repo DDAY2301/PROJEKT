@@ -180,6 +180,8 @@ async def preview_asset(token: str, asset_path: str):
         headers={
             "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
             "X-Robots-Tag": "noindex, nofollow, noarchive",
+            "Referrer-Policy": "no-referrer",
+            "X-Content-Type-Options": "nosniff",
             # Generated HTML is untrusted customer-authored output. Sandbox even
             # direct-tab previews so they cannot access the local Builder origin,
             # user JWT in localStorage or privileged API routes.
