@@ -40,22 +40,48 @@ def _safe_name(value: str, fallback: str = "Imported website") -> str:
     return (value or fallback)[:120]
 
 
+WINDOWS_RESERVED_NAMES = {"CON", "PRN", "AUX", "NUL"} | {
+    f"{prefix}{number}" for prefix in ("COM", "LPT") for number in range(1, 10)
+}
+WINDOWS_INVALID_CHARS = set('<>:"|?*')
+
+
 def _normalise_member(name: str) -> str | None:
-    raw = (name or "").replace("\\", "/").lstrip("/")
+    raw = (name or "").replace("\\", "/")
+    # Do not silently turn an absolute/drive-qualified archive member into a
+    # relative path. ZIPs may be uploaded from Windows as well as Unix hosts.
+    if raw.startswith("/") or re.match(r"^[A-Za-z]:", raw):
+        raise HTTPException(422, "ZIP contains an absolute path")
     if not raw or raw.endswith("/"):
         return None
-    path = PurePosixPath(raw)
-    parts = list(path.parts)
-    if not parts or any(part in {"", ".", ".."} for part in parts):
+    parts = raw.split("/")
+    if any(
+        part in {"", ".", ".."}
+        or part.endswith((" ", "."))
+        or part.split(".", 1)[0].upper() in WINDOWS_RESERVED_NAMES
+        or any(ord(ch) < 32 or ch in WINDOWS_INVALID_CHARS for ch in part)
+        for part in parts
+    ):
         raise HTTPException(422, "ZIP contains an unsafe path")
-    if parts[0].lower() in IGNORED_ROOTS or any(part.lower() in IGNORED_ROOTS for part in parts):
+    if any(part.lower() in IGNORED_ROOTS or part.startswith(".") for part in parts):
         return None
-    if any(part.startswith(".") for part in parts):
-        return None
-    ext = path.suffix.lower()
-    if ext not in ALLOWED_EXTENSIONS:
+    path = PurePosixPath(raw)
+    if path.suffix.lower() not in ALLOWED_EXTENSIONS:
         return None
     return "/".join(parts)
+
+
+def _ensure_unique_member_path(path: str, seen: set[str]) -> None:
+    """Reject duplicate/colliding ZIP members on case-insensitive filesystems."""
+    key = path.casefold()
+    if any(
+        key == previous
+        or key.startswith(previous + "/")
+        or previous.startswith(key + "/")
+        for previous in seen
+    ):
+        raise HTTPException(422, "ZIP contains duplicate or conflicting file paths")
+    seen.add(key)
 
 
 def _strip_common_root(files: dict[str, bytes]) -> dict[str, bytes]:
@@ -301,6 +327,7 @@ async def import_site_zip(
         raise HTTPException(413, f"ZIP contains more than {MAX_FILES} files")
 
     extracted: dict[str, bytes] = {}
+    seen_paths: set[str] = set()
     expanded = 0
     for info in members:
         unix_mode = (info.external_attr >> 16) & 0xFFFF
@@ -309,6 +336,7 @@ async def import_site_zip(
         path = _normalise_member(info.filename)
         if not path:
             continue
+        _ensure_unique_member_path(path, seen_paths)
         if info.file_size > MAX_FILE_BYTES:
             raise HTTPException(413, f"{path} exceeds the per-file import limit")
         expanded += int(info.file_size or 0)
