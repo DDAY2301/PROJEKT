@@ -15,7 +15,7 @@ DESIGN_PROMPT_VERSION = "art-direction-v3"
 INDUSTRY_DIRECTIONS = (
     (("law", "legal", "attorney", "odvet", "pravni"), "legal", "Calm institutional editorial; strong typography, asymmetric text/image hero, restrained ink/stone palette, clearly separated services and credentials.",),
     (("restaurant", "food", "hotel", "hospitality", "gostin", "restavr", "kavarn"), "hospitality", "Warm editorial hospitality; atmospheric authentic photography, spacious menu/story hierarchy, prominent booking/contact path, tactile type pairing.",),
-    (("cleaning", "service", "servis", "čist", "salon"), "local_service", "Warm trustworthy local service; crisp typography, genuine service photography, scannable prices/process, visible quote CTA, no stock-office aesthetic.",),
+    (("cleaning", "clean", "service", "servis", "čist", "čišč", "salon"), "local_service", "Warm trustworthy local service; crisp typography, genuine service photography, scannable prices/process, visible quote CTA, no stock-office aesthetic.",),
     (("forest", "outdoor", "survival", "nature", "planin", "gozd"), "outdoor", "Nature-led field journal; documentary outdoor imagery, earthy restrained accents, textured hierarchy, clear course/activities path.",),
     (("youth", "erasmus", "ngo", "nonprofit", "mladin", "zavod"), "social_impact", "Human-centred impact editorial; real activity photography, lively yet accessible hierarchy, participant pathways, honest programme evidence.",),
     (("auto", "car", "detail", "garage", "vozil", "avto"), "automotive", "Precision automotive studio; high-contrast typography, close-up material or vehicle images, strong service proof and booking journey.",),
