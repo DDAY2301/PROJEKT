@@ -2,9 +2,9 @@
   // Exactly one controller per Builder tab. Media fallback used to load the
   // same script twice, creating conflicting watchers and false stage resets.
   if (window.PV_PAYMENT_FLOW_V2_LOADED) return;
-  window.PV_PAYMENT_FLOW_V2_LOADED = true;
   const button = document.getElementById('generate');
   if (!button) return;
+  window.PV_PAYMENT_FLOW_V2_LOADED = true;
 
   const ACTIVE_KEY = 'pv_active_project_v2';
   const ACTIVE_STATUSES = new Set([
@@ -435,20 +435,10 @@
         }
       }
 
-      // Migration path from the older frontend: find the newest unfinished
-      // project even if its id was never written to localStorage.
-      if (!id) {
-        const projects = await request('/projects');
-        const candidate = Array.isArray(projects)
-          ? projects.find(item => ACTIVE_STATUSES.has(item.status))
-          : null;
-        if (candidate) {
-          id = candidate.id;
-          project = candidate;
-          rememberActive(id);
-        }
-      }
-
+      // Do not automatically select an unrelated legacy project merely
+      // because it has an old payment_pending state. The user can open it
+      // explicitly via My Projects. Automatic selection caused stale QA/payment
+      // statuses to appear while composing a different website.
       if (!id || !project) return;
       if (!ACTIVE_STATUSES.has(project.status)) {
         // A completed/failed project is viewable in Dashboard but must
@@ -479,6 +469,13 @@
     clearPayButton();
     setBuildButtonBusy(false);
     window.updateCheckoutHint();
+    // Remove the previously selected project from this browser tab's URL.
+    // Do not clear any project or payment from the server.
+    const currentUrl = new URL(location.href);
+    for (const key of ['project', 'project_id', 'payment', 'session_id']) {
+      currentUrl.searchParams.delete(key);
+    }
+    history.replaceState({}, '', currentUrl.pathname + currentUrl.search + currentUrl.hash);
   }, true);
 
   button.addEventListener('click', event => {
