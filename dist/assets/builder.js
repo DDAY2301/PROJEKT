@@ -506,6 +506,9 @@ const stageIndex = {
 };
 
 function updatePipeline(current) {
+  // Legacy renderer is retained for compatibility but disabled whenever the
+  // V14 single-controller postbuild workflow is available.
+  if (window.PV_PAYMENT_FLOW_V2_LOADED) return;
   const active = stageIndex[current] ?? 0;
   document.querySelectorAll('.pipe').forEach((el, i) => {
     el.classList.remove('running','done');
@@ -571,6 +574,9 @@ function setResultLinks(repoName) {
 }
 
 async function startProjectFlow() {
+  // Payment-before-build is legacy and must never compete with the V12/V14
+  // audited build-first flow or create a duplicate project/Stripe session.
+  if (window.PV_PAYMENT_FLOW_V2_LOADED) return;
   if (!token) {
     status('IZDELAVA JE BLOKIRANA\nNajprej se registriraj ali prijavi.');
     return;
@@ -614,6 +620,7 @@ async function startProjectFlow() {
 $('generate')?.addEventListener('click', startProjectFlow);
 
 async function watch(id) {
+  if (window.PV_PAYMENT_FLOW_V2_LOADED) return;
   for (let i = 0; i < 240; i++) {
     await sleep(3500);
     try {
