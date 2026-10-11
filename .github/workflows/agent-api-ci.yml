@@ -1420,7 +1420,7 @@ jobs:
           grep -q 'MODEL_ROUTING = "adaptive"' start-product.ps1
           grep -q 'OLLAMA_EXPERT_KEEP_ALIVE = "10s"' start-product.ps1
           grep -q 'OLLAMA_FAST_KEEP_ALIVE = "10m"' start-product.ps1
-          grep -q 'OLLAMA_VISION_KEEP_ALIVE = "10m"' start-product.ps1
+          grep -Fq 'OLLAMA_VISION_KEEP_ALIVE = if ($lowMemoryProfile) { "15s" } else { "10m" }' start-product.ps1
           grep -q 'qwen2.5-coder:7b' start-product.ps1
           grep -q 'qwen2.5-coder:7b' api/start-local.ps1
           grep -q 'DESIGN_CRITIC_MODE = "adaptive"' start-product.ps1
