@@ -52,9 +52,12 @@ def verify_limits() -> None:
 
 def verify_default_worker_count() -> None:
     small = resource_guard.MemorySnapshot(total_mb=8000, available_mb=3500, source="test")
+    medium = resource_guard.MemorySnapshot(total_mb=16384, available_mb=10000, source="test")
     large = resource_guard.MemorySnapshot(total_mb=32000, available_mb=25000, source="test")
     with patch.dict(os.environ, {"PRODUCTION_WORKERS": ""}):
         with patch.object(resource_guard, "memory_snapshot", return_value=small):
+            assert production_queue.configured_worker_count() == 1
+        with patch.object(resource_guard, "memory_snapshot", return_value=medium):
             assert production_queue.configured_worker_count() == 1
         with patch.object(resource_guard, "memory_snapshot", return_value=large):
             assert production_queue.configured_worker_count() == 4
