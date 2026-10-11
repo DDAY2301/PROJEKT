@@ -2,6 +2,7 @@ param(
   [string]$Model = "qwen2.5-coder:7b",
   [int]$Port = 8000,
   [switch]$LocalOnly,
+  [switch]$EnablePublishing,
   [string]$PublicApiUrl = $env:PV_PUBLIC_API_URL
 )
 
@@ -58,8 +59,14 @@ if (Get-Command git -ErrorAction SilentlyContinue) {
 # Local-only mode is safe for diagnostics. It does not require a GitHub PAT,
 # public DNS or a random trycloudflare.com URL; no customer repos are published.
 if ($LocalOnly) {
-  Write-Host "LOCAL MODE: no public tunnel or GitHub publishing" -ForegroundColor Cyan
-  & (Join-Path $repoRoot 'api\start-local.ps1') -SkipGitHub -Model $Model -Port $Port
+  $localScript = Join-Path $repoRoot 'api\start-local.ps1'
+  if ($EnablePublishing) {
+    Write-Host "LOCAL + PUBLISHING: browser stays on loopback; GitHub PAT required for repository delivery." -ForegroundColor Cyan
+    & $localScript -Model $Model -Port $Port
+  } else {
+    Write-Host "LOCAL PREVIEW: no public tunnel or GitHub publishing" -ForegroundColor Cyan
+    & $localScript -SkipGitHub -Model $Model -Port $Port
+  }
   return
 }
 
