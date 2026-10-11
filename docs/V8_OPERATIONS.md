@@ -176,3 +176,14 @@ GitHub PAT and Cloudflare for the full remote product; local-only
 testing can use `api/start-local.ps1 -SkipGitHub`. Run the real 10-site
 load test with a **separate DB_PATH** only after health and resource
 admission are verified. Do not recreate 21 test GitHub repositories.
+
+### Expert-model safety on a 16 GB host
+
+The launchers discover optional KAT/Qwen expert models. When RAM is
+<=20 GB they now **do not auto-route** to installed expert models, to
+avoid accidentally loading a very large model alongside Chrome/Chromium.
+The standard `qwen2.5-coder:7b` remains the default. An operator can opt
+back in by setting `$env:PV_ENABLE_LARGE_EXPERT_MODELS='1'` before
+startup, only after confirming enough headroom in real tests.
+This applies to the API process environment on restart and does not
+uninstall or delete any Ollama model.
