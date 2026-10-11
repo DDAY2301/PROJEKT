@@ -11,6 +11,7 @@ The webhook is the source of truth; success-page verification is a safe fallback
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 from typing import Any
 
@@ -132,6 +133,26 @@ def _upsert_payment(
         )
 
 
+def _latest_quality_approved(audit_json: str | None) -> bool:
+    """Recheck the actual backend release gate before collecting/releasing payment."""
+    if not audit_json:
+        return False
+    try:
+        audit = json.loads(audit_json)
+    except (ValueError, TypeError):
+        return False
+    if not isinstance(audit, dict):
+        return False
+    # The audit can contain a historical quality summary. Re-evaluate the
+    # current release gate instead of trusting payment/status flags alone.
+    import api.enhanced_runtime as runtime
+    issues = list(audit.get("issues") or [])
+    visual = audit.get("visual_qa") or {}
+    if not isinstance(visual, dict) or not isinstance(issues, list):
+        return False
+    return runtime._quality_gate_passed(issues, visual)
+
+
 async def _mark_session_paid(session: Any) -> None:
     metadata = dict(getattr(session, "metadata", None) or session.get("metadata") or {})
     project_id = str(metadata.get("project_id") or "")
@@ -162,8 +183,21 @@ async def _mark_session_paid(session: Any) -> None:
     # Payment releases the ALREADY generated project. enhanced_runtime detects
     # repository_ready and publishes the existing repo without rebuilding it.
     with core.db() as con:
-        row = con.execute("SELECT status FROM projects WHERE id=?", (project_id,)).fetchone()
+        row = con.execute(
+            "SELECT status,last_audit_json FROM projects WHERE id=? AND user_id=?",
+            (project_id, user_id),
+        ).fetchone()
     if row and row["status"] in {"ready_for_payment", "payment_pending", "awaiting_payment", "failed"}:
+        if not _latest_quality_approved(row["last_audit_json"]):
+            # Stripe has ALREADY confirmed payment. Preserve the paid record;
+            # never publish a failed QA build or charge the customer again.
+            # The project must be repaired/reviewed or refunded by an operator.
+            with core.db() as con:
+                con.execute(
+                    "UPDATE projects SET status='needs_review',updated_at=? WHERE id=?",
+                    (core.now_iso(), project_id),
+                )
+            return
         with core.db() as con:
             con.execute(
                 "UPDATE projects SET status='queued',updated_at=? WHERE id=?",
@@ -223,7 +257,7 @@ async def create_checkout(data: CheckoutIn, user_id: str = Depends(core.current_
     ensure_billing_schema()
     with core.db() as con:
         project = con.execute(
-            "SELECT id,user_id,package,name,status,repo_name FROM projects WHERE id=? AND user_id=?",
+            "SELECT id,user_id,package,name,status,repo_name,last_audit_json FROM projects WHERE id=? AND user_id=?",
             (data.project_id, user_id),
         ).fetchone()
     if not project:
@@ -236,6 +270,11 @@ async def create_checkout(data: CheckoutIn, user_id: str = Depends(core.current_
         return {"paid": True, "project_id": project["id"]}
     if project["status"] not in {"ready_for_payment", "payment_pending"} or not project["repo_name"]:
         raise HTTPException(409, "Website is not finished yet. Payment becomes available after build and QA.")
+    if not _latest_quality_approved(project["last_audit_json"]):
+        raise HTTPException(
+            409,
+            "Website failed its latest release QA. Payment is blocked until visual QA and critical issues are resolved.",
+        )
 
     create_args: dict[str, Any] = {
         "mode": "payment",
