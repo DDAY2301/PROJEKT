@@ -269,3 +269,88 @@ Remote Cloudflare DNS/named tunnel provisioning, Chrome Safe Browsing
 reputation, public authentication and real end-to-end delivery all
 require operator-side configuration/testing. GitHub CI cannot confirm
 the user's Windows port is listening.
+
+
+## V11 — login recovery, safe GitHub delivery and design V4
+
+### Why health was green but login/publishing failed
+
+A successful `/health` proves only the process responds. When started
+with `start-product.ps1 -LocalOnly`, the API intentionally reports
+`github_configured: false`; no GitHub repository can be created or
+published in that mode. A cached browser token can also be invalid
+after the operator switches SQLite `DB_PATH` or signs in to another
+API instance. A registered account in one SQLite database does not
+exist in a newly created isolated benchmark database.
+
+### Supported local operating modes
+
+```powershell
+cd 'C:\Users\dangr\PROJEKT'
+git status --short
+git pull --ff-only origin main
+.\.venv\Scripts\python.exe tools\v11_auth_publish_design_smoke.py
+
+# No PAT, suitable for isolated smoke / model and design tests:
+.\start-product.ps1 -LocalOnly
+
+# Full LOCAL factory with authorized GitHub repository delivery:
+# First stop the former API gracefully with Ctrl+C.
+.\start-product.ps1 -LocalOnly -EnablePublishing
+```
+
+The second mode **keeps the UI strictly on**
+`http://127.0.0.1:8000/builder.html`. It calls the existing
+`api/start-local.ps1` without `-SkipGitHub`, requests a current PAT
+in a hidden terminal prompt when required, and verifies authentication
+with GitHub. It does **not** create a Cloudflare public tunnel, place
+tokens in URLs or alter Windows firewall settings. Avoid exposing
+the local backend to the internet.
+
+The PAT requires appropriate Contents write, Pages access and, for
+new repository creation, Administration write to the allowed account
+repositories. Token acceptance by `/user` alone does **not** prove
+creation or Pages publication permissions. Use the UI's new
+**Preveri prijavo in objavo** diagnostic control while signed in to
+check preflight; an authorized end-to-end disposable test repository is
+still required to verify actual publication. Do not recreate dozens
+of GitHub repositories during initial smoke tests.
+
+### Login and database guidance
+
+- The API now exposes authenticated `GET /auth/session`, validating
+  both the JWT and the user's presence in the active SQLite DB.
+- The Builder saves a token's API origin, validates sessions after
+  refresh and clears stale sessions when they belong to a different
+  backend or no longer correspond to a user. This prevents false
+  “prijavljen” status.
+- Use the same persistent `DB_PATH` when returning from testing to
+  regular operation; the default is `api/data/agent.db`.
+- If the chosen database contains no account for your email, register
+  **once** in that local Builder; do not delete the previous DB to
+  recover a password or account.
+- No API token, password, personal email, or secret should be sent in
+  a chat, GitHub issue or diagnostic report.
+
+### Design agent V4
+
+The existing `api/design_prompt_v3.py` now uses the internal
+`art-direction-v4` contract, without creating a second generator.
+A deterministic, brief-scoped motif encourages different content
+layouts across client websites without adding inference calls.
+The contract feeds the planner, design critic, visual reviewer and
+actual CSS/HTML model calls, preserving customer colours, language,
+authentic available images, accessibility and working CTA/navigation.
+Originality, editorial QA and visual release gates remain unchanged.
+
+### Acceptance criteria
+
+- `/health` reports `ok=True`, `product=project_visibility`,
+  `model_ready=True`. For publishing mode, `github_configured=True`.
+- `GET /auth/session` succeeds with a valid browser login and returns
+  HTTP 401 for an old token from a fresh DB.
+- The UI preflight returns `READY` only if mandatory checks pass;
+  it may report concrete GitHub/worker/disk blockers.
+- An actual publication is marked verified **only** after the
+  intended test repository and public URL are inspected.
+- Test job and site throughput are measured separately from GitHub CI.

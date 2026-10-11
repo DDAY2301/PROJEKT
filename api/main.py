@@ -393,6 +393,20 @@ async def health():
     }
 
 
+@app.get("/auth/session")
+async def active_session(user_id: str = Depends(current_user)):
+    """Validate that a cached session still belongs to this database.
+
+    JWT validity alone cannot establish that the account exists after an
+    isolated benchmark DB switch or restored database.
+    """
+    with db() as con:
+        row = con.execute("SELECT 1 FROM users WHERE id=?", (user_id,)).fetchone()
+    if not row:
+        raise HTTPException(401, "Session account not found on this server")
+    return {"authenticated": True}
+
+
 @app.post("/auth/register")
 async def register(data: RegisterIn):
     uid = str(uuid.uuid4())

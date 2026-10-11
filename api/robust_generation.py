@@ -778,6 +778,7 @@ async def _model_css(config: dict[str, Any], spec: dict[str, Any]) -> str:
 Create the complete CSS file for a premium responsive multi-page website.
 PROJECT={json.dumps(config, ensure_ascii=False)}
 DESIGN={json.dumps(spec, ensure_ascii=False)}
+ART_DIRECTION={design_prompt_v3.render_direction(config)}
 Use the customer colors as CSS custom properties. Aim for an editorial, distinctive studio-quality result with excellent mobile behavior, visible focus states and subtle reduced-motion-safe interactions.
 Return CSS only. No markdown and no explanation.
 """
@@ -798,6 +799,7 @@ Build ONE complete standalone HTML page for this website. Shared CSS is at asset
 PROJECT={json.dumps(config, ensure_ascii=False)}
 SITE_NAME={json.dumps(spec.get('site_name'), ensure_ascii=False)}
 PAGE={json.dumps(page, ensure_ascii=False)}
+ART_DIRECTION={design_prompt_v3.render_direction(config, page)}
 NAVIGATION={json.dumps(nav, ensure_ascii=False)}
 CSS_DIRECTION={json.dumps(css_hint[:3500], ensure_ascii=False)}
 Rules:

@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-DESIGN_PROMPT_VERSION = "art-direction-v3"
+DESIGN_PROMPT_VERSION = "art-direction-v4"
 
 # Specific composition, typography and image direction. The deterministic
 # Design Engine remains responsible for actual CSS and originality controls.
@@ -44,12 +44,42 @@ def select_direction(config: dict[str, Any]) -> tuple[str, str]:
 
 
 def design_direction(config: dict[str, Any]) -> str:
+    """Brief-specific art director shared by planner, critic, CSS and page writer."""
+    import hashlib
+
     industry, direction = select_direction(config)
+    # A stable motif per project discourages cross-project layout repetition
+    # without extra model calls or unpredictable random decisions.
+    identity = " | ".join(str(config.get(key) or "") for key in
+                          ("organization", "name", "programme"))
+    motifs = (
+        "editorial split hero / staggered image-content rhythm",
+        "image-led hero / spacious numbered narrative",
+        "typography-led hero / contrasting full-bleed feature",
+        "asymmetric grid / calm proof-and-process sections",
+        "story-led hero / restrained mosaic of relevant imagery",
+    )
+    digest = hashlib.sha256(identity.encode("utf-8")).digest()[0]
+    motif = motifs[digest % len(motifs)]
     return (
         f"{DESIGN_PROMPT_VERSION}/{industry}: {direction} "
-        "Respect explicit brand colours, fonts, language and image instructions. "
-        "Give each page a distinct purpose and section rhythm, with readable mobile "
-        "type, strong contrast, functional CTAs and meaningful photo placement. "
-        "No generic SaaS cards, fake reviews/metrics, repeated hero slogans, "
-        "unlicensed imagery or empty decorations. Do not contradict customer facts."
+        f"Compositional motif: {motif}. "
+        "Honour supplied colours, language, brand and actual photos. "
+        "Build a distinct hierarchy for each page; mobile-first, accessible contrast, "
+        "visible keyboard focus, meaningful CTAs and appropriate image crops. "
+        "No generic SaaS cards, fake reviews/claims, broken image URLs, repeated copy "
+        "or decorative noise. Every claim must follow the brief."
+    )
+
+
+def render_direction(config: dict[str, Any], page: dict[str, Any] | None = None) -> str:
+    """Extra low-token constraints for actual CSS/HTML generation, not just planning."""
+    route = str((page or {}).get("slug") or "index")[:50]
+    purpose = str((page or {}).get("purpose") or "")[:140]
+    return (
+        f"{design_direction(config)} Page={route}; purpose={purpose}. "
+        "Match section spacing and type scale to content density, not one template. "
+        "Use existing local assets only; no phantom images, buttons or forms. "
+        "Keep navigation and CTA destinations real, image alt text specific, "
+        "and visible controls operable. Respect reduced motion and small screens."
     )
