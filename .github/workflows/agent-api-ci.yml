@@ -102,13 +102,34 @@ jobs:
           python - <<'PY'
           from fastapi import HTTPException
           from PIL import Image
-          from api.site_import import _normalise_member, _write_stage, _read_stage, _stage_text_files, _stage_dir, _bundle_sha256
+          from api.site_import import _normalise_member, _ensure_unique_member_path, _write_stage, _read_stage, _stage_text_files, _stage_dir, _bundle_sha256
           from api.brief_import import _labelled_fields, _normalise
           from api.binary_publish import _expected_bundle_manifest, _tree_matches_bundle
           from api.repo_map import build_repo_map
           from api.media import _focal_crop
 
           assert _normalise_member('site/assets/app.js') == 'site/assets/app.js'
+          assert _normalise_member('site\\assets\\app.js') == 'site/assets/app.js'
+          for unsafe in (
+              '/index.html', '//server/share/index.html', 'C:/index.html',
+              'assets/../index.html', 'assets//app.js', 'assets/CON.txt',
+              'assets/NUL.css', 'assets/bad:name.js', 'assets/file .js',
+              'assets/control\x00.js',
+          ):
+              try:
+                  _normalise_member(unsafe)
+                  raise AssertionError(f'Unsafe ZIP member accepted: {unsafe!r}')
+              except HTTPException as exc:
+                  assert exc.status_code == 422, unsafe
+          seen = set()
+          _ensure_unique_member_path('assets/app.js', seen)
+          _ensure_unique_member_path('assets/other.js', seen)
+          for collision in ('ASSETS/APP.JS', 'assets/app.js/icon.png', 'assets'):
+              try:
+                  _ensure_unique_member_path(collision, seen)
+                  raise AssertionError(f'Conflicting ZIP member accepted: {collision!r}')
+              except HTTPException as exc:
+                  assert exc.status_code == 422, collision
 
           staging_id = 'ci-zip-stage'
           staged_files = {
