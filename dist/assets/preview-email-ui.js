@@ -123,7 +123,12 @@
       localStorage.getItem('pv_active_project_v2');
     if (!id) return;
     try {
-      syncActions(await request(`/projects/${encodeURIComponent(id)}`));
+      // Another project may have started while this bootstrap request was
+      // in flight. Never repaint its actions with a stale saved project.
+      if (activeProjectId && activeProjectId !== id) return;
+      const project = await request(`/projects/${encodeURIComponent(id)}`);
+      if (activeProjectId && activeProjectId !== id) return;
+      syncActions(project);
     } catch { /* Missing or inaccessible project: leave controls hidden. */ }
   }, 1800);
 })();
