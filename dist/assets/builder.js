@@ -11,20 +11,39 @@ function cleanApi(value) {
   return (value || '').trim().replace(/\/$/, '');
 }
 
+function isDisposableTunnel(value) {
+  try {
+    const url = new URL(value);
+    return /(^|\.)trycloudflare\.com$/i.test(url.hostname);
+  } catch { return false; }
+}
+
+function isAllowedApi(value) {
+  try {
+    const url = new URL(value);
+    const local = ['127.0.0.1', 'localhost'].includes(url.hostname) &&
+      url.protocol === 'http:';
+    return (local || url.protocol === 'https:') &&
+      !isDisposableTunnel(value) && !url.username && !url.password &&
+      url.pathname === '/' && !url.search && !url.hash;
+  } catch { return false; }
+}
+
+const suggestedApi = cleanApi(params.get('api'));
 function initialApi() {
-  const fromUrl = cleanApi(params.get('api'));
-  if (fromUrl) {
-    localStorage.setItem('pv_api_url', fromUrl);
-    return fromUrl;
+  if (['localhost', '127.0.0.1'].includes(location.hostname)) {
+    return location.origin;
   }
+  // Only a deploy-time configured API may be trusted from the query string.
+  // URLs supplied by arbitrary links cannot silently receive account passwords.
   const configured = cleanApi(window.PV_RUNTIME?.apiBase);
-  if (configured && /^https?:\/\//i.test(configured)) {
+  if (configured && isAllowedApi(configured)) {
     localStorage.setItem('pv_api_url', configured);
     return configured;
   }
   const saved = cleanApi(localStorage.getItem('pv_api_url'));
-  if (saved) return saved;
-  if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') return location.origin;
+  if (saved && isAllowedApi(saved)) return saved; // Previously confirmed by user.
+  if (saved && !isAllowedApi(saved)) localStorage.removeItem('pv_api_url');
   return '';
 }
 
@@ -123,32 +142,43 @@ async function loadBillingConfig() {
 }
 
 async function checkHealth(showStatus = true) {
-  if ($('apiUrl')) $('apiUrl').value = API;
+  if ($('apiUrl')) $('apiUrl').value = API || (isAllowedApi(suggestedApi) ? suggestedApi : '');
   if (!API) {
     setSignal('apiState', 'Ni povezano', 'bad');
     setSignal('modelState', '—');
     setSignal('githubState', '—');
-    if (showStatus) status('Builder je pripravljen. V nastavitvah povezave vnesi naslov storitve.');
+    if (showStatus) status(isDisposableTunnel(suggestedApi) || isDisposableTunnel(location.origin)
+      ? 'ZAČASNI CLOUDFLARE NASLOV NI ZAUPANJA VREDEN. Ne vpisuj gesla. Odpri lokalni builder na http://127.0.0.1:8000/builder.html ali nastavi stalen HTTPS API.'
+      : 'API ni preverjen. Odpri Nastavitve povezave in ročno potrdi svoj stabilni API URL.');
     return false;
   }
   setSignal('apiState', 'Preverjam');
   setSignal('modelState', 'Preverjam');
   let lastError = null;
-  for (let attempt = 1; attempt <= 5; attempt++) {
+  const maxAttempts = showStatus ? 3 : 1;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       const health = await request('/health');
+      if (health.product !== 'project_visibility' || !health.ok) {
+        throw new Error('API ne potrjuje Project Visibility. Zaženi posodobljeni lokalni API in preveri naslov.');
+      }
       setSignal('apiState', 'Online', 'ok');
-      setSignal('modelState', 'Pripravljen', 'ok');
-      setSignal('githubState', health.github_configured ? 'Povezan' : 'Ni povezano', health.github_configured ? 'ok' : 'warn');
+      const modelReady = health.model_ready === true;
+      setSignal('modelState', modelReady ? 'Pripravljen' : 'Ollama ni pripravljena', modelReady ? 'ok' : 'warn');
+      setSignal('githubState', health.github_configured ? 'Konfigurirano' : 'Ni konfigurirano', health.github_configured ? 'ok' : 'warn');
       if ($('apiHint')) $('apiHint').textContent = API;
-      await loadBillingConfig();
-      if (showStatus) status(health.github_configured
-        ? 'SISTEM ONLINE\nPovezava je aktivna. Izdelava, slike, plačilo in GitHub objava so pripravljeni.'
-        : 'SISTEM ONLINE\nIzdelava je pripravljena, GitHub objava pa še ni povezana.');
+      if (showStatus) {
+        await loadBillingConfig();
+        status(modelReady
+          ? (health.github_configured
+            ? 'API in model sta pripravljena. GitHub token je nastavljen; objavo preveri posebej.'
+            : 'API in model sta pripravljena, GitHub objavljanje pa ni nastavljeno.')
+          : 'API deluje, vendar lokalni Ollama model ni pripravljen. Preveri Ollama in nameščeni model.');
+      }
       return true;
     } catch (e) {
       lastError = e;
-      if (attempt < 5) await sleep(1800);
+      if (attempt < maxAttempts) await sleep(1500);
     }
   }
   setSignal('apiState', 'Nedosegljivo', 'bad');
@@ -160,8 +190,8 @@ async function checkHealth(showStatus = true) {
 
 $('connectApi')?.addEventListener('click', async () => {
   const next = cleanApi($('apiUrl').value);
-  if (!next || !/^https?:\/\//i.test(next)) {
-    status('Vnesi veljaven naslov povezave.');
+  if (!isAllowedApi(next)) {
+    status('Uporabi lokalni naslov 127.0.0.1 ali stalen HTTPS API. Začasnih trycloudflare.com naslovov ne uporabljaj.');
     return;
   }
   if (API && API !== next) {
@@ -617,3 +647,8 @@ updateAuthUi();
 syncPreview();
 checkHealth(true).then(() => handlePaymentReturn());
 if (token) loadRecentProjects();
+// State from a previous startup must never remain green when the API stops.
+// A single read-only health probe while the page is visible is inexpensive.
+setInterval(() => {
+  if (document.visibilityState === 'visible' && API) checkHealth(false);
+}, 30000);
