@@ -121,6 +121,13 @@ $expertModels = @(
     } |
     Select-Object -Unique
 )
+# Prevent heavy expert routing on memory-constrained systems.
+if ($stableMemoryProfile -and $env:PV_ENABLE_LARGE_EXPERT_MODELS -notin @('1','true','yes','on')) {
+  if ($expertModels.Count -gt 0) {
+    Write-Warning 'Large expert routing disabled on this host. Set PV_ENABLE_LARGE_EXPERT_MODELS=1 to opt in.'
+  }
+  $expertModels = @()
+}
 $env:OLLAMA_EXPERT_MODELS = ($expertModels -join ',')
 if ($expertModels.Count -gt 0) {
   Write-Host "Expert models: $env:OLLAMA_EXPERT_MODELS" -ForegroundColor Green
