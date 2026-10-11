@@ -13,6 +13,8 @@ const editor = read('dist/assets/workspace-upgrades.js');
 const base = read('dist/assets/builder.js');
 const payment = read('dist/assets/payment-flow-v2.js');
 const readiness = read('dist/assets/readiness-v3.js');
+const agent = read('dist/assets/agent-console-v1.js');
+const preview = read('dist/assets/preview-email-ui.js');
 
 assert.equal((html.match(/<script[^>]+src="assets\/payment-flow-v2\.js/g) || []).length, 1,
   'Builder must reference exactly one payment flow');
@@ -30,6 +32,12 @@ assert.ok(payment.includes('if (myVersion !== watcherVersion || activeProjectId 
 assert.ok(readiness.includes('Pripravljenost briefa'));
 assert.ok(readiness.includes('Ne pomeni, da je bila stran izdelana ali objavljena.'));
 assert.ok(html.includes('Potek izdelave izbranega projekta'));
+assert.ok(agent.includes('lastLoadedSignature'));
+assert.ok(agent.includes('Date.now() - lastLoadedAt > 120000'));
+assert.ok(!agent.includes('setTimeout(load,80)'), 'Health polling must not trigger preflight repeatedly');
+assert.ok(preview.includes('if (activeProjectId && activeProjectId !== id) return;'));
+assert.ok(html.includes('assets/agent-console-v1.js?v=20261011-v14'));
+assert.ok(html.includes('assets/payment-flow-v2.js?v=20261011-v14'));
 
 const calls = [];
 const mk = id => ({
