@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sqlite3
 import sys
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import patch
 
@@ -20,41 +22,60 @@ from api import main as core
 from api import design_prompt_v3 as design
 
 
+@contextmanager
+def _test_db():
+    """Make transaction semantics explicit AND close handles before temp cleanup.
+
+    sqlite3.Connection.__exit__ commits/rolls back but does not close() the
+    connection. Windows refuses to unlink an open SQLite file (WinError 32).
+    This wrapper is for the test only: no production schema or DB is modified.
+    """
+    con = sqlite3.connect(core.DB_PATH)
+    con.row_factory = sqlite3.Row
+    try:
+        with con:
+            yield con
+    finally:
+        con.close()
+
+
 async def check_auth() -> None:
     # Never touch the operator's app-secret file, users or production SQLite DB.
-    with tempfile.TemporaryDirectory(prefix="pv-v11-auth-") as temp:
-        isolated = Path(temp) / "temporary_auth.db"
-        with patch.object(core, "DB_PATH", isolated):
-            core.init_db()
-            created = await core.register(core.RegisterIn(
-                email="test-login@example.com", password="Test-Only-Password-123"
-            ))
-            assert isinstance(created["token"], str)
-            claims = jwt.decode(created["token"], core.APP_SECRET, algorithms=["HS256"])
-            user_id = core.current_user(authorization="Bearer " + created["token"])
-            assert claims["sub"] == user_id
-            assert (await core.active_session(user_id=user_id)) == {"authenticated": True}
-            signed_in = await core.login(core.LoginIn(
-                email="TEST-LOGIN@example.com", password="Test-Only-Password-123"
-            ))
-            assert isinstance(signed_in["token"], str)
-            try:
-                await core.login(core.LoginIn(
-                    email="test-login@example.com", password="Incorrect-Password-123"
-                ))
-                raise AssertionError("Wrong password was accepted")
-            except HTTPException as exc:
-                assert exc.status_code == 401
-
-            # Recreate the isolated DB from scratch: old JWT must not
-            # automatically count as a logged-in account on a new database.
-            with patch.object(core, "DB_PATH", Path(temp) / "fresh.db"):
+    # Patch the DB accessor so every test-only connection is closed promptly.
+    with patch.object(core, "db", _test_db):
+        with tempfile.TemporaryDirectory(prefix="pv-v11-auth-") as temp:
+            isolated = Path(temp) / "temporary_auth.db"
+            with patch.object(core, "DB_PATH", isolated):
                 core.init_db()
+                created = await core.register(core.RegisterIn(
+                    email="test-login@example.com", password="Test-Only-Password-123"
+                ))
+                assert isinstance(created["token"], str)
+                claims = jwt.decode(created["token"], core.APP_SECRET, algorithms=["HS256"])
+                user_id = core.current_user(authorization="Bearer " + created["token"])
+                assert claims["sub"] == user_id
+                assert (await core.active_session(user_id=user_id)) == {"authenticated": True}
+                signed_in = await core.login(core.LoginIn(
+                    email="TEST-LOGIN@example.com", password="Test-Only-Password-123"
+                ))
+                assert isinstance(signed_in["token"], str)
                 try:
-                    await core.active_session(user_id=user_id)
-                    raise AssertionError("Token from previous DB was trusted")
+                    await core.login(core.LoginIn(
+                        email="test-login@example.com", password="Incorrect-Password-123"
+                    ))
+                    raise AssertionError("Wrong password was accepted")
                 except HTTPException as exc:
                     assert exc.status_code == 401
+
+                # Recreate the isolated DB from scratch: old JWT must not
+                # automatically count as a logged-in account on a new database.
+                with patch.object(core, "DB_PATH", Path(temp) / "fresh.db"):
+                    core.init_db()
+                    try:
+                        await core.active_session(user_id=user_id)
+                        raise AssertionError("Token from previous DB was trusted")
+                    except HTTPException as exc:
+                        assert exc.status_code == 401
 
 
 def check_launcher_and_frontend() -> None:

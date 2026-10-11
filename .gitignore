@@ -7,6 +7,9 @@ node_modules/
 .venv/
 __pycache__/
 *.pyc
+# All local runtime data: databases, WAL/SHM, media, secrets and caches.
+# No file under api/data/ is tracked in the repository.
+api/data/
 api/data/*.db
 api/data/*.db-*
 api/data/*.log
