@@ -258,8 +258,15 @@
 
     for (let i = 0; i < 600; i++) {
       if (myVersion !== watcherVersion) return;
+      // Polling is only for the UI; workers and payments run independently.
+      // Hidden tabs should not generate constant SQLite/API traffic.
+      if (document.visibilityState === 'hidden') {
+        await sleep(9000);
+        continue;
+      }
       try {
         const project = await request(`/projects/${id}`);
+        window.pvSyncProjectActions?.(project);
         const {lines, issues} = projectStatusText(project, id);
         const qaApproved = clientQualityPassed(project.last_audit || {});
         updatePostbuildPipeline(project.status, qaApproved);
@@ -339,7 +346,8 @@
         setBuildButtonBusy(false);
         return;
       }
-      await sleep(3000);
+      const pollInterval = observedProjectStatus === 'payment_pending' ? 12000 : 5500;
+      await sleep(pollInterval);
     }
 
     status('IZDELAVA ŠE TEČE\nProjekt je shranjen, vendar je spremljanje v brskalniku doseglo časovno omejitev. Osveži stran; spremljanje se bo samodejno nadaljevalo.');
@@ -430,6 +438,7 @@
       if (!id || !project || !ACTIVE_STATUSES.has(project.status)) return;
 
       status(`OBNAVLJAM SPREMLJANJE\nProjekt: ${id}\nTrenutno stanje: ${localLabels[project.status] || project.status}`);
+      window.pvSyncProjectActions?.(project);
       updatePostbuildPipeline(project.status);
       watchPostbuild(id);
     } catch (e) {
