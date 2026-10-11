@@ -139,8 +139,18 @@ try {
   $gh = Invoke-RestMethod -Uri "https://api.github.com/user" -Headers $headers -Method Get -TimeoutSec 15
   Write-Host "GitHub: CONNECTED as $($gh.login)" -ForegroundColor Green
 } catch {
+  $statusCode = 0
+  if ($_.Exception.Response) {
+    $statusCode = [int]$_.Exception.Response.StatusCode
+  }
   $env:GITHUB_TOKEN = $null
-  throw "GitHub token validation failed. Create a new token with repository write/administration access."
+  if ($statusCode -eq 401) {
+    throw "GitHub HTTP 401: token is expired, revoked, malformed or incorrect. Create a fresh fine-grained PAT."
+  }
+  if ($statusCode -eq 403) {
+    throw "GitHub HTTP 403: token lacks permission, is restricted or was rate-limited. Review GitHub token access."
+  }
+  throw "GitHub token validation failed (HTTP $statusCode). Check GitHub availability and network access."
 }
 
 Write-Host "[4/6] Starting/checking website service..."
