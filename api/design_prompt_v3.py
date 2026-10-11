@@ -61,14 +61,17 @@ def design_direction(config: dict[str, Any]) -> str:
     )
     digest = hashlib.sha256(identity.encode("utf-8")).digest()[0]
     motif = motifs[digest % len(motifs)]
+    template_id = str(config.get("_design_template_id") or "").strip().upper()
+    template_name = str(config.get("_design_template_name") or "").strip()[:60]
+    composition = str(config.get("_design_composition") or "").strip()[:30]
+    selection = f"Template {template_id} {template_name}; composition={composition}. " if template_id else ""
     return (
         f"{DESIGN_PROMPT_VERSION}/{industry}: {direction} "
-        f"Compositional motif: {motif}. "
-        "Honour supplied colours, language, brand and actual photos. "
-        "Build a distinct hierarchy for each page; mobile-first, accessible contrast, "
-        "visible keyboard focus, meaningful CTAs and appropriate image crops. "
-        "No generic SaaS cards, fake reviews/claims, broken image URLs, repeated copy "
-        "or decorative noise. Every claim must follow the brief."
+        f"{selection}Compositional motif: {motif}. "
+        "Use only THIS brief's brand, images, names and contacts; never copy clients. "
+        "Mobile-first with accessible contrast, keyboard focus, real CTAs and photo crops. "
+        "No generic SaaS cards, fake reviews/claims, phantom assets, repeated copy "
+        "or invented metrics. Preserve stated colours, language and verified facts."
     )
 
 
@@ -78,8 +81,9 @@ def render_direction(config: dict[str, Any], page: dict[str, Any] | None = None)
     purpose = str((page or {}).get("purpose") or "")[:140]
     return (
         f"{design_direction(config)} Page={route}; purpose={purpose}. "
-        "Match section spacing and type scale to content density, not one template. "
-        "Use existing local assets only; no phantom images, buttons or forms. "
-        "Keep navigation and CTA destinations real, image alt text specific, "
-        "and visible controls operable. Respect reduced motion and small screens."
+        "Vary actual hero geometry, navigation, editorial section rhythm, image crops "
+        "and type pairing to fit THIS client; do not merely recolour a common layout. "
+        "Keep navigation/CTA destinations and forms real; use available licensed "
+        "assets only. Check 360/390/430/768/1024/1440/1920px, keyboard focus "
+        "and reduced-motion. No unverified claims, fake reviews or mock submissions."
     )
