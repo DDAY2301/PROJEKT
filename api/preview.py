@@ -49,13 +49,31 @@ def _preview_token(project_id: str, user_id: str, repo_name: str, ref_sha: str) 
 async def _repo_head_sha(repo_name: str) -> str:
     headers = dict(core.github_headers())
     url = f"https://api.github.com/repos/{core.GITHUB_OWNER}/{repo_name}/git/ref/heads/main"
-    async with httpx.AsyncClient(timeout=30, headers=headers) as client:
-        response = await client.get(url)
+    try:
+        async with httpx.AsyncClient(timeout=12, headers=headers) as client:
+            response = await client.get(url)
+    except httpx.RequestError as exc:
+        raise HTTPException(503, "GitHub is unreachable while resolving the private preview. Try again shortly.") from exc
+    if response.status_code == 404:
+        # GitHub deliberately returns 404 for private repos with insufficient
+        # scope as well as deleted repos. Do not claim which without evidence.
+        raise HTTPException(
+            409,
+            "The generated GitHub repository or main branch is missing or inaccessible. "
+            "Verify that the repository still exists and the current PAT can read it.",
+        )
+    if response.status_code in {401, 403}:
+        raise HTTPException(503, "GitHub token has no read access to the private preview repository.")
+    if response.status_code == 429 or response.status_code >= 500:
+        raise HTTPException(503, "GitHub temporarily cannot supply the private preview.")
     if response.status_code >= 400:
-        raise HTTPException(502, "Could not resolve preview repository version")
-    sha = str((response.json().get("object") or {}).get("sha") or "")
+        raise HTTPException(502, "GitHub rejected private preview version lookup.")
+    try:
+        sha = str((response.json().get("object") or {}).get("sha") or "")
+    except (ValueError, AttributeError, TypeError):
+        sha = ""
     if not sha:
-        raise HTTPException(502, "Preview repository has no main-branch version")
+        raise HTTPException(409, "Preview repository has no main-branch version.")
     return sha
 
 
@@ -126,12 +144,19 @@ async def preview_asset(token: str, asset_path: str):
     headers = dict(core.github_headers())
     headers["Accept"] = "application/vnd.github.raw+json"
     url = f"https://api.github.com/repos/{core.GITHUB_OWNER}/{repo_name}/contents/{path}"
-    async with httpx.AsyncClient(timeout=45, headers=headers, follow_redirects=True) as client:
-        response = await client.get(url, params={"ref": ref_sha})
+    try:
+        async with httpx.AsyncClient(timeout=20, headers=headers, follow_redirects=True) as client:
+            response = await client.get(url, params={"ref": ref_sha})
+    except httpx.RequestError as exc:
+        raise HTTPException(503, "GitHub is unreachable while loading preview assets.") from exc
     if response.status_code == 404:
-        raise HTTPException(404, "Preview file not found")
+        raise HTTPException(404, "Preview file missing or repository access was revoked.")
+    if response.status_code in {401, 403}:
+        raise HTTPException(503, "GitHub token lacks access to private preview files.")
+    if response.status_code == 429 or response.status_code >= 500:
+        raise HTTPException(503, "GitHub is temporarily unavailable for preview files.")
     if response.status_code >= 400:
-        raise HTTPException(502, "Could not load preview file from GitHub")
+        raise HTTPException(502, "GitHub rejected preview asset request.")
 
     content = response.content
     media_type = mimetypes.guess_type(path)[0] or "application/octet-stream"
@@ -155,6 +180,11 @@ async def preview_asset(token: str, asset_path: str):
         headers={
             "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
             "X-Robots-Tag": "noindex, nofollow, noarchive",
-            "Content-Security-Policy": "frame-ancestors *",
+            "Referrer-Policy": "no-referrer",
+            "X-Content-Type-Options": "nosniff",
+            # Generated HTML is untrusted customer-authored output. Sandbox even
+            # direct-tab previews so they cannot access the local Builder origin,
+            # user JWT in localStorage or privileged API routes.
+            "Content-Security-Policy": "sandbox allow-scripts allow-forms; frame-ancestors 'self'",
         },
     )
