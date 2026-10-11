@@ -118,6 +118,35 @@ rollback point and actual customer handoff.
 - On machines without direct access to the user's PC, distinguish committed
   code and GitHub CI from measured local inference and actual live deployment.
 
+## V15 — Ultimate Website Creator / Studio-24
+
+The customer-provided **ULTIMATE WEBSITE CREATOR AGENT V1** is now adapted as
+the production studio contract in `docs/ULTIMATE_WEBSITE_CREATOR_V15.md`.
+Preserve its sequence: BRIEF → BRAND → TEMPLATE ROTATION → CONTENT/MEDIA →
+CODE → QA/AUTO-FIX → PREVIEW → authorized DEPLOY → VERIFIED LIVE.
+
+The existing `api/design_engine_v2.py` has 24 numbered, distinct CSS
+directions `T01..T24` (plus one backwards-compatible local-service
+motif). Template selection must prioritize the customer's industry and
+explicit choice over arbitrary rotation. `_project_id` scopes design
+history: same-name clients must never share a frozen template record.
+Each output includes `assets/design-manifest.json` with template ID,
+project-specific design seed, composition and anonymous fingerprint.
+
+Short art-direction instructions in `api/design_prompt_v3.py` receive the
+**same chosen template** for the planner, CSS/HTML generation, critique
+and vision QA. Keep client facts/images/addresses/branding isolated;
+no recycled customer data, counterfeit images, invented reviews,
+nonexistent integrations or fake measurements. Maintain the existing
+Windows low-memory profile; **do not pass the entire master document
+to every inference call**.
+
+QA (including accessibility, actual responsiveness and public URL)
+must be verified, not assumed. No weakening V12 payment gate, originality
+gate or visual score. Run `python tools/v15_studio_rotation_smoke.py`
+and full applicable CI before release; a real multi-site generation and
+public deployment still require separate operator-side measurement.
+
 ## Release and rollback
 
 The low-memory profile and runtime prompt are configured via environment;

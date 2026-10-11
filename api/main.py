@@ -318,6 +318,11 @@ async def generate_project(project_id: str):
         config = json.loads(row["config_json"])
         con.execute("UPDATE projects SET status='designing',updated_at=? WHERE id=?", (now_iso(), project_id))
     spec = await design_site(config)
+    chosen = spec.get("design_system") or {}
+    if chosen.get("template_id"):
+        config["_design_template_id"] = chosen["template_id"]
+        config["_design_template_name"] = chosen.get("template_name", "")
+        config["_design_composition"] = chosen.get("composition", "")
     files = await build_files(config, spec)
     audit1 = static_audit(files)
     audit2 = await ai_audit(files, config)
