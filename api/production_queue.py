@@ -14,6 +14,7 @@ import logging
 import os
 import socket
 import sqlite3
+import time
 import uuid
 from typing import Any
 
@@ -21,6 +22,7 @@ from fastapi import Depends
 
 import api.main as core
 import api.billing_gate as billing_gate
+import api.resource_guard as resource_guard
 
 WORKER_COUNT = max(1, min(12, int(os.getenv("PRODUCTION_WORKERS", "4"))))
 POLL_SECONDS = max(0.2, float(os.getenv("PRODUCTION_QUEUE_POLL_SECONDS", "0.8")))
@@ -28,6 +30,7 @@ INSTANCE_ID = f"{socket.gethostname()}-{os.getpid()}-{uuid.uuid4().hex[:6]}"
 _worker_tasks: list[asyncio.Task] = []
 _wake_event: asyncio.Event | None = None
 _schema_ready = False
+_last_resource_warning_at = 0.0
 logger = logging.getLogger("project_visibility.production_queue")
 
 
@@ -216,10 +219,24 @@ async def _execute(project_id: str, worker_id: str) -> None:
 
 
 async def _worker(index: int) -> None:
+    global _last_resource_warning_at
     worker_id = f"{INSTANCE_ID}-w{index + 1}"
     logger.info("Production worker started id=%s", worker_id)
     while True:
         try:
+            # Keep the existing job durable in SQLite while memory is tight.
+            # Do not interrupt active jobs or tamper with unrelated processes.
+            admission = resource_guard.admission_status()
+            if not admission["allow_new_job"]:
+                now = time.monotonic()
+                if now - _last_resource_warning_at >= 60:
+                    logger.warning(
+                        "New jobs paused: RAM available=%s MB; reserve=%s MB",
+                        admission["available_mb"], admission["required_free_mb"],
+                    )
+                    _last_resource_warning_at = now
+                await asyncio.sleep(max(POLL_SECONDS, 2.0))
+                continue
             project_id = _claim_next(worker_id)
             if project_id:
                 try:
@@ -340,6 +357,7 @@ def queue_snapshot() -> dict[str, Any]:
         "workers_alive": len(alive),
         "workers_crashed": len(crashed),
         "worker_pool_healthy": len(alive) == WORKER_COUNT,
+        "resource_admission": resource_guard.admission_status(),
         "instance_id": INSTANCE_ID,
         "states": {str(row["state"]): int(row["n"]) for row in states},
         "running": [dict(row) for row in running],
