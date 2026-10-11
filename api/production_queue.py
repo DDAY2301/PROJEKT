@@ -24,7 +24,20 @@ import api.main as core
 import api.billing_gate as billing_gate
 import api.resource_guard as resource_guard
 
-WORKER_COUNT = max(1, min(12, int(os.getenv("PRODUCTION_WORKERS", "4"))))
+def configured_worker_count() -> int:
+    """Conservative default on small machines, without overriding the operator.
+
+    The launcher already applies this rule; keep it when the API is started
+    directly with uvicorn, from a service, or by Agent Manager.
+    """
+    value = os.getenv("PRODUCTION_WORKERS", "").strip()
+    if value:
+        return max(1, min(12, int(value)))
+    snapshot = resource_guard.memory_snapshot()
+    return 1 if snapshot and snapshot.total_mb <= 12 * 1024 else 4
+
+
+WORKER_COUNT = configured_worker_count()
 POLL_SECONDS = max(0.2, float(os.getenv("PRODUCTION_QUEUE_POLL_SECONDS", "0.8")))
 INSTANCE_ID = f"{socket.gethostname()}-{os.getpid()}-{uuid.uuid4().hex[:6]}"
 _worker_tasks: list[asyncio.Task] = []
@@ -237,6 +250,11 @@ async def _worker(index: int) -> None:
                     _last_resource_warning_at = now
                 await asyncio.sleep(max(POLL_SECONDS, 2.0))
                 continue
+            # Clear before checking SQLite. An enqueue between the empty
+            # claim and the wait then leaves the event set and wakes promptly.
+            # Clearing after the claim could lose that signal for POLL_SECONDS.
+            if _wake_event is not None:
+                _wake_event.clear()
             project_id = _claim_next(worker_id)
             if project_id:
                 try:
@@ -252,7 +270,6 @@ async def _worker(index: int) -> None:
             if _wake_event is None:
                 await asyncio.sleep(POLL_SECONDS)
                 continue
-            _wake_event.clear()
             try:
                 await asyncio.wait_for(_wake_event.wait(), timeout=POLL_SECONDS)
             except asyncio.TimeoutError:
