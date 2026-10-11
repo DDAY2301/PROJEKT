@@ -141,13 +141,15 @@ Write-Host "[4/9] Checking port $Port..."
 $listener = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($listener) {
   $old = Get-Process -Id $listener.OwningProcess -ErrorAction SilentlyContinue
-  if ($old -and $old.ProcessName -match 'python|uvicorn') {
-    Write-Host "Stopping previous local agent process $($old.Id)..."
-    Stop-Process -Id $old.Id -Force
-    Start-Sleep -Seconds 1
-  } elseif ($old) {
-    throw "Port $Port is already used by $($old.ProcessName) (PID $($old.Id))."
+  $details = Get-CimInstance Win32_Process -Filter "ProcessId=$($listener.OwningProcess)" -ErrorAction SilentlyContinue
+  $isOurApi = $old -and $old.ProcessName -match 'python|uvicorn' -and
+    $details -and $details.CommandLine -match '(?i)(uvicorn\s+api\.server:app|api[\\/]server\.py)'
+  if (-not $isOurApi) {
+    throw "Port $Port is owned by an unrelated process. Refusing to stop PID $($listener.OwningProcess)."
   }
+  Write-Host "Stopping previous Project Visibility API process $($old.Id)..."
+  Stop-Process -Id $old.Id -Force
+  Start-Sleep -Seconds 1
 }
 
 Write-Host "[5/9] Preparing isolated Python environment..."
