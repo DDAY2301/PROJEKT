@@ -51,6 +51,44 @@ function initialApi() {
 
 API = initialApi();
 
+function clearSession() {
+  token = '';
+  localStorage.removeItem('pv_token');
+  localStorage.removeItem('pv_token_api_url');
+}
+
+function saveSession(value) {
+  if (!value || typeof value !== 'string') throw new Error('Strežnik ni vrnil prijavne seje.');
+  token = value;
+  localStorage.setItem('pv_token', token);
+  localStorage.setItem('pv_token_api_url', API);
+}
+
+// A token from another API instance or a former test DB is not a valid login.
+if (token && (!API || localStorage.getItem('pv_token_api_url') !== API)) clearSession();
+
+async function verifyExistingSession() {
+  if (!token) {
+    updateAuthUi('Za dostop do projektov se prijavi ali registriraj.');
+    return false;
+  }
+  try {
+    const session = await request('/auth/session');
+    if (!session.authenticated) throw new Error('Seja ni potrjena.');
+    updateAuthUi('Prijavna seja preverjena.');
+    return true;
+  } catch (error) {
+    // Network errors should not destroy otherwise valid credentials.
+    if (/401|403|not found|expired|session|token|credentials/i.test(String(error.message))) {
+      clearSession();
+      updateAuthUi('Prejšnja seja ni veljavna za trenutno bazo. Ponovno se prijavi.');
+      return false;
+    }
+    updateAuthUi('Seje trenutno ni mogoče preveriti. Preveri API.');
+    return false;
+  }
+}
+
 function status(msg) {
   const el = $('status');
   if (el) el.textContent = msg;
@@ -196,14 +234,14 @@ $('connectApi')?.addEventListener('click', async () => {
     status('Uporabi lokalni naslov 127.0.0.1 ali stalen HTTPS API. Začasnih trycloudflare.com naslovov ne uporabljaj.');
     return;
   }
-  if (API && API !== next) {
-    token = '';
-    localStorage.removeItem('pv_token');
-    updateAuthUi();
+  if (API !== next) {
+    clearSession();
+    updateAuthUi('Po spremembi API-ja se ponovno prijavi.');
   }
   API = next;
   localStorage.setItem('pv_api_url', API);
-  await checkHealth(true);
+  const ready = await checkHealth(true);
+  if (ready) await verifyExistingSession();
 });
 
 function authBody() {
@@ -234,8 +272,7 @@ $('register')?.addEventListener('click', async () => {
     validateAuth();
     status('Ustvarjam račun ...');
     const data = await request('/auth/register', {method:'POST', body:JSON.stringify(authBody())});
-    token = data.token;
-    localStorage.setItem('pv_token', token);
+    saveSession(data.token);
     updateAuthUi('Registriran in prijavljen.');
     status('Račun je pripravljen. Zdaj lahko začneš izdelavo projekta.');
     await loadRecentProjects();
@@ -250,20 +287,21 @@ $('login')?.addEventListener('click', async () => {
     validateAuth();
     status('Prijavljam ...');
     const data = await request('/auth/login', {method:'POST', body:JSON.stringify(authBody())});
-    token = data.token;
-    localStorage.setItem('pv_token', token);
+    saveSession(data.token);
     updateAuthUi('Prijava uspešna.');
     status('Prijava je uspešna. Projektni workspace je pripravljen.');
     await loadRecentProjects();
     await handlePaymentReturn();
   } catch (e) {
-    status(`PRIJAVA NI USPELA\n${e.message}`);
+    const guidance = /Invalid credentials|401/i.test(e.message)
+      ? 'Napačen e-mail ali geslo za trenutno lokalno bazo. Če se še nisi registriral v tej bazi, izberi Registracija.'
+      : e.message;
+    status(`PRIJAVA NI USPELA\n${guidance}`);
   }
 });
 
 $('logout')?.addEventListener('click', () => {
-  token = '';
-  localStorage.removeItem('pv_token');
+  clearSession();
   updateAuthUi('Odjavljen.');
   status('Prijavna seja je zaključena.');
 });
@@ -664,8 +702,13 @@ installCheckoutHint();
 selectPackage($('package')?.value || 'Start');
 updateAuthUi();
 syncPreview();
-checkHealth(true).then(() => handlePaymentReturn());
-if (token) loadRecentProjects();
+checkHealth(true).then(async ready => {
+  if (!ready) return;
+  if (await verifyExistingSession()) {
+    await loadRecentProjects();
+    await handlePaymentReturn();
+  }
+});
 // State from a previous startup must never remain green when the API stops.
 // A single read-only health probe while the page is visible is inexpensive.
 setInterval(() => {
