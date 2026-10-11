@@ -1327,11 +1327,9 @@ jobs:
       - name: Check builder intro contrast is independent of page background
         run: |
           python - <<'PY'
-          import re
           css = open('dist/assets/workspace-v2.css', encoding='utf-8').read()
-          match = re.search(r'\\.intro-main\\{([^}]+)\\}', css)
-          assert match, 'Missing builder intro panel'
-          rule = match.group(1)
+          assert '.intro-main{' in css, 'Missing builder intro panel'
+          rule = css.split('.intro-main{', 1)[1].split('}', 1)[0]
           assert '#183d31' in rule and '#071e18' in rule, 'Intro panel must use opaque dark colors'
           assert 'background:linear-gradient(' in rule, 'Intro panel must not depend on body background'
           assert 'color:#fff' in rule, 'Intro text must stay legible'
