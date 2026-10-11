@@ -35,7 +35,7 @@ MOTIFS: dict[str, dict[str, Any]] = {
         "keywords": ("luxury", "premium", "beauty", "fashion", "jewelry", "consulting"),
         "font": 'Inter,Arial,sans-serif', "display": 'Georgia,"Times New Roman",serif',
         "radius": "8px", "shell": "1160px", "tracking": "-.035em",
-        "css": """.site-header{background:rgba(22,20,17,.88)}.hero{background:linear-gradient(135deg,#171512,#29241f);}.hero::after{opacity:.28}.hero-grid{grid-template-columns:1fr;text-align:center;max-width:1050px}.hero-copy,.hero-copy p{margin-left:auto;margin-right:auto}.hero-art{display:none}.hero-actions{justify-content:center}.section-head h2,.hero-copy h1{font-family:var(--display)}.section-head{max-width:850px}.story-card{background:#211d19}.button{border-radius:2px}.final-cta{text-align:center;background:#171512}""",
+        "css": """.site-header{background:rgba(22,20,17,.88)}.hero{background:linear-gradient(135deg,#171512,#29241f);}.hero::after{opacity:.28}.hero-grid{grid-template-columns:1fr;text-align:center;max-width:1050px}.hero-copy,.hero-copy p{margin-left:auto;margin-right:auto}.hero-art{max-width:900px;width:100%;margin-inline:auto}.hero-actions{justify-content:center}.section-head h2,.hero-copy h1{font-family:var(--display)}.section-head{max-width:850px}.story-card{background:#211d19}.button{border-radius:2px}.final-cta{text-align:center;background:#171512}""",
     },
     "outdoor_field": {
         "keywords": ("outdoor", "nature", "survival", "forest", "adventure", "camp", "environment"),
@@ -98,6 +98,123 @@ MOTIFS: dict[str, dict[str, Any]] = {
         "css": """.site-header{background:rgba(255,255,255,.95);border-bottom:2px solid var(--ink)}.brand,.nav-links a{color:var(--ink)}.menu span{background:var(--ink)}.hero{background:#fff;color:var(--ink);border-bottom:5px solid var(--ink)}.hero::after{display:none}.hero-grid{grid-template-columns:minmax(0,1.25fr) minmax(300px,.75fr);align-items:end}.label-light,.hero-copy p,.text-link{color:var(--ink)}.hero-copy h1,.section-head h2{font-family:var(--display)}.section{border-bottom:1px solid var(--ink)}.story-grid{grid-template-columns:2fr 1fr 1fr}.story-card{border-radius:0;background:#111}.final-cta{background:#111}""",
     },
 }
+
+
+# ULTIMATE WEBSITE CREATOR V1: 24 distinct studio directions, each backed by
+# its own real CSS profile. Keep legacy "local_service" as a 25th safe fallback.
+# Template choices are never borrowed customer websites or copied assets.
+STUDIO_TEMPLATES: tuple[tuple[str, str, str], ...] = (
+    ("T01", "Swiss Editorial", "swiss_editorial"),
+    ("T02", "Luxury Minimal", "luxury_minimal"),
+    ("T03", "Architectural", "architectural"),
+    ("T04", "Industrial Precision", "industrial_precision"),
+    ("T05", "Automotive Performance", "automotive_dark"),
+    ("T06", "Organic Nature", "organic_story"),
+    ("T07", "Outdoor Editorial", "outdoor_field"),
+    ("T08", "Boutique Hospitality", "hospitality_warm"),
+    ("T09", "Culinary Magazine", "magazine"),
+    ("T10", "Professional Legal", "corporate_grid"),
+    ("T11", "Financial Trust", "financial_trust"),
+    ("T12", "Healthcare Clarity", "healthcare_clarity"),
+    ("T13", "Scientific Research", "scientific_research"),
+    ("T14", "Tech Product Grid", "tech_precision"),
+    ("T15", "SaaS Utility", "saas_utility"),
+    ("T16", "Creative Brutalist", "creative_brutal"),
+    ("T17", "Portfolio Gallery", "portfolio_gallery"),
+    ("T18", "Artisan Craft", "artisan_craft"),
+    ("T19", "Beauty Ritual", "beauty_ritual"),
+    ("T20", "Sport Kinetic", "sport_kinetic"),
+    ("T21", "Travel Immersive", "travel_immersive"),
+    ("T22", "Education Pathways", "education_pathways"),
+    ("T23", "NGO Impact Story", "ngo_story"),
+    ("T24", "Event & Festival", "event_festival"),
+)
+STUDIO_BY_MOTIF = {motif: (template_id, name) for template_id, name, motif in STUDIO_TEMPLATES}
+
+_EXTRA_MOTIFS: dict[str, dict[str, Any]] = {
+    "architectural": {
+        "keywords": ("architecture", "architect", "architectural", "interior", "arhitektur", "nepremičnin"),
+        "font": "Arial,Helvetica,sans-serif", "display": "Georgia,serif",
+        "radius": "1px", "shell": "1480px", "tracking": "-.047em",
+        "css": """.hero{background:#eeeae1;color:#24312e}.hero::after{display:none}.hero-grid{grid-template-columns:.7fr 1.3fr;align-items:end;gap:7vw}.hero-copy p,.label-light{color:#24312e}.hero-art{min-height:600px}.visual{border-radius:0;border:1px solid #676a63;box-shadow:none}.section{border-bottom:1px solid #b8b9b0}.section-split{gap:7rem}.final-cta{background:#24312e}""",
+    },
+    "industrial_precision": {
+        "keywords": ("manufactur", "industrial", "production", "engineering", "factory", "proizvod", "stroj"),
+        "font": "Arial,Helvetica,sans-serif", "display": "Arial Black,Arial,sans-serif",
+        "radius": "2px", "shell": "1390px", "tracking": "-.052em",
+        "css": """.hero{background:#1d2427}.hero-grid{grid-template-columns:1.3fr .7fr}.hero-copy h1{text-transform:uppercase}.visual{border-radius:2px;border:2px solid var(--accent);box-shadow:none}.section-head{border-left:5px solid var(--accent);padding-left:1.3rem}.story-grid{gap:2px;background:#45535a}.story-card{border-radius:0}.final-cta{background:#151b1e}.label{letter-spacing:.12em}""",
+    },
+    "financial_trust": {
+        "keywords": ("finance", "financial", "bank", "insurance", "invest", "računovod", "zavarovan", "finan"),
+        "font": "Inter,Arial,sans-serif", "display": "Georgia,serif",
+        "radius": "5px", "shell": "1230px", "tracking": "-.035em",
+        "css": """.hero{background:#152d3a}.hero-grid{grid-template-columns:1.2fr .8fr}.visual{border-radius:5px;border:1px solid #8faeb0;background:#e7efec;color:#16313a}.metrics{border-top:3px solid var(--accent)}.section{padding:96px 0}.story-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.story-card{border-radius:6px}.final-cta{background:#102c37}""",
+    },
+    "healthcare_clarity": {
+        "keywords": ("health", "clinic", "medical", "hospital", "physio", "zdrav", "ambulant", "klinika"),
+        "font": "Arial,Helvetica,sans-serif", "display": "Arial,Helvetica,sans-serif",
+        "radius": "24px", "shell": "1220px", "tracking": "-.045em",
+        "css": """.hero{background:#edf6f4;color:#193c39}.hero::after{display:none}.hero-grid{grid-template-columns:1fr 1fr;min-height:630px}.hero-copy p,.label-light{color:#24524e}.visual{border-radius:24px;border:1px solid #b6d3cd;background:#f9fffc;box-shadow:none}.section{padding:88px 0}.story-card{border-radius:20px}.button{border-radius:12px}.final-cta{background:#1e514d}""",
+    },
+    "scientific_research": {
+        "keywords": ("scientific", "research", "laborator", "science", "university", "razisk", "študij"),
+        "font": "Inter,Arial,sans-serif", "display": "Arial,Helvetica,sans-serif",
+        "radius": "0px", "shell": "1320px", "tracking": "-.056em",
+        "css": """.hero{background:#101d29}.hero::before{content:'';position:absolute;inset:0;background-image:linear-gradient(#ffffff10 1px,transparent 1px),linear-gradient(90deg,#ffffff10 1px,transparent 1px);background-size:46px 46px}.hero-grid{grid-template-columns:.85fr 1.15fr}.visual{border:1px solid #b4c7ca;border-radius:0;box-shadow:none}.section-head h2{max-width:950px}.section{border-bottom:1px solid #8a9a9e}.label{font-family:ui-monospace,Consolas,monospace}.final-cta{background:#102838}""",
+    },
+    "saas_utility": {
+        "keywords": ("saas", "subscription", "dashboard", "workflow", "app", "automation", "productivity", "platform"),
+        "font": "Inter,Arial,sans-serif", "display": "Inter,Arial,sans-serif",
+        "radius": "18px", "shell": "1270px", "tracking": "-.06em",
+        "css": """.hero{background:#e8edf8;color:#12223d}.hero::after{display:none}.hero-grid{grid-template-columns:1fr 1.05fr;min-height:690px}.hero-copy p,.label-light{color:#20375a}.visual{border-radius:18px;border:1px solid #aabbd9;background:#fff;box-shadow:0 24px 50px #25325125}.story-grid{gap:14px}.story-card{border-radius:18px}.section{padding:80px 0}.final-cta{background:#12284e}""",
+    },
+    "portfolio_gallery": {
+        "keywords": ("portfolio", "photograph", "gallery", "showcase", "creative", "visual", "fotograf", "galerija"),
+        "font": "Arial,Helvetica,sans-serif", "display": "Georgia,serif",
+        "radius": "0px", "shell": "1460px", "tracking": "-.048em",
+        "css": """.hero{background:#141414}.hero-grid{grid-template-columns:.65fr 1.35fr;min-height:800px}.visual{border-radius:0;background:#252525;box-shadow:none}.gallery-grid{grid-template-columns:1.7fr 1fr 1fr;gap:9px}.gallery-tile{border-radius:0}.section{padding:118px 0}.story-card{border-radius:0}.button{border-radius:0}.final-cta{background:#151515}""",
+    },
+    "artisan_craft": {
+        "keywords": ("artisan", "craft", "woodwork", "handmade", "ceramic", "rokodel", "les", "ročno"),
+        "font": "Georgia,serif", "display": "Georgia,serif",
+        "radius": "9px", "shell": "1170px", "tracking": "-.032em",
+        "css": """.hero{background:#543828}.hero-grid{grid-template-columns:1fr .85fr}.visual{border:8px solid #cdb99e;border-radius:9px;background:#b89d79;box-shadow:none}.section:nth-of-type(even){background:#f1e8d7!important}.section{padding:110px 0}.story-card{background:#61412e;border-radius:10px}.button{border-radius:2px}.final-cta{background:#4c2c1f}""",
+    },
+    "beauty_ritual": {
+        "keywords": ("beauty", "skincare", "cosmetic", "spa", "aesthetic", "salon", "nega", "kozmetik"),
+        "font": "Arial,Helvetica,sans-serif", "display": "Georgia,serif",
+        "radius": "34px", "shell": "1140px", "tracking": "-.035em",
+        "css": """.hero{background:#eadcd7;color:#452e3c}.hero::after{display:none}.hero-grid{grid-template-columns:.9fr 1.1fr;min-height:690px}.hero-copy p,.label-light{color:#654455}.visual{border-radius:48% 48% 6px 6px;border:1px solid #aa8b94;background:#f5ede6}.section{padding:120px 0}.story-card{border-radius:30px}.button{border-radius:999px}.final-cta{background:#4b3441}""",
+    },
+    "sport_kinetic": {
+        "keywords": ("sport", "fitness", "athlet", "gym", "race", "cycling", "training", "tečaj fit"),
+        "font": "Arial,Helvetica,sans-serif", "display": "Arial Black,Arial,sans-serif",
+        "radius": "3px", "shell": "1360px", "tracking": "-.072em",
+        "css": """.hero{background:#151716}.hero-grid{grid-template-columns:1.35fr .65fr;min-height:770px;transform:none}.hero-copy h1{text-transform:uppercase;font-style:italic}.visual{transform:skew(-2deg);border-left:9px solid var(--accent);border-radius:0;background:#292b29}.section-head h2{text-transform:uppercase}.story-grid{gap:7px}.story-card{border-radius:0}.final-cta{background:#202321}@media(max-width:760px){.visual{transform:none}}""",
+    },
+    "travel_immersive": {
+        "keywords": ("travel", "destination", "tour", "holiday", "trip", "potov", "izlet", "turiz"),
+        "font": "Arial,Helvetica,sans-serif", "display": "Georgia,serif",
+        "radius": "12px", "shell": "1320px", "tracking": "-.033em",
+        "css": """.hero{background:#1a3d46}.hero-grid{grid-template-columns:1fr;text-align:center;min-height:840px}.hero-copy,.hero-copy p{margin-inline:auto}.hero-actions{justify-content:center}.hero-art{max-width:1000px;width:100%;margin-inline:auto}.visual{border-radius:12px;min-height:460px;border:1px solid #acd0d3}.section{padding:96px 0}.gallery-grid{grid-template-columns:2fr 1fr 1fr}.final-cta{background:#153a44}""",
+    },
+    "education_pathways": {
+        "keywords": ("education", "course", "school", "learn", "academy", "training", "tečaj", "izobraž"),
+        "font": "Arial,Helvetica,sans-serif", "display": "Georgia,serif",
+        "radius": "16px", "shell": "1250px", "tracking": "-.043em",
+        "css": """.hero{background:#213c3a}.hero-grid{grid-template-columns:.95fr 1.05fr;min-height:700px}.visual{border-radius:16px;border:2px solid #c4d8c8}.process-strip{border-top:4px solid var(--accent)}.process-step{min-height:150px}.section{padding:85px 0}.section-head h2{max-width:900px}.story-card{border-radius:14px}.final-cta{background:#1e3d3a}""",
+    },
+    "event_festival": {
+        "keywords": ("festival", "event", "concert", "conference", "ticket", "prireditev", "dogodek", "koncert"),
+        "font": "Arial,Helvetica,sans-serif", "display": "Arial Black,Arial,sans-serif",
+        "radius": "0px", "shell": "1390px", "tracking": "-.075em",
+        "css": """.site-header{background:#111;border-bottom:4px solid var(--accent)}.hero{background:#24121f}.hero-grid{grid-template-columns:1.1fr .9fr}.hero-copy h1{text-transform:uppercase;line-height:.94}.visual{border:6px solid var(--accent);box-shadow:12px 12px 0 #000;border-radius:0}.section{border-bottom:5px solid var(--accent)}.story-card{border:2px solid var(--accent);border-radius:0}.label{letter-spacing:.13em}.final-cta{background:#111}""",
+    },
+}
+MOTIFS.update(_EXTRA_MOTIFS)
+assert len(STUDIO_TEMPLATES) == 24 and len({row[2] for row in STUDIO_TEMPLATES}) == 24
+assert all(row[2] in MOTIFS for row in STUDIO_TEMPLATES)
+
 
 
 def _ensure_history() -> None:
