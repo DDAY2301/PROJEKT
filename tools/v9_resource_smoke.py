@@ -50,6 +50,58 @@ def verify_limits() -> None:
     assert resource_guard.required_free_mb(8000) == 768
 
 
+def verify_default_worker_count() -> None:
+    small = resource_guard.MemorySnapshot(total_mb=8000, available_mb=3500, source="test")
+    large = resource_guard.MemorySnapshot(total_mb=32000, available_mb=25000, source="test")
+    with patch.dict(os.environ, {"PRODUCTION_WORKERS": ""}):
+        with patch.object(resource_guard, "memory_snapshot", return_value=small):
+            assert production_queue.configured_worker_count() == 1
+        with patch.object(resource_guard, "memory_snapshot", return_value=large):
+            assert production_queue.configured_worker_count() == 4
+        with patch.object(resource_guard, "memory_snapshot", return_value=None):
+            assert production_queue.configured_worker_count() == 4
+    with patch.dict(os.environ, {"PRODUCTION_WORKERS": "3"}):
+        with patch.object(resource_guard, "memory_snapshot", return_value=small):
+            assert production_queue.configured_worker_count() == 3
+
+
+async def verify_enqueue_wake_is_not_lost() -> None:
+    previous_event = production_queue._wake_event
+    production_queue._wake_event = asyncio.Event()
+    calls = 0
+
+    def claim(_worker_id: str) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            # Simulate enqueue while the SQLite claim sees no queued job.
+            production_queue._wake_event.set()
+        return None
+
+    admission = {"enabled": True, "allow_new_job": True, "available_mb": 3000, "required_free_mb": 768}
+    try:
+        with (
+            patch.object(production_queue.resource_guard, "admission_status", return_value=admission),
+            patch.object(production_queue, "_claim_next", side_effect=claim),
+            patch.object(production_queue, "POLL_SECONDS", 10.0),
+        ):
+            job = asyncio.create_task(production_queue._worker(7))
+            try:
+                for _ in range(50):
+                    if calls >= 2:
+                        break
+                    await asyncio.sleep(0.01)
+                assert calls >= 2, "An enqueue wakeup was dropped after an empty claim"
+            finally:
+                job.cancel()
+                try:
+                    await job
+                except asyncio.CancelledError:
+                    pass
+    finally:
+        production_queue._wake_event = previous_event
+
+
 def verify_launchers_and_audit() -> None:
     for path in ("start-product.ps1", "api/start-local.ps1"):
         source = (ROOT / path).read_text(encoding="utf-8")
@@ -67,6 +119,8 @@ def verify_launchers_and_audit() -> None:
 
 if __name__ == "__main__":
     verify_limits()
+    verify_default_worker_count()
     verify_launchers_and_audit()
     asyncio.run(verify_worker_defers_claim())
+    asyncio.run(verify_enqueue_wake_is_not_lost())
     print("V9 RESOURCE SMOKE: PASS (low RAM defers jobs, overrides, no host side effects)")
