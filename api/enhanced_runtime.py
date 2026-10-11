@@ -545,6 +545,11 @@ async def generate_project_observable(project_id: str):
             return
         set_status(project_id, "designing")
         spec = await core.design_site(config)
+        chosen = spec.get("design_system") or {}
+        if chosen.get("template_id"):
+            config["_design_template_id"] = chosen["template_id"]
+            config["_design_template_name"] = chosen.get("template_name", "")
+            config["_design_composition"] = chosen.get("composition", "")
 
         phase = "website build"
         if _cancel_checkpoint(project_id, "before_build"):
