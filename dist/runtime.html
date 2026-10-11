@@ -23,51 +23,24 @@
 </main>
 <script>
 (() => {
+  // Legacy compatibility entry. No query-string API may trigger an automatic
+  // cross-origin navigation: that was unsafe with disposable tunnel hostnames.
   const state = document.getElementById('state');
-  const retry = document.getElementById('retry');
+  const openBuilder = document.getElementById('retry');
   const params = new URLSearchParams(location.search);
-  const api = (params.get('api') || '').trim().replace(/\/$/, '');
-  const allowed = /^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/i.test(api) || /^https:\/\/[a-z0-9.-]+(?::\d+)?$/i.test(api);
-  const sleep = ms => new Promise(r => setTimeout(r, ms));
-
-  function fail(message) {
-    state.classList.add('bad');
-    state.textContent = message;
-    retry.style.display = 'inline-flex';
-  }
-
-  async function verifyAndOpen() {
-    retry.style.display = 'none';
-    state.classList.remove('bad');
-    if (!api || !allowed) {
-      fail('Povezava ni veljavna. Ponovno zaženi Project Visibility launcher.');
-      return;
-    }
-    state.textContent = 'Preverjam: ' + api + '\nČakam na odgovor storitve …';
-    let healthy = false;
-    for (let attempt = 1; attempt <= 8; attempt++) {
-      try {
-        const response = await fetch(api + '/health?runtime=' + Date.now(), {cache:'no-store'});
-        if (response.ok) {
-          const data = await response.json();
-          if (data && data.ok) { healthy = true; break; }
-        }
-      } catch (_) {}
-      state.textContent = 'Preverjam: ' + api + '\nPoskus ' + attempt + '/8 — povezava še ni pripravljena.';
-      await sleep(1500);
-    }
-    if (!healthy) {
-      fail('Ta javna povezava ni več dosegljiva ali je potekla.\n\nQuick Tunnel naslovi so začasni. Zaženi start-product.ps1, da sistem ustvari in preveri nov naslov.');
-      return;
-    }
-    const savedLang = localStorage.getItem('pv_language') || 'sl';
-    const target = api + '/builder.html?api=' + encodeURIComponent(api) + '&lang=' + encodeURIComponent(savedLang) + '&pv=' + Date.now();
-    state.textContent = 'Povezava je aktivna.\nOdpiram Website Builder …';
-    location.replace(target);
-  }
-
-  retry.addEventListener('click', verifyAndOpen);
-  verifyAndOpen();
+  const supplied = String(params.get('api') || '').trim();
+  const temporary = supplied.toLowerCase().includes('.trycloudflare.com');
+  state.dataset.checkedAt = String(Date.now());
+  state.classList.add('bad');
+  state.textContent = temporary
+    ? 'Začasni Cloudflare Quick Tunnel ni varen stalen naslov. Na njem ne vpisuj gesel ali tokenov. Odpri Builder na uradnem GitHub Pages naslovu ter uporabi lokalni API ali svoj stalen HTTPS API.'
+    : 'Samodejne preusmeritve na zunanje API-domene so iz varnostnih razlogov izklopljene. Builder je na uradnem GitHub Pages naslovu. API poveži ročno v nastavitvah.';
+  openBuilder.style.display = 'inline-flex';
+  openBuilder.textContent = 'Odpri varen Builder';
+  openBuilder.addEventListener('click', () => {
+    // Always stay on the trusted GitHub Pages origin.
+    location.assign('./builder.html');
+  });
 })();
 </script>
 </body>

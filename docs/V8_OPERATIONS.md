@@ -187,3 +187,85 @@ back in by setting `$env:PV_ENABLE_LARGE_EXPERT_MODELS='1'` before
 startup, only after confirming enough headroom in real tests.
 This applies to the API process environment on restart and does not
 uninstall or delete any Ollama model.
+
+
+## V10 — safe URL, truthful backend status, reliable local startup
+
+### Incident (2026-10-11)
+Browser displayed **Dangerous** for a random `*.trycloudflare.com` URL.
+Host check showed `127.0.0.1:8000` not listening; Ollama at 11434 was
+listening but with no loaded model. Browser kept a stale “Online” badge.
+
+Do **not** override Safe Browsing or enter credentials on the flagged URL.
+These addresses are randomly assigned and disposable, not production
+identities. Neither HTTPS nor a successful `/health` alone proves a
+hostname has a good reputation or is safe for credential entry.
+
+### Safe default and stable public access
+- `start-product.ps1 -LocalOnly` launches the same existing local
+  `api/start-local.ps1 -SkipGitHub` without needing a PAT, DNS, Cloudflare
+  or any public browser URL. It leaves the server in the foreground.
+- `start-product.ps1` with a valid PAT launches the API but defaults to
+  **http://127.0.0.1:8000/builder.html** when no stable public API URL
+  is explicitly provided. No random Cloudflare Quick Tunnel is started.
+- For public access, first configure an account-owned, long-lived HTTPS
+  hostname using a **named Cloudflare tunnel** or another supported
+  TLS reverse proxy. Configure the DNS/tunnel **outside** this script,
+  verify that endpoint's identity, then launch:
+  `./start-product.ps1 -PublicApiUrl https://api.your-domain.example`
+  (or set `PV_PUBLIC_API_URL`). The launcher refuses `trycloudflare.com`,
+  checks remote `/health` and opens the canonical GitHub Pages builder.
+- `dist/runtime.html` is now a legacy safety notice that can only link
+  to the GitHub Pages builder. It never redirects users to an arbitrary
+  external hostname.
+- On temporary tunnel origins the builder disables its account inputs.
+  When the API address is supplied by a link, the user must manually
+  confirm it in Connection settings unless `PV_RUNTIME.apiBase` was
+  explicitly configured for the hosted site.
+- Backend health identifies the service as `project_visibility`, probes
+  Ollama `/api/tags` without loading a model, and reports
+  `ollama_online`, `model_installed` and `model_ready`. GitHub
+  `github_configured` still means token **present**, not end-to-end
+  deployment proven.
+- Builder refreshes health every 30 seconds while the tab is visible.
+  An offline API no longer stays green indefinitely.
+
+### Recommended recovery steps on the affected Windows host
+
+Close the flagged browser tab; do not bypass its warning.
+After confirming no Project Visibility job is running, open PowerShell:
+
+```powershell
+cd 'C:\Users\dangr\PROJEKT'
+git status --short
+git pull --ff-only origin main
+
+# Read-only regressions before the heavy model starts.
+.\.venv\Scripts\python.exe tools\v10_safe_url_smoke.py
+.\.venv\Scripts\python.exe tools\v9_resource_smoke.py
+
+# No PAT, no random public domain. Leave this window running.
+.\start-product.ps1 -LocalOnly
+```
+
+In another PowerShell window:
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/health
+.\tools\inspect-agent-host.ps1
+```
+`ok=True` and `product=project_visibility` confirm the API identity.
+`model_ready=True` indicates Ollama responds and the configured
+model is installed; it does **not** certify generation quality.
+Use `http://127.0.0.1:8000/builder.html` while testing locally.
+
+If a local smoke script raises `AssertionError`, capture its **entire
+Python traceback including the failing file and line**; the single
+word `AssertionError` does not identify which condition failed.
+Check `git rev-parse --short HEAD` before attributing it to the
+latest version.
+
+### Not yet verified
+Remote Cloudflare DNS/named tunnel provisioning, Chrome Safe Browsing
+reputation, public authentication and real end-to-end delivery all
+require operator-side configuration/testing. GitHub CI cannot confirm
+the user's Windows port is listening.

@@ -254,6 +254,10 @@ if (-not $env:APP_SECRET) { throw "Could not prepare APP_SECRET." }
 Write-Host "Local login sessions: PERSISTENT across restarts" -ForegroundColor Green
 
 Write-Host "[8/9] Connecting GitHub repository access..."
+# Local-only smoke must not inherit a stale/invalid PAT from the parent shell.
+if ($SkipGitHub) {
+  Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+}
 if (-not $SkipGitHub -and -not $env:GITHUB_TOKEN) {
   Write-Host "The token is kept only in this process and is NOT saved to the repository."
   Write-Host "For full automatic publishing use a fine-grained token with:" -ForegroundColor Yellow

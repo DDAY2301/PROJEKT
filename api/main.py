@@ -360,10 +360,34 @@ async def startup():
 
 @app.get("/health")
 async def health():
+    """Report actual service identity and local model availability, not just API uptime.
+
+    GitHub token presence means configured, not externally verified publishing.
+    A short Ollama probe is read-only: it never loads a model into RAM.
+    """
     v7_active = os.getenv("PV_AGENT_V7_ENABLED", "1").strip().lower() not in {"0", "false", "no", "off"}
+    ollama_online = False
+    model_installed = False
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(2.0, connect=1.0)) as client:
+            response = await client.get(f"{OLLAMA_BASE_URL}/api/tags")
+            response.raise_for_status()
+            payload = response.json()
+            models = (payload.get("models") or []) if isinstance(payload, dict) else []
+            ollama_online = True
+            model_installed = any(
+                str(item.get("name") or item.get("model") or "") == OLLAMA_MODEL
+                for item in models if isinstance(item, dict)
+            )
+    except (httpx.HTTPError, ValueError, TypeError):
+        pass
     return {
         "ok": True,
+        "product": "project_visibility",
         "model": OLLAMA_MODEL,
+        "ollama_online": ollama_online,
+        "model_installed": model_installed,
+        "model_ready": ollama_online and model_installed,
         "github_configured": bool(GITHUB_TOKEN),
         "agent_policy": "V7" if v7_active else "disabled",
     }
