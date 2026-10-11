@@ -397,3 +397,62 @@ re-review, re-test the same project (without losing customer media
 or an already paid transaction). Re-run `tools/v12_payment_qa_smoke.py`
 locally after pulling; restart the running API only when no
 production job is in progress.
+
+
+## V13 — duplicate polling and private preview diagnostic (2026-10-11)
+
+The supplied local Uvicorn log contained **308 HTTP requests**, including
+**202 successful GETs for one older project**. There was also one
+`POST /projects/<old-id>/preview-session` that returned HTTP 502.
+`/auth/session` succeeded, `/imports/brief` succeeded and one new
+project received successful `POST /projects` + `POST /build` responses.
+These two POSTs start work but **do not prove build completion**.
+
+**Cause of needless traffic:** `preview-email-ui.js` contained its own
+3000ms build watcher and a 2500ms unconditional polling loop; the
+post-build payment UI also had an independent 3000ms watcher. Legacy
+watches could overwrite the status of a newly created project with an
+old saved project's status.
+
+**Implemented:**
+- The payment-flow module is the only owner of build polling; its calls
+  update preview/email buttons through `window.pvSyncProjectActions`.
+  The preview/email module no longer creates a new build or pay flow
+  or overrides the V12 quality/payment gate.
+- Foreground UI polling starts conservatively at 5.5 seconds and
+  extends to 12 seconds while waiting for payment. Hidden tabs avoid
+  polling every few seconds; actual workers and Stripe webhooks run
+  independently from browser polling.
+- Only one bootstrap project lookup is used to restore buttons for
+  an already finished project.
+- The preview API now distinguishes repository missing/inaccessible
+  (HTTP 409) from GitHub token failure (503) and temporary GitHub
+  errors (503), instead of masking every scenario as an opaque 502.
+  A missing/revoked private repository is **not** automatically
+  recreated or published.
+- Generated HTML is untrusted. Its preview iframe and served HTML
+  both receive restrictive sandbox policy; customer scripts cannot
+  read the Builder origin's stored login JWT. Referrers are disabled
+  to protect short-lived preview URL tokens.
+
+**Operator-side checks after applying V13:**
+
+```powershell
+cd 'C:\Users\dangr\PROJEKT'
+git pull --ff-only origin main
+.\.venv\Scripts\python.exe tools\v13_preview_poller_smoke.py
+```
+
+After the current build finishes, restart the local API using
+`start-product.ps1 -LocalOnly -EnablePublishing` (with a valid PAT in
+the hidden terminal prompt), then hard refresh
+`http://127.0.0.1:8000/builder.html`. Retry Private preview.
+If the server returns HTTP 409, check the exact project's `repo_name`
+and verify the GitHub repository still exists **and** that the current
+PAT can read it. If HTTP 503, inspect GitHub connectivity and PAT access
+without exposing credentials. A GitHub 404 may reflect either a missing
+private repo or insufficient fine-grained PAT access.
+
+Do not assume a green API health check proves the preview repository
+exists or that the new project completed its build. Never reset,
+re-create or delete customer projects automatically based on polling.
