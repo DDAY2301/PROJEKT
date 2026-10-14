@@ -1,0 +1,65 @@
+name: PV Remote Preview V8
+
+on:
+  workflow_dispatch:
+    inputs:
+      brief_json:
+        description: 'Non-secret project brief JSON (1-8 pages, max 12 KB)'
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pv-preview-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  build-preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install rendering requirements
+        run: pip install -r api/requirements.txt
+      - name: Validate brief and build isolated preview
+        env:
+          PV_BRIEF_JSON: ${{ inputs.brief_json }}
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          text = os.environ["PV_BRIEF_JSON"]
+          if len(text.encode("utf-8")) > 12000:
+              raise SystemExit("Brief exceeds 12 KB.")
+          Path("pv-preview-brief.json").write_text(text, encoding="utf-8")
+          PY
+          python tools/remote_preview_v8.py --brief-file pv-preview-brief.json --output pv-preview-output
+      - name: Validate artifact quality
+        run: |
+          python - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          root = Path("pv-preview-output")
+          manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+          assert manifest["mode"] == "preview_only_no_deploy"
+          assert "index.html" in manifest["pages"]
+          for rel, expected in manifest["files_sha256"].items():
+              actual = hashlib.sha256((root / rel).read_bytes()).hexdigest()
+              assert actual == expected, rel
+          for rel in manifest["pages"]:
+              html = (root / rel).read_text(encoding="utf-8")
+              assert 'assets/site.css' in html
+              assert 'aria-label=' in html
+          print("PV Preview V8 artifact QA PASS")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pv-preview-${{ github.run_id }}
+          path: pv-preview-output/
+          retention-days: 7
+          if-no-files-found: error
