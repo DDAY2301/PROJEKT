@@ -1,0 +1,38 @@
+name: PV Remote Visual QA V8
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        type: choice
+        description: Fixed public website to inspect
+        options: [pv, bloglab]
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  visual-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install browser on hosted runner
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+      - name: Capture desktop and mobile evidence
+        env:
+          PV_VISUAL_TARGET: ${{ inputs.target }}
+        run: node tools/remote_visual_qa_v8.mjs "$PV_VISUAL_TARGET"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pv-visual-qa-${{ github.run_id }}
+          path: pv-visual-qa-output/
+          retention-days: 7
+          if-no-files-found: warn

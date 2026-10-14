@@ -51,6 +51,8 @@ jobs:
           Path("ci-bad.json").unlink()
           print("PV off-host preview worker smoke PASS")
           PY
+      - name: Validate remote Visual QA source
+        run: node --check tools/remote_visual_qa_v8.mjs
       - name: Compile API runtime
         run: >-
           python -m py_compile
