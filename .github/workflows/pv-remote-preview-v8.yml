@@ -1,8 +1,13 @@
 name: PV Remote Preview V8
+run-name: PV Preview V8 ${{ inputs.request_id }}
 
 on:
   workflow_dispatch:
     inputs:
+      request_id:
+        description: 'Stable hexadecimal request identifier for run correlation'
+        type: string
+        required: true
       brief_json:
         description: 'Non-secret project brief JSON (1-8 pages, max 12 KB)'
         type: string
@@ -12,7 +17,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: pv-preview-${{ github.run_id }}
+  group: pv-preview-${{ inputs.request_id }}
   cancel-in-progress: false
 
 jobs:
@@ -29,11 +34,15 @@ jobs:
       - name: Validate brief and build isolated preview
         env:
           PV_BRIEF_JSON: ${{ inputs.brief_json }}
+          PV_REQUEST_ID: ${{ inputs.request_id }}
         run: |
           python - <<'PY'
           import os
           from pathlib import Path
           text = os.environ["PV_BRIEF_JSON"]
+          import re
+          if not re.fullmatch(r"[0-9a-f]{32}", os.environ["PV_REQUEST_ID"]):
+              raise SystemExit("Request ID must be a 32-character lowercase hexadecimal value.")
           if len(text.encode("utf-8")) > 12000:
               raise SystemExit("Brief exceeds 12 KB.")
           Path("pv-preview-brief.json").write_text(text, encoding="utf-8")
