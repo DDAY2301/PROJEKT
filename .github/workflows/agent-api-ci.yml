@@ -17,6 +17,40 @@ jobs:
           python-version: '3.12'
       - name: Install dependencies
         run: pip install -r api/requirements.txt
+      - name: Validate remote PV preview worker
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from tools.remote_preview_v8 import build_preview, _brief
+          brief = {
+              "name": "CI Preview Studio",
+              "language": "sl",
+              "goal": "Modern website preview only",
+              "pages": [
+                  {"slug": "index", "title": "Domov", "purpose": "Uvod", "sections": []},
+                  {"slug": "kontakt", "title": "Kontakt", "purpose": "Kontakt", "sections": []},
+              ],
+          }
+          Path("ci-brief.json").write_text(json.dumps(brief), encoding="utf-8")
+          result = build_preview(Path("ci-brief.json"), Path("ci-preview-site"))
+          assert result["mode"] == "preview_only_no_deploy"
+          assert len(result["pages"]) == 2
+          assert (Path("ci-preview-site")/"index.html").exists()
+          assert (Path("ci-preview-site")/"assets/site.js").exists()
+          bad = {**brief, "pages": [{"slug": "../unsafe", "title": "Bad"}]}
+          Path("ci-bad.json").write_text(json.dumps(bad), encoding="utf-8")
+          try:
+              _brief(Path("ci-bad.json"))
+              raise AssertionError("Unsafe path accepted")
+          except ValueError:
+              pass
+          import shutil
+          shutil.rmtree("ci-preview-site")
+          Path("ci-brief.json").unlink()
+          Path("ci-bad.json").unlink()
+          print("PV off-host preview worker smoke PASS")
+          PY
       - name: Compile API runtime
         run: >-
           python -m py_compile
