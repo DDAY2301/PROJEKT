@@ -27,6 +27,11 @@ async def publish_generated_site(repo_name: str) -> str:
     Returns the deterministic GitHub Pages URL. GitHub may need a short period
     after this call before the site is reachable.
     """
+    # This check must precede *every* GitHub API side effect. Callers include
+    # initial generation, revisions and editor rollbacks.
+    import api.billing as billing
+    billing.assert_publication_authorized(repo_name)
+
     headers = core.github_headers()
     repo_api = f"https://api.github.com/repos/{core.GITHUB_OWNER}/{repo_name}"
 
