@@ -73,7 +73,13 @@ def ensure_billing_schema() -> None:
 
 
 def package_is_configured(package: str) -> bool:
-    return bool(STRIPE_SECRET_KEY and package in PACKAGE_PRICES)
+    """Checkout is enabled only with keys matching the explicit environment."""
+    if package not in PACKAGE_PRICES:
+        return False
+    env = os.getenv("PV_ENV", "development").strip().lower()
+    if env == "production":
+        return STRIPE_SECRET_KEY.startswith("sk_live_") and STRIPE_WEBHOOK_SECRET.startswith("whsec_")
+    return env in {"development", "test"} and STRIPE_SECRET_KEY.startswith("sk_test_")
 
 
 def project_is_paid(project_id: str) -> bool:
@@ -307,7 +313,7 @@ async def billing_config():
     packages: dict[str, dict[str, Any]] = {}
     for name, cfg in PACKAGE_PRICES.items():
         item: dict[str, Any] = {
-            "configured": bool(STRIPE_SECRET_KEY),
+            "configured": package_is_configured(name),
             "currency": cfg["currency"],
             "unit_amount": cfg["unit_amount"],
         }
@@ -320,7 +326,7 @@ async def billing_config():
                 pass
         packages[name] = item
     return {
-        "enabled": bool(STRIPE_SECRET_KEY),
+        "enabled": any(package_is_configured(name) for name in PACKAGE_PRICES),
         "packages": packages,
         "mode": "payment",
         "provider": "stripe",
@@ -341,8 +347,8 @@ async def create_checkout(data: CheckoutIn, user_id: str = Depends(core.current_
         raise HTTPException(404, "Project not found")
 
     package = project["package"]
-    if not STRIPE_SECRET_KEY or package not in PACKAGE_PRICES:
-        raise HTTPException(503, f"Stripe checkout for package {package} is not configured")
+    if not package_is_configured(package):
+        raise HTTPException(503, f"Stripe checkout for package {package} is not safely configured")
     if project_is_paid(project["id"]):
         return {"paid": True, "project_id": project["id"]}
     if project["status"] not in {"ready_for_payment", "payment_pending"} or not project["repo_name"]:
