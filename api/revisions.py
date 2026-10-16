@@ -317,7 +317,7 @@ async def run_revision(project_id: str, revision_id: str, instruction: str) -> N
                 "message": "GitHub Pages deployment is still propagating; source was published successfully.",
             })
 
-        final_status = "ready" if not _severe(issues) else "needs_review"
+        final_status = "ready" if live and not _severe(issues) else "needs_review"
         _set_revision_status(revision_id, final_status)
         with core.db() as con:
             con.execute(
