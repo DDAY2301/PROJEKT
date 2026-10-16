@@ -73,7 +73,13 @@ def ensure_billing_schema() -> None:
 
 
 def package_is_configured(package: str) -> bool:
-    return bool(STRIPE_SECRET_KEY and package in PACKAGE_PRICES)
+    """Checkout is enabled only with keys matching the explicit environment."""
+    if package not in PACKAGE_PRICES:
+        return False
+    env = os.getenv("PV_ENV", "development").strip().lower()
+    if env == "production":
+        return STRIPE_SECRET_KEY.startswith("sk_live_") and STRIPE_WEBHOOK_SECRET.startswith("whsec_")
+    return env in {"development", "test"} and STRIPE_SECRET_KEY.startswith("sk_test_")
 
 
 def project_is_paid(project_id: str) -> bool:
@@ -87,7 +93,50 @@ def project_is_paid(project_id: str) -> bool:
 
 
 def payments_required(project_id: str, package: str) -> bool:
-    return package_is_configured(package) and not project_is_paid(project_id)
+    """A missing Stripe key never makes a commercial package free."""
+    return package in PACKAGE_PRICES and not project_is_paid(project_id)
+
+
+def assert_publication_authorized(repo_name: str) -> str:
+    """Fail-closed authorization for every public GitHub Pages publication path.
+
+    Only a production-mode project with a LIVE Stripe payment, a matching
+    payment record, and a passing release QA may become publicly accessible.
+    Development and Stripe TEST sites stay in private preview only.
+    """
+    if os.getenv("PV_ENV", "development").strip().lower() != "production":
+        raise RuntimeError("Public publication disabled outside PV_ENV=production")
+    if not STRIPE_SECRET_KEY.startswith("sk_live_") or not STRIPE_WEBHOOK_SECRET.startswith("whsec_"):
+        raise RuntimeError("Live Stripe secret and webhook verification are required for public publication")
+    ensure_billing_schema()
+    with core.db() as con:
+        records = con.execute(
+            """SELECT p.id, p.user_id, p.package, p.last_audit_json,
+                      pay.user_id AS payment_user_id, pay.package AS payment_package,
+                      pay.status AS payment_status, pay.stripe_session_id,
+                      pay.stripe_payment_intent, pay.currency
+               FROM projects AS p
+               LEFT JOIN payments AS pay ON pay.project_id=p.id
+               WHERE p.repo_name=?""",
+            (repo_name,),
+        ).fetchall()
+    if len(records) != 1:
+        raise RuntimeError("Public publication requires one unambiguous customer project")
+    row = records[0]
+    if row["package"] not in PACKAGE_PRICES:
+        raise RuntimeError("Unknown commercial package; publication blocked")
+    if (
+        row["payment_status"] != "paid"
+        or row["user_id"] != row["payment_user_id"]
+        or row["package"] != row["payment_package"]
+        or not str(row["stripe_session_id"] or "").startswith("cs_live_")
+        or not str(row["stripe_payment_intent"] or "").startswith("pi_")
+        or str(row["currency"] or "").lower() != PACKAGE_PRICES[row["package"]]["currency"]
+    ):
+        raise RuntimeError("A matching verified LIVE Stripe payment is required before publication")
+    if not _latest_quality_approved(row["last_audit_json"]):
+        raise RuntimeError("Release QA is not approved; public publication blocked")
+    return str(row["id"])
 
 
 def _upsert_payment(
@@ -111,11 +160,11 @@ def _upsert_payment(
               amount_total,currency,status,created_at,updated_at
             ) VALUES(?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(project_id) DO UPDATE SET
-              stripe_session_id=COALESCE(excluded.stripe_session_id,payments.stripe_session_id),
-              stripe_payment_intent=COALESCE(excluded.stripe_payment_intent,payments.stripe_payment_intent),
-              amount_total=COALESCE(excluded.amount_total,payments.amount_total),
-              currency=COALESCE(excluded.currency,payments.currency),
-              status=excluded.status,
+              stripe_session_id=CASE WHEN payments.status='paid' THEN payments.stripe_session_id ELSE COALESCE(excluded.stripe_session_id,payments.stripe_session_id) END,
+              stripe_payment_intent=CASE WHEN payments.status='paid' THEN payments.stripe_payment_intent ELSE COALESCE(excluded.stripe_payment_intent,payments.stripe_payment_intent) END,
+              amount_total=CASE WHEN payments.status='paid' THEN payments.amount_total ELSE COALESCE(excluded.amount_total,payments.amount_total) END,
+              currency=CASE WHEN payments.status='paid' THEN payments.currency ELSE COALESCE(excluded.currency,payments.currency) END,
+              status=CASE WHEN payments.status='paid' THEN 'paid' ELSE excluded.status END,
               updated_at=excluded.updated_at
             """,
             (
@@ -167,8 +216,39 @@ async def _mark_session_paid(session: Any) -> None:
 
     session_id = str(getattr(session, "id", None) or session.get("id") or "") or None
     payment_intent = getattr(session, "payment_intent", None) or session.get("payment_intent")
-    amount_total = getattr(session, "amount_total", None) or session.get("amount_total")
+    amount_total = getattr(session, "amount_total", None)
+    if amount_total is None:
+        amount_total = session.get("amount_total")
     currency = getattr(session, "currency", None) or session.get("currency")
+
+    # A signed event is not sufficient on its own: the Checkout session must
+    # be one that THIS API created and persisted for THIS customer/package.
+    # Never let arbitrary Stripe-account sessions set project payment status.
+    client_reference = getattr(session, "client_reference_id", None) or session.get("client_reference_id")
+    if not session_id or client_reference != project_id:
+        return
+    ensure_billing_schema()
+    with core.db() as con:
+        current = con.execute(
+            """SELECT p.user_id,p.package,p.repo_name,pay.status AS payment_status,
+                      pay.stripe_session_id
+               FROM projects AS p
+               LEFT JOIN payments AS pay ON pay.project_id=p.id
+               WHERE p.id=?""",
+            (project_id,),
+        ).fetchone()
+    if not current or current["user_id"] != user_id or current["package"] != package:
+        return
+    if current["stripe_session_id"] != session_id or current["payment_status"] == "paid":
+        return  # stale/foreign Checkout or duplicate delivery
+    if currency != PACKAGE_PRICES.get(package, {}).get("currency"):
+        return
+    if amount_total is None or int(amount_total) < 0:
+        return
+    if os.getenv("PV_ENV", "development").strip().lower() == "production":
+        if not bool(getattr(session, "livemode", None) or session.get("livemode")):
+            return
+
     _upsert_payment(
         project_id,
         user_id,
@@ -199,11 +279,14 @@ async def _mark_session_paid(session: Any) -> None:
                 )
             return
         with core.db() as con:
-            con.execute(
-                "UPDATE projects SET status='queued',updated_at=? WHERE id=?",
-                (core.now_iso(), project_id),
+            transition = con.execute(
+                """UPDATE projects SET status='queued',updated_at=?
+                   WHERE id=? AND user_id=?
+                     AND status IN ('ready_for_payment','payment_pending','awaiting_payment','failed')""",
+                (core.now_iso(), project_id, user_id),
             )
-        asyncio.create_task(core.generate_project(project_id))
+        if transition.rowcount == 1:
+            asyncio.create_task(core.generate_project(project_id))
 
 
 def _line_item(package: str) -> dict[str, Any]:
@@ -230,7 +313,7 @@ async def billing_config():
     packages: dict[str, dict[str, Any]] = {}
     for name, cfg in PACKAGE_PRICES.items():
         item: dict[str, Any] = {
-            "configured": bool(STRIPE_SECRET_KEY),
+            "configured": package_is_configured(name),
             "currency": cfg["currency"],
             "unit_amount": cfg["unit_amount"],
         }
@@ -243,7 +326,7 @@ async def billing_config():
                 pass
         packages[name] = item
     return {
-        "enabled": bool(STRIPE_SECRET_KEY),
+        "enabled": any(package_is_configured(name) for name in PACKAGE_PRICES),
         "packages": packages,
         "mode": "payment",
         "provider": "stripe",
@@ -264,8 +347,8 @@ async def create_checkout(data: CheckoutIn, user_id: str = Depends(core.current_
         raise HTTPException(404, "Project not found")
 
     package = project["package"]
-    if not STRIPE_SECRET_KEY or package not in PACKAGE_PRICES:
-        raise HTTPException(503, f"Stripe checkout for package {package} is not configured")
+    if not package_is_configured(package):
+        raise HTTPException(503, f"Stripe checkout for package {package} is not safely configured")
     if project_is_paid(project["id"]):
         return {"paid": True, "project_id": project["id"]}
     if project["status"] not in {"ready_for_payment", "payment_pending"} or not project["repo_name"]:
@@ -297,7 +380,7 @@ async def create_checkout(data: CheckoutIn, user_id: str = Depends(core.current_
         create_args["automatic_tax"] = {"enabled": True}
 
     try:
-        session = stripe.checkout.Session.create(**create_args)
+        session = stripe.checkout.Session.create(**create_args, idempotency_key=f"pv-checkout-{project['id']}")
     except Exception as exc:
         raise HTTPException(502, f"Could not create Stripe Checkout session: {str(exc)[:300]}") from exc
 
@@ -333,7 +416,7 @@ async def payment_status(project_id: str, user_id: str = Depends(core.current_us
     return {
         "project_id": project_id,
         "package": project["package"],
-        "required": package_is_configured(project["package"]),
+        "required": project["package"] in PACKAGE_PRICES,
         "ready_for_payment": bool(project["status"] in {"ready_for_payment", "payment_pending"} and project["repo_name"]),
         "paid": bool(payment and payment["status"] == "paid"),
         "payment": dict(payment) if payment else None,

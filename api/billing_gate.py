@@ -104,6 +104,11 @@ def _enforce_build_quota(user_id: str) -> None:
 
 
 def sandbox_payment_bypass(user_id: str) -> bool:
+    # Opt-in only: never allow a production account to bypass the payment UI.
+    if os.getenv("PV_ENV", "development").strip().lower() != "test":
+        return False
+    if os.getenv("PV_ALLOW_TEST_PAYMENT_BYPASS", "0").strip().lower() not in {"1", "true", "yes"}:
+        return False
     if not billing.STRIPE_SECRET_KEY.startswith("sk_test_"):
         return False
     with core.db() as con:
@@ -160,7 +165,7 @@ async def create_project_with_postbuild_payment(
         email = str(account["email"] if account else "").strip().lower()
         benchmark_allowed = email.startswith("pv.loadtest.") and email.endswith("@gmail.com")
     cfg["_benchmark_mode"] = bool(data.benchmark_mode and benchmark_allowed)
-    payment_required = billing.package_is_configured(data.package) and not bypass
+    payment_required = data.package in billing.PACKAGE_PRICES and not bypass
 
     with core.db() as con:
         con.execute(

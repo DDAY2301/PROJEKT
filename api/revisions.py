@@ -295,6 +295,19 @@ async def run_revision(project_id: str, revision_id: str, instruction: str) -> N
             files, media_files, config, project_id, revision_id
         )
 
+        # Never push a failed revision to a repo that GitHub Pages might
+        # automatically redeploy. A failed visual/technical gate leaves the
+        # last verified live version untouched.
+        from api.enhanced_runtime import _quality_gate_passed
+        if not _quality_gate_passed(issues, visual_report):
+            _set_revision_status(revision_id, "needs_review")
+            _set_project_status(project_id, "needs_review")
+            return
+
+        # Authorization happens before writing to the source repository;
+        # changing main can itself trigger a Pages deployment.
+        import api.billing as billing
+        billing.assert_publication_authorized(repo_name)
         _set_revision_status(revision_id, "publishing")
         _set_project_status(project_id, "publishing")
         if hasattr(core, "github_replace_bundle"):
@@ -317,7 +330,7 @@ async def run_revision(project_id: str, revision_id: str, instruction: str) -> N
                 "message": "GitHub Pages deployment is still propagating; source was published successfully.",
             })
 
-        final_status = "ready" if not _severe(issues) else "needs_review"
+        final_status = "ready" if live and not _severe(issues) else "needs_review"
         _set_revision_status(revision_id, final_status)
         with core.db() as con:
             con.execute(

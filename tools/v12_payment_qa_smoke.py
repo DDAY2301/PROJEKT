@@ -78,12 +78,19 @@ async def checks() -> None:
                     assert "QA" in str(exc.detail)
             stripe_create.assert_not_called()
 
+            # Simulate a persisted Checkout session, not an arbitrary account event.
+            billing._upsert_payment(
+                "unit-test-project", "unit-test-user", "Start",
+                status="pending", session_id="cs_test_fake_unique",
+            )
+
             # A webhook may arrive for an *earlier* Checkout session. The paid
             # record must be preserved but publishing must never be launched.
             session = {
                 "id": "cs_test_fake_unique",
                 "metadata": {"project_id": "unit-test-project", "user_id": "unit-test-user", "package": "Start"},
                 "payment_status": "paid",
+                "client_reference_id": "unit-test-project",
                 "payment_intent": "pi_test_fake",
                 "amount_total": 49000,
                 "currency": "eur",
