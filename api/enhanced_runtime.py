@@ -448,19 +448,16 @@ async def _publish_existing_project(project_id: str, row: Any, audit: dict[str, 
     try:
         billing.assert_publication_authorized(repo_name)
     except RuntimeError as exc:
-        issues.append({
-            "severity": "high",
-            "code": "PUBLICATION_BLOCKED",
-            "file": "",
-            "message": str(exc)[:500],
-        })
+        # A billing/hosting configuration fault is not a QA failure. Keep the
+        # approved source intact so a later retry can publish without a rebuild.
+        logger.warning("Publication blocked project=%s: %s", project_id, str(exc)[:300])
         with core.db() as con:
             con.execute(
                 "UPDATE projects SET status='needs_review',last_audit_json=?,updated_at=? WHERE id=?",
                 (_audit_payload(
                     issues, visual_report, repository_ready=True,
                     public_url=None, public_live=False, uploaded_images=uploaded_images,
-                    extra={"payment_required": True, "payment_stage": "blocked", "originality": audit.get("originality") or {}},
+                    extra={"payment_required": True, "payment_stage": "blocked", "publish_action_required": "billing_configuration", "publication_blocker": str(exc)[:500], "originality": audit.get("originality") or {}},
                 ), core.now_iso(), project_id),
             )
         return
