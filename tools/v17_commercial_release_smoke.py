@@ -10,6 +10,11 @@ import tempfile
 from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from api import billing, billing_gate, enhanced_runtime, main as core, pages_publish
 
