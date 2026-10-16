@@ -63,7 +63,7 @@ jobs:
           api/preview.py api/notifications.py api/handoff_runtime.py
           api/model_router.py api/resource_guard.py api/repo_map.py api/deep_static_qa.py api/design_critic.py api/design_prompt_v3.py
           api/source_editor.py api/site_import.py api/brief_import.py api/image_studio.py api/autonomous_supervisor.py api/production_queue.py api/production_lifecycle.py api/capabilities.py
-          api/server.py api/preflight.py api/create_test_user.py tools/production_load_test.py tools/diagnose_load_test.py tools/v7_policy_smoke.py tools/v8_design_cleanup_smoke.py tools/v9_resource_smoke.py tools/v10_safe_url_smoke.py tools/v11_auth_publish_design_smoke.py tools/v12_payment_qa_smoke.py tools/v13_preview_poller_smoke.py tools/v15_studio_rotation_smoke.py
+          api/server.py api/preflight.py api/create_test_user.py tools/production_load_test.py tools/diagnose_load_test.py tools/v7_policy_smoke.py tools/v8_design_cleanup_smoke.py tools/v9_resource_smoke.py tools/v10_safe_url_smoke.py tools/v11_auth_publish_design_smoke.py tools/v12_payment_qa_smoke.py tools/v13_preview_poller_smoke.py tools/v15_studio_rotation_smoke.py tools/v17_commercial_release_smoke.py
       - name: Import complete server
         env:
           APP_SECRET: ci-only-secret
@@ -154,6 +154,11 @@ jobs:
         run: |
           python tools/v12_payment_qa_smoke.py
           node --check dist/assets/payment-flow-v2.js
+      - name: Validate V17 fail-closed publication and verified-live status
+        env:
+          APP_SECRET: ci-only-long-secret-for-v17-commercial-tests
+          VISUAL_QA_VISION: 'false'
+        run: python tools/v17_commercial_release_smoke.py
       - name: Validate V13 single polling owner and isolated private preview
         env:
           APP_SECRET: ci-only-secret
