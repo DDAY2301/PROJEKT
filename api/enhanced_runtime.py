@@ -95,12 +95,9 @@ def repo_name_for(config: dict, project_id: str = "") -> str:
 
 
 def _sandbox_payment_bypass(user_id: str) -> bool:
-    if not billing.STRIPE_SECRET_KEY.startswith("sk_test_"):
-        return False
-    with core.db() as con:
-        row = con.execute("SELECT email FROM users WHERE id=?", (user_id,)).fetchone()
-    email = str(row["email"] if row else "").strip().lower()
-    return email in TEST_BYPASS_EMAILS
+    # Use the same explicitly opted-in TEST-only bypass as the API route.
+    from api.billing_gate import sandbox_payment_bypass
+    return sandbox_payment_bypass(user_id)
 
 
 def _inject_uploaded_image_metadata(project_id: str, config: dict) -> list[dict[str, Any]]:
@@ -446,6 +443,28 @@ async def _publish_existing_project(project_id: str, row: Any, audit: dict[str, 
     visual_report = dict(audit.get("visual_qa") or {})
     uploaded_images = int(audit.get("uploaded_images") or 0)
 
+    # Billing/QA authorization is enforced here and again in the shared
+    # publisher, so a nonstandard caller cannot accidentally publish for free.
+    try:
+        billing.assert_publication_authorized(repo_name)
+    except RuntimeError as exc:
+        issues.append({
+            "severity": "high",
+            "code": "PUBLICATION_BLOCKED",
+            "file": "",
+            "message": str(exc)[:500],
+        })
+        with core.db() as con:
+            con.execute(
+                "UPDATE projects SET status='needs_review',last_audit_json=?,updated_at=? WHERE id=?",
+                (_audit_payload(
+                    issues, visual_report, repository_ready=True,
+                    public_url=None, public_live=False, uploaded_images=uploaded_images,
+                    extra={"payment_required": True, "payment_stage": "blocked", "originality": audit.get("originality") or {}},
+                ), core.now_iso(), project_id),
+            )
+        return
+
     set_status(project_id, "publishing")
     try:
         public_url = await publish_generated_site(repo_name)
@@ -485,7 +504,7 @@ async def _publish_existing_project(project_id: str, row: Any, audit: dict[str, 
             "message": "GitHub Pages was enabled but the public edge is still propagating.",
         })
 
-    final_status = "ready" if not _severe(issues) else "needs_review"
+    final_status = "ready" if live and not _severe(issues) else "needs_review"
     with core.db() as con:
         con.execute(
             "UPDATE projects SET status=?,last_audit_json=?,updated_at=? WHERE id=?",
@@ -521,7 +540,7 @@ async def generate_project_observable(project_id: str):
         if _cancel_checkpoint(project_id, "preparing"):
             return
         bypass = _sandbox_payment_bypass(str(row["user_id"]))
-        stripe_required = billing.package_is_configured(config.get("package", "")) and not bypass
+        stripe_required = config.get("package", "") in billing.PACKAGE_PRICES and not bypass
 
         # Payment/webhook resume path: if the site was already generated and held
         # for payment, never regenerate it. Publish the exact approved repository.
