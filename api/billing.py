@@ -87,7 +87,50 @@ def project_is_paid(project_id: str) -> bool:
 
 
 def payments_required(project_id: str, package: str) -> bool:
-    return package_is_configured(package) and not project_is_paid(project_id)
+    """A missing Stripe key never makes a commercial package free."""
+    return package in PACKAGE_PRICES and not project_is_paid(project_id)
+
+
+def assert_publication_authorized(repo_name: str) -> str:
+    """Fail-closed authorization for every public GitHub Pages publication path.
+
+    Only a production-mode project with a LIVE Stripe payment, a matching
+    payment record, and a passing release QA may become publicly accessible.
+    Development and Stripe TEST sites stay in private preview only.
+    """
+    if os.getenv("PV_ENV", "development").strip().lower() != "production":
+        raise RuntimeError("Public publication disabled outside PV_ENV=production")
+    if not STRIPE_SECRET_KEY.startswith("sk_live_") or not STRIPE_WEBHOOK_SECRET.startswith("whsec_"):
+        raise RuntimeError("Live Stripe secret and webhook verification are required for public publication")
+    ensure_billing_schema()
+    with core.db() as con:
+        records = con.execute(
+            """SELECT p.id, p.user_id, p.package, p.last_audit_json,
+                      pay.user_id AS payment_user_id, pay.package AS payment_package,
+                      pay.status AS payment_status, pay.stripe_session_id,
+                      pay.stripe_payment_intent, pay.currency
+               FROM projects AS p
+               LEFT JOIN payments AS pay ON pay.project_id=p.id
+               WHERE p.repo_name=?""",
+            (repo_name,),
+        ).fetchall()
+    if len(records) != 1:
+        raise RuntimeError("Public publication requires one unambiguous customer project")
+    row = records[0]
+    if row["package"] not in PACKAGE_PRICES:
+        raise RuntimeError("Unknown commercial package; publication blocked")
+    if (
+        row["payment_status"] != "paid"
+        or row["user_id"] != row["payment_user_id"]
+        or row["package"] != row["payment_package"]
+        or not str(row["stripe_session_id"] or "").startswith("cs_live_")
+        or not str(row["stripe_payment_intent"] or "").startswith("pi_")
+        or str(row["currency"] or "").lower() != PACKAGE_PRICES[row["package"]]["currency"]
+    ):
+        raise RuntimeError("A matching verified LIVE Stripe payment is required before publication")
+    if not _latest_quality_approved(row["last_audit_json"]):
+        raise RuntimeError("Release QA is not approved; public publication blocked")
+    return str(row["id"])
 
 
 def _upsert_payment(
@@ -333,7 +376,7 @@ async def payment_status(project_id: str, user_id: str = Depends(core.current_us
     return {
         "project_id": project_id,
         "package": project["package"],
-        "required": package_is_configured(project["package"]),
+        "required": project["package"] in PACKAGE_PRICES,
         "ready_for_payment": bool(project["status"] in {"ready_for_payment", "payment_pending"} and project["repo_name"]),
         "paid": bool(payment and payment["status"] == "paid"),
         "payment": dict(payment) if payment else None,
