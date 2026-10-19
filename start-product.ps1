@@ -118,6 +118,20 @@ if (-not $ollamaOk) {
 }
 $tags = Invoke-RestMethod -Uri "http://127.0.0.1:11434/api/tags" -Method Get -TimeoutSec 5
 $models = @($tags.models | ForEach-Object { $_.name })
+# Use the newest *already installed* suitable model. Never silently download a
+# larger model or override an explicit -Model choice on a customer's host.
+if (-not $PSBoundParameters.ContainsKey('Model') -and $env:PV_LOCAL_MODEL_AUTOSELECT -ne '0') {
+  $candidateModels = if ($systemRamGB -ge 24) { @('qwen3.5:9b','qwen3.5:4b','qwen2.5-coder:7b') }
+    elseif ($systemRamGB -ge 12) { @('qwen3.5:4b','qwen2.5-coder:7b') }
+    else { @('qwen3.5:2b','qwen2.5-coder:7b') }
+  foreach ($candidate in $candidateModels) {
+    if ($models -contains $candidate) {
+      $Model = $candidate
+      Write-Host "Adaptive local model selected: $Model (RAM $systemRamGB GB)" -ForegroundColor Green
+      break
+    }
+  }
+}
 if ($models -notcontains $Model) {
   Write-Host "Downloading local model $Model ..."
   & ollama pull $Model
