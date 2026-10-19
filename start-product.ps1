@@ -69,6 +69,9 @@ if ($LocalOnly -and -not $PSBoundParameters.ContainsKey('Model') -and $env:PV_LO
     foreach ($localCandidate in $localPreferred) {
       if ($localNames -contains $localCandidate) { $Model = $localCandidate; break }
     }
+    if ($Model -ne 'qwen2.5-coder:7b' -and -not $env:OLLAMA_FALLBACK_MODELS -and $localNames -contains 'qwen2.5-coder:7b') {
+      $env:OLLAMA_FALLBACK_MODELS = 'qwen2.5-coder:7b'
+    }
   } catch { Write-Host 'Ollama inventory unavailable; preserving original local model choice.' -ForegroundColor DarkGray }
 }
 # Local-only mode is safe for diagnostics. It does not require a GitHub PAT,
@@ -146,6 +149,9 @@ if (-not $PSBoundParameters.ContainsKey('Model') -and $env:PV_LOCAL_MODEL_AUTOSE
       break
     }
   }
+}
+if ($Model -ne 'qwen2.5-coder:7b' -and -not $env:OLLAMA_FALLBACK_MODELS -and $models -contains 'qwen2.5-coder:7b') {
+  $env:OLLAMA_FALLBACK_MODELS = 'qwen2.5-coder:7b'
 }
 if ($models -notcontains $Model) {
   Write-Host "Downloading local model $Model ..."
