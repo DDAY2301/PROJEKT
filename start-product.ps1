@@ -56,6 +56,24 @@ if (Get-Command git -ErrorAction SilentlyContinue) {
   Write-Host "[1/6] Git is not on PATH - continuing with local files."
 }
 
+# Keep -LocalOnly usable with already installed newer local models as well.
+# No downloads are triggered by this automatic selection.
+if ($LocalOnly -and -not $PSBoundParameters.ContainsKey('Model') -and $env:PV_LOCAL_MODEL_AUTOSELECT -ne '0') {
+  try {
+    $localRamGb = [math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 1)
+    $localTags = Invoke-RestMethod -Uri 'http://127.0.0.1:11434/api/tags' -Method Get -TimeoutSec 3
+    $localNames = @($localTags.models | ForEach-Object { $_.name })
+    $localPreferred = if ($localRamGb -ge 24) { @('qwen3.5:9b','qwen3.5:4b') }
+      elseif ($localRamGb -ge 12) { @('qwen3.5:4b') }
+      else { @('qwen3.5:2b') }
+    foreach ($localCandidate in $localPreferred) {
+      if ($localNames -contains $localCandidate) { $Model = $localCandidate; break }
+    }
+    if ($Model -ne 'qwen2.5-coder:7b' -and -not $env:OLLAMA_FALLBACK_MODELS -and $localNames -contains 'qwen2.5-coder:7b') {
+      $env:OLLAMA_FALLBACK_MODELS = 'qwen2.5-coder:7b'
+    }
+  } catch { Write-Host 'Ollama inventory unavailable; preserving original local model choice.' -ForegroundColor DarkGray }
+}
 # Local-only mode is safe for diagnostics. It does not require a GitHub PAT,
 # public DNS or a random trycloudflare.com URL; no customer repos are published.
 if ($LocalOnly) {
@@ -118,6 +136,23 @@ if (-not $ollamaOk) {
 }
 $tags = Invoke-RestMethod -Uri "http://127.0.0.1:11434/api/tags" -Method Get -TimeoutSec 5
 $models = @($tags.models | ForEach-Object { $_.name })
+# Use the newest *already installed* suitable model. Never silently download a
+# larger model or override an explicit -Model choice on a customer's host.
+if (-not $PSBoundParameters.ContainsKey('Model') -and $env:PV_LOCAL_MODEL_AUTOSELECT -ne '0') {
+  $candidateModels = if ($systemRamGB -ge 24) { @('qwen3.5:9b','qwen3.5:4b','qwen2.5-coder:7b') }
+    elseif ($systemRamGB -ge 12) { @('qwen3.5:4b','qwen2.5-coder:7b') }
+    else { @('qwen3.5:2b','qwen2.5-coder:7b') }
+  foreach ($candidate in $candidateModels) {
+    if ($models -contains $candidate) {
+      $Model = $candidate
+      Write-Host "Adaptive local model selected: $Model (RAM $systemRamGB GB)" -ForegroundColor Green
+      break
+    }
+  }
+}
+if ($Model -ne 'qwen2.5-coder:7b' -and -not $env:OLLAMA_FALLBACK_MODELS -and $models -contains 'qwen2.5-coder:7b') {
+  $env:OLLAMA_FALLBACK_MODELS = 'qwen2.5-coder:7b'
+}
 if ($models -notcontains $Model) {
   Write-Host "Downloading local model $Model ..."
   & ollama pull $Model
@@ -133,7 +168,8 @@ $experts = @(
     Where-Object {
       $_ -match '(?i)KAT-Coder-V2\.5-Dev' -or
       $_ -match '(?i)Qwen_Qwen3\.6-35B-A3B' -or
-      $_ -match '(?i)qwen3\.6:35b-a3b-coding'
+      $_ -match '(?i)qwen3\.6:35b-a3b-coding' -or
+      $_ -match '(?i)qwen3\.8:(27b|latest)'
     } |
     Select-Object -Unique
 )

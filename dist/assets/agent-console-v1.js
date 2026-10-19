@@ -45,7 +45,7 @@
       .agent-refresh{border:1px solid rgba(255,255,255,.15);border-radius:.55rem;background:rgba(255,255,255,.04);color:#fff;padding:.38rem .5rem;font-size:.58rem;font-weight:850;cursor:pointer}
       .agent-summary{display:grid;grid-template-columns:1fr 1fr;gap:.42rem;margin-top:.7rem}.agent-metric{padding:.55rem;border:1px solid rgba(255,255,255,.08);border-radius:.65rem;background:rgba(255,255,255,.025)}.agent-metric span{display:block;color:#789188;font-size:.53rem;text-transform:uppercase;letter-spacing:.06em}.agent-metric strong{display:block;margin-top:.13rem;color:var(--lime);font-size:.67rem;word-break:break-word}
       .agent-runtime{display:flex;gap:.3rem;flex-wrap:wrap;margin-top:.6rem}.agent-pill{padding:.28rem .4rem;border-radius:999px;background:rgba(255,255,255,.06);color:#9eb3aa;font-size:.52rem;font-weight:800}.agent-pill.ok{background:rgba(217,255,101,.1);color:var(--lime)}
-      .agent-features{margin-top:.65rem;padding-top:.6rem;border-top:1px solid rgba(255,255,255,.08);color:#b7c8c1;font-size:.57rem;line-height:1.5}.agent-error{margin-top:.65rem;color:#ffb2b2;font-size:.6rem;white-space:pre-wrap}
+      .agent-model-list{display:grid;gap:.3rem;margin-top:.4rem}.agent-model-row{display:flex;justify-content:space-between;gap:.5rem;padding:.38rem .45rem;border:1px solid rgba(255,255,255,.08);border-radius:.5rem;font-size:.55rem}.agent-model-row b{font-weight:850;color:#fff;overflow-wrap:anywhere}.agent-model-status{flex-shrink:0;color:#96aea5;font-size:.51rem}.agent-model-status.running{color:var(--lime)}.agent-features{margin-top:.65rem;padding-top:.6rem;border-top:1px solid rgba(255,255,255,.08);color:#b7c8c1;font-size:.57rem;line-height:1.5}.agent-error{margin-top:.65rem;color:#ffb2b2;font-size:.6rem;white-space:pre-wrap}
       @media(max-width:1220px){.agent-console{grid-column:auto}}@media(max-width:520px){.agent-summary{grid-template-columns:1fr}}
     `;document.head.appendChild(s);
   }
@@ -59,6 +59,9 @@
     const auth=$('authState'); if(auth)new MutationObserver(scheduleRefresh).observe(auth,{childList:true,subtree:true});
     const api=$('apiState'); if(api)new MutationObserver(scheduleRefresh).observe(api,{childList:true,subtree:true});
     setTimeout(() => load(true),500);
+  }
+  function escapeHtml(value){
+    return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
   }
   function runtimeState(value){
     if(typeof value==='boolean') return {active:value,label:value?'ON':'OFF'};
@@ -80,11 +83,17 @@
     lastLoadedAt = Date.now();
     body.innerHTML='<div class="agent-error">Preverjam lokalni agent …</div>';
     try{
-      const [caps,models,supervisor,preflight]=await Promise.all([get('/agent/capabilities'),get('/agent/models'),get('/agent/supervisor'),get('/agent/preflight')]);
+      const [caps,models,supervisor,preflight,localModels]=await Promise.all([get('/agent/capabilities'),get('/agent/models'),get('/agent/supervisor'),get('/agent/preflight'),get('/agent/models/local').catch(()=>null)]);
       const runtime=caps.runtime||{};const features=caps.features||{};
       const available=Object.entries(runtime).filter(([,v])=>runtimeState(v).active);
       const enabled=Object.entries(features).filter(([,v])=>Boolean(v));
       const providers=[...new Set((models.backends||[]).map(x=>x.provider))];
+      const inventory=Array.isArray(localModels?.models)?localModels.models:[];
+      const localPanel=localModels?`
+        <div class="agent-features"><strong>Lokalni Ollama · ${localModels.ollama_online?'dosegljiv':'nedosegljiv'}</strong> · izbrani model: ${escapeHtml(localModels.active_model||'—')}. Nameščen model še ni nujno naložen v RAM ali uspešno uporabljen.</div>
+        <div class="agent-model-list">${inventory.slice(0,20).map(m=>`<div class="agent-model-row"><b>${escapeHtml(m.name)}</b><span class="agent-model-status ${m.loaded?'running':''}">${m.loaded?'V RAM-u':m.installed?'Nameščen':'Ni nameščen'}${m.selected?' · IZBRAN':''}</span></div>`).join('')||'<div class="agent-error">Ni zaznanih lokalnih modelov.</div>'}</div>
+        <div class="agent-features">Zadnji dejanski klici: ${(localModels.recent||[]).slice(0,5).map(x=>`${escapeHtml(x.model)} · ${x.status==='ok'?'OK':'NAPAKA'} · ${Number(x.latency_ms)||0} ms`).join(' · ')||'še ni podatkov'}</div>
+        <div class="agent-features">Za namestitev na Windows zaženi v mapi PROJEKT: <code>.\\install-local-models.ps1</code>. Večji modeli se ne prenesejo samodejno.</div>` : '<div class="agent-features">Podatki o lokalnih modelih še niso dosegljivi.</div>';
       body.innerHTML=`
         <div class="agent-summary">
           <div class="agent-metric"><span>Fast model</span><strong>${models.primary||caps.agent?.primary_model||'—'}</strong></div>
@@ -101,7 +110,7 @@
         <div class="agent-runtime">${Object.entries(runtime).map(([name,val])=>{const state=runtimeState(val);return `<span class="agent-pill ${state.active?'ok':''}">${name} · ${state.label}</span>`}).join('')}</div>
         <div class="agent-features">${enabled.map(([name])=>name.replaceAll('_',' ')).join(' · ')}</div>
         <div class="agent-features">supervisor: ${Object.entries(supervisor.decision_counts||{}).map(([k,v])=>`${k} ${v}`).join(' · ')||'no decisions yet'} · model ${supervisor.runtime?.model_online?'online':'offline'} · disk ${supervisor.runtime?.disk_free_gb??'—'} GB</div>
-        <div class="agent-features">${preflight.blockers?.length ? 'BLOCKERS: '+preflight.blockers.join(' · ') : 'preflight OK'}${preflight.warnings?.length ? ' · warnings: '+preflight.warnings.join(' · ') : ''}</div>`;
+        <div class="agent-features">${preflight.blockers?.length ? 'BLOCKERS: '+preflight.blockers.join(' · ') : 'preflight OK'}${preflight.warnings?.length ? ' · warnings: '+preflight.warnings.join(' · ') : ''}</div>${localPanel}`;
     }catch(err){body.textContent = String(err.message || err);}
     finally{inflight = false;}
   }

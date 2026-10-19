@@ -454,3 +454,108 @@ async def model_summary(user_id: str = Depends(core.current_user)):
 
 
 core.ollama = routed_ollama
+
+
+# The local inventory is read-only: reporting models never installs or starts one.
+# Installed != loaded into RAM != successfully used in a real agent call.
+LOCAL_MODEL_RECOMMENDATIONS = (
+    {"name": "qwen3.5:2b", "min_ram_gb": 8, "role": "compact", "description": "Small local fallback for low-memory hosts"},
+    {"name": "qwen3.5:4b", "min_ram_gb": 12, "role": "balanced", "description": "Recommended fast multimodal agent model for 16 GB PCs"},
+    {"name": "qwen3.5:9b", "min_ram_gb": 24, "role": "expert", "description": "Higher-quality local reasoning on hosts with more RAM"},
+    {"name": "qwen3.8:27b", "min_ram_gb": 40, "role": "ultra-expert", "description": "Latest high-end agentic model; not suitable for a 16 GB host"},
+    {"name": "qwen2.5-coder:7b", "min_ram_gb": 12, "role": "legacy-coder", "description": "Existing coding fallback; retained for compatibility"},
+)
+
+
+def _inventory_names(payload: Any) -> dict[str, dict[str, Any]]:
+    """Normalize the documented Ollama /api/tags and /api/ps schemas."""
+    if not isinstance(payload, dict):
+        return {}
+    values: dict[str, dict[str, Any]] = {}
+    for entry in payload.get("models") or []:
+        if not isinstance(entry, dict):
+            continue
+        name = str(entry.get("name") or entry.get("model") or "").strip()
+        if not name:
+            continue
+        values[name] = {
+            "size_bytes": max(0, int(entry.get("size") or 0)),
+            "size_vram_bytes": max(0, int(entry.get("size_vram") or 0)),
+            "parameters": str((entry.get("details") or {}).get("parameter_size") or ""),
+            "quantization": str((entry.get("details") or {}).get("quantization_level") or ""),
+        }
+    return values
+
+
+def _model_catalog(installed: dict, loaded: dict, *, active: str) -> list[dict[str, Any]]:
+    recommendations = {r["name"]: r for r in LOCAL_MODEL_RECOMMENDATIONS}
+    results = []
+    for name in sorted(set(installed) | set(loaded) | set(recommendations) | {active}):
+        if not name:
+            continue
+        meta = installed.get(name) or loaded.get(name) or {}
+        recommended = recommendations.get(name, {})
+        results.append({
+            "name": name,
+            "installed": name in installed,
+            "loaded": name in loaded,
+            "selected": name == active,
+            "size_bytes": meta.get("size_bytes", 0),
+            "size_vram_bytes": (loaded.get(name) or {}).get("size_vram_bytes", 0),
+            "parameters": meta.get("parameters", ""),
+            "quantization": meta.get("quantization", ""),
+            "role": recommended.get("role", "other"),
+            "description": recommended.get("description", ""),
+            "min_ram_gb": recommended.get("min_ram_gb"),
+        })
+    return results
+
+
+@core.app.get("/agent/models/local")
+async def local_model_runtime(user_id: str = Depends(core.current_user)):
+    """Read-only inventory for the authenticated Builder console.
+
+    This endpoint does not call inference, pull models, expose credentials or
+    pretend that an installed model is currently running.
+    """
+    del user_id
+    installed: dict[str, dict[str, Any]] = {}
+    loaded: dict[str, dict[str, Any]] = {}
+    online = False
+    # Ollama can be stopped while the API and website remain accessible.
+    try:
+        async with httpx.AsyncClient(timeout=2.5) as client:
+            tags, ps = await asyncio.gather(
+                client.get(f"{core.OLLAMA_BASE_URL.rstrip('/')}/api/tags"),
+                client.get(f"{core.OLLAMA_BASE_URL.rstrip('/')}/api/ps"),
+                return_exceptions=True,
+            )
+        if isinstance(tags, httpx.Response) and tags.status_code == 200:
+            installed = _inventory_names(tags.json())
+            online = True
+        if isinstance(ps, httpx.Response) and ps.status_code == 200:
+            loaded = _inventory_names(ps.json())
+    except (httpx.HTTPError, ValueError):
+        pass
+
+    try:
+        ensure_schema()
+        with core.db() as con:
+            recent = [
+                dict(row) for row in con.execute(
+                    "SELECT provider,model,status,latency_ms,created_at "
+                    "FROM agent_model_runs ORDER BY created_at DESC LIMIT 8"
+                ).fetchall()
+            ]
+    except Exception:
+        # Inventory must remain available when the local telemetry DB is busy.
+        recent = []
+
+    active = _fast_models()[0] if _fast_models() else ""
+    return {
+        "ollama_online": online,
+        "active_model": active,
+        "models": _model_catalog(installed, loaded, active=active),
+        "recent": recent,
+        "note": "Installed models are not necessarily loaded or proven successful.",
+    }

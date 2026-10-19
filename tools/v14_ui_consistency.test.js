@@ -33,10 +33,12 @@ assert.ok(readiness.includes('Pripravljenost briefa'));
 assert.ok(readiness.includes('Ne pomeni, da je bila stran izdelana ali objavljena.'));
 assert.ok(html.includes('Potek izdelave izbranega projekta'));
 assert.ok(agent.includes('lastLoadedSignature'));
+assert.ok(agent.includes("get('/agent/models/local')"), 'Local Agent Engine must display real Ollama model state');
+assert.ok(agent.includes('escapeHtml(m.name)'), 'External model names must be safely escaped');
 assert.ok(agent.includes('Date.now() - lastLoadedAt > 120000'));
 assert.ok(!agent.includes('setTimeout(load,80)'), 'Health polling must not trigger preflight repeatedly');
 assert.ok(preview.includes('if (activeProjectId && activeProjectId !== id) return;'));
-assert.ok(html.includes('assets/agent-console-v1.js?v=20261011-v14'));
+assert.ok(html.includes('assets/agent-console-v1.js?v=20261019-local-models'));
 assert.ok(html.includes('assets/payment-flow-v2.js?v=20261011-v14'));
 
 const calls = [];
