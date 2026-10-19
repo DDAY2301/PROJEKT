@@ -56,6 +56,21 @@ if (Get-Command git -ErrorAction SilentlyContinue) {
   Write-Host "[1/6] Git is not on PATH - continuing with local files."
 }
 
+# Keep -LocalOnly usable with already installed newer local models as well.
+# No downloads are triggered by this automatic selection.
+if ($LocalOnly -and -not $PSBoundParameters.ContainsKey('Model') -and $env:PV_LOCAL_MODEL_AUTOSELECT -ne '0') {
+  try {
+    $localRamGb = [math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 1)
+    $localTags = Invoke-RestMethod -Uri 'http://127.0.0.1:11434/api/tags' -Method Get -TimeoutSec 3
+    $localNames = @($localTags.models | ForEach-Object { $_.name })
+    $localPreferred = if ($localRamGb -ge 24) { @('qwen3.5:9b','qwen3.5:4b') }
+      elseif ($localRamGb -ge 12) { @('qwen3.5:4b') }
+      else { @('qwen3.5:2b') }
+    foreach ($localCandidate in $localPreferred) {
+      if ($localNames -contains $localCandidate) { $Model = $localCandidate; break }
+    }
+  } catch { Write-Host 'Ollama inventory unavailable; preserving original local model choice.' -ForegroundColor DarkGray }
+}
 # Local-only mode is safe for diagnostics. It does not require a GitHub PAT,
 # public DNS or a random trycloudflare.com URL; no customer repos are published.
 if ($LocalOnly) {
