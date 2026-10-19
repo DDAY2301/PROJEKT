@@ -1,5 +1,5 @@
 param(
-  [ValidateSet('auto','compact','balanced','expert')]
+  [ValidateSet('auto','compact','balanced','expert','ultra')]
   [string]$Profile = 'auto'
 )
 
@@ -13,7 +13,8 @@ if ($ramGb -le 0) { throw 'Could not determine installed RAM. Select a model man
 
 $profileChosen = $Profile
 if ($Profile -eq 'auto') {
-  if ($ramGb -ge 24) { $profileChosen = 'expert' }
+  if ($ramGb -ge 40) { $profileChosen = 'ultra' }
+  elseif ($ramGb -ge 24) { $profileChosen = 'expert' }
   elseif ($ramGb -ge 12) { $profileChosen = 'balanced' }
   elseif ($ramGb -ge 8) { $profileChosen = 'compact' }
   else { throw 'Less than 8 GB RAM: no new automatic model installation is recommended.' }
@@ -22,6 +23,7 @@ $spec = switch ($profileChosen) {
   'compact'  { @{ Name='qwen3.5:2b'; MinRam=8;  MinDisk=5 } }
   'balanced' { @{ Name='qwen3.5:4b'; MinRam=12; MinDisk=7 } }
   'expert'   { @{ Name='qwen3.5:9b'; MinRam=24; MinDisk=12 } }
+  'ultra'    { @{ Name='qwen3.8:27b'; MinRam=40; MinDisk=25 } }
 }
 if ($ramGb -lt $spec.MinRam) {
   throw "Selected model $($spec.Name) requires at least $($spec.MinRam) GB host RAM for this Project Visibility safety profile."
