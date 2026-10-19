@@ -462,6 +462,7 @@ LOCAL_MODEL_RECOMMENDATIONS = (
     {"name": "qwen3.5:2b", "min_ram_gb": 8, "role": "compact", "description": "Small local fallback for low-memory hosts"},
     {"name": "qwen3.5:4b", "min_ram_gb": 12, "role": "balanced", "description": "Recommended fast multimodal agent model for 16 GB PCs"},
     {"name": "qwen3.5:9b", "min_ram_gb": 24, "role": "expert", "description": "Higher-quality local reasoning on hosts with more RAM"},
+    {"name": "qwen3.8:27b", "min_ram_gb": 40, "role": "ultra-expert", "description": "Latest high-end agentic model; not suitable for a 16 GB host"},
     {"name": "qwen2.5-coder:7b", "min_ram_gb": 12, "role": "legacy-coder", "description": "Existing coding fallback; retained for compatibility"},
 )
 
