@@ -91,8 +91,9 @@
       const inventory=Array.isArray(localModels?.models)?localModels.models:[];
       const localPanel=localModels?`
         <div class="agent-features"><strong>Lokalni Ollama · ${localModels.ollama_online?'dosegljiv':'nedosegljiv'}</strong> · izbrani model: ${escapeHtml(localModels.active_model||'—')}. Nameščen model še ni nujno naložen v RAM ali uspešno uporabljen.</div>
-        <div class="agent-model-list">${inventory.filter(m=>m.installed||m.selected).slice(0,14).map(m=>`<div class="agent-model-row"><b>${escapeHtml(m.name)}</b><span class="agent-model-status ${m.loaded?'running':''}">${m.loaded?'V RAM-u':m.installed?'Nameščen':'Ni nameščen'}${m.selected?' · IZBRAN':''}</span></div>`).join('')||'<div class="agent-error">Ni zaznanih lokalnih modelov.</div>'}</div>
-        <div class="agent-features">Zadnji dejanski klici: ${(localModels.recent||[]).slice(0,5).map(x=>`${escapeHtml(x.model)} · ${x.status==='ok'?'OK':'NAPAKA'} · ${Number(x.latency_ms)||0} ms`).join(' · ')||'še ni podatkov'}</div>` : '<div class="agent-features">Podatki o lokalnih modelih še niso dosegljivi.</div>';
+        <div class="agent-model-list">${inventory.slice(0,20).map(m=>`<div class="agent-model-row"><b>${escapeHtml(m.name)}</b><span class="agent-model-status ${m.loaded?'running':''}">${m.loaded?'V RAM-u':m.installed?'Nameščen':'Ni nameščen'}${m.selected?' · IZBRAN':''}</span></div>`).join('')||'<div class="agent-error">Ni zaznanih lokalnih modelov.</div>'}</div>
+        <div class="agent-features">Zadnji dejanski klici: ${(localModels.recent||[]).slice(0,5).map(x=>`${escapeHtml(x.model)} · ${x.status==='ok'?'OK':'NAPAKA'} · ${Number(x.latency_ms)||0} ms`).join(' · ')||'še ni podatkov'}</div>
+        <div class="agent-features">Za namestitev na Windows zaženi v mapi PROJEKT: <code>.\\install-local-models.ps1</code>. Večji modeli se ne prenesejo samodejno.</div>` : '<div class="agent-features">Podatki o lokalnih modelih še niso dosegljivi.</div>';
       body.innerHTML=`
         <div class="agent-summary">
           <div class="agent-metric"><span>Fast model</span><strong>${models.primary||caps.agent?.primary_model||'—'}</strong></div>
